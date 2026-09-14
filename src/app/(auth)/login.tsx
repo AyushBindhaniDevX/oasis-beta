@@ -52,7 +52,15 @@ export default function LoginScreen() {
   const isTablet = width >= 768 && width < 960;
 
   const { tenant } = useTenantBranding();
-  const { signIn, signInWithGoogle, isLoading: authLoading } = useAuth();
+  const { user, profile, signIn, signInWithGoogle, isLoading: authLoading } = useAuth();
+  // Auto-redirect if user already has an active SSO session
+  useEffect(() => {
+    if (user || profile) {
+      const targetRoute = profile?.role === 'admin' ? '/(admin)/dashboard' : profile?.role === 'hr' ? '/(hr)/dashboard' : '/(employee)/dashboard';
+      router.replace(targetRoute as never);
+    }
+  }, [user, profile, router]);
+
   const {
     hasHardware,
     biometricType,

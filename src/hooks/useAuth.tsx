@@ -224,7 +224,74 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } else {
-        if (isMounted) {
+        // Check if user has an SSO ticket or active SSO session from SSO Hub
+        let ssoMatched = false;
+        if (typeof window !== 'undefined') {
+          try {
+            const params = new URLSearchParams(window.location.search);
+            const ticketRaw = params.get('sso_ticket');
+            let sessionData: any = null;
+            if (ticketRaw) {
+              sessionData = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(ticketRaw)))));
+              if (sessionData?.uid && (Date.now() - (sessionData.ts || 0)) < 86400000) {
+                localStorage.setItem('oasis_sso_session', JSON.stringify(sessionData));
+                const cleanUrl = new URL(window.location.href);
+                cleanUrl.searchParams.delete('sso_ticket');
+                cleanUrl.searchParams.delete('app');
+                window.history.replaceState({}, document.title, cleanUrl.pathname + (cleanUrl.searchParams.toString() ? '?' + cleanUrl.searchParams.toString() : ''));
+              }
+            } else {
+              const saved = localStorage.getItem('oasis_sso_session');
+              if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed?.uid && (Date.now() - (parsed.ts || 0)) < 86400000) {
+                  sessionData = parsed;
+                } else {
+                  localStorage.removeItem('oasis_sso_session');
+                }
+              }
+            }
+
+            if (sessionData?.uid) {
+              const profRef = doc(db, 'profiles', sessionData.uid);
+              const profSnap = await getDoc(profRef);
+              let prof: Profile | null = null;
+              if (profSnap.exists()) {
+                prof = { id: profSnap.id, ...profSnap.data() } as Profile;
+              } else if (sessionData.email) {
+                const emailQ = query(collection(db, 'profiles'), where('email', '==', sessionData.email.trim().toLowerCase()), limit(1));
+                const emailSnap = await getDocs(emailQ);
+                if (!emailSnap.empty) {
+                  prof = { id: emailSnap.docs[0].id, ...emailSnap.docs[0].data() } as Profile;
+                }
+              }
+
+              if (prof) {
+                const appUser: AppUser = {
+                  id: prof.id,
+                  email: prof.email,
+                  fullName: prof.full_name || sessionData.displayName,
+                  imageUrl: prof.avatar_url,
+                  user_metadata: {
+                    full_name: prof.full_name,
+                    role: prof.role,
+                    organization_id: prof.organization_id,
+                  },
+                };
+                if (isMounted) {
+                  setProfile(prof);
+                  setUser(appUser);
+                  setIsLoading(false);
+                  ssoMatched = true;
+                }
+              }
+            }
+          } catch (ssoErr) {
+            console.warn('[Oasis SSO consumer error]:', ssoErr);
+          }
+        }
+
+        if (!ssoMatched && isMounted) {
           setUser(null);
           setProfile(null);
           loggedInUserIdRef.current = null;
@@ -308,13 +375,86 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(appUser);
         }
       } else {
-        // Mobile / Expo: Use WebBrowser session or prompt
+        // Mobile (Android / iOS): Native Google Sign-In with Firebase credential exchange
+        let GoogleSignin: any;
+        let statusCodes: any;
         try {
-          const WebBrowser = await import('expo-web-browser');
-          WebBrowser.maybeCompleteAuthSession();
-        } catch {}
+          const gModule = await import('@react-native-google-signin/google-signin');
+          GoogleSignin = gModule.GoogleSignin;
+          statusCodes = gModule.statusCodes;
+        } catch {
+          throw new Error('Native Google Sign-In requires a development build or EAS build (it cannot run in standard Expo Go). Please run "npm run build:android" or use email/password login.');
+        }
 
-        throw new Error('Google Sign-In on mobile requires native Google OAuth setup. Please sign in with your email & password or sign in on the web.');
+        const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+        if (!webClientId) {
+          throw new Error(
+            'Google Sign-In configuration missing: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is not set in your .env file. Add your Web Client ID from Firebase Console / Google Cloud Console.'
+          );
+        }
+
+        try {
+          GoogleSignin.configure({
+            webClientId,
+            offlineAccess: true,
+          });
+
+          await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+          const signInResult = await GoogleSignin.signIn();
+
+          // Support both newer v13+ data structure and legacy shape
+          const idToken = signInResult?.data?.idToken || (signInResult as any)?.idToken;
+          if (!idToken) {
+            throw new Error('No Google ID token was returned by Google Sign-In.');
+          }
+
+          const { GoogleAuthProvider, signInWithCredential } = await import('firebase/auth');
+          const credential = GoogleAuthProvider.credential(idToken);
+          const authResult = await signInWithCredential(auth, credential);
+          const fbUser = authResult.user;
+
+          if (fbUser) {
+            const prof = await syncProfileForAuthUser(fbUser);
+            const appUser: AppUser = {
+              id: fbUser.uid,
+              email: fbUser.email || undefined,
+              fullName: prof?.full_name || fbUser.displayName || fbUser.email?.split('@')[0],
+              imageUrl: prof?.avatar_url || fbUser.photoURL || null,
+              user_metadata: {
+                full_name: prof?.full_name || fbUser.displayName || undefined,
+                role: prof?.role || 'employee',
+                organization_id: prof?.organization_id,
+              },
+            };
+            setProfile(prof);
+            setUser(appUser);
+          }
+        } catch (nativeErr: any) {
+          if (
+            nativeErr.code === statusCodes?.SIGN_IN_CANCELLED ||
+            nativeErr.code === '12501' ||
+            nativeErr.message?.includes?.('SIGN_IN_CANCELLED')
+          ) {
+            // User cancelled Google sign-in dialog
+            return;
+          } else if (
+            nativeErr.code === statusCodes?.IN_PROGRESS ||
+            nativeErr.message?.includes?.('IN_PROGRESS')
+          ) {
+            return;
+          } else if (nativeErr.code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE) {
+            throw new Error('Google Play Services is not available or outdated on this Android device.');
+          } else if (
+            nativeErr.code === '10' ||
+            nativeErr.message?.includes?.('DEVELOPER_ERROR') ||
+            nativeErr.message?.includes?.('status code 10')
+          ) {
+            throw new Error(
+              'Google Sign-In configuration error (DEVELOPER_ERROR 10). Ensure your SHA-1 certificate fingerprint is registered in Firebase Console (under Android App com.oasis.hrms) and that EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID matches your OAuth 2.0 Web client ID.'
+            );
+          }
+          throw nativeErr;
+        }
       }
     } catch (err: any) {
       if (err.code === 'auth/popup-closed-by-user') {
