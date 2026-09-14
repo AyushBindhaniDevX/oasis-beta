@@ -330,6 +330,17 @@ export default function LoginScreen() {
     </View>
   );
 
+  if (authLoading || user || profile) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF', minHeight: '100vh' }}>
+        <ActivityIndicator size="large" color="#0D7377" />
+        <Text style={{ marginTop: 16, fontSize: 14, color: '#64748B', fontWeight: '600' }}>
+          {user || profile ? 'Redirecting to your workspace...' : 'Verifying SSO session...'}
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.pageContainer}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />

@@ -3,6 +3,7 @@ import {
   initializeAuth,
   getAuth,
   Auth,
+  inMemoryPersistence,
 } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
@@ -54,4 +55,13 @@ export const storage: FirebaseStorage = getStorage(app);
 
 // 5. Secondary App for admin user creation without logging out current user
 export const secondaryApp: FirebaseApp = getApps().find(a => a.name === 'SecondaryApp') || initializeApp(firebaseConfig, 'SecondaryApp');
-export const secondaryAuth: Auth = getAuth(secondaryApp);
+
+let secAuth: Auth;
+try {
+  secAuth = initializeAuth(secondaryApp, {
+    persistence: inMemoryPersistence,
+  });
+} catch (e) {
+  secAuth = getAuth(secondaryApp);
+}
+export const secondaryAuth: Auth = secAuth;

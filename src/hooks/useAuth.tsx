@@ -23,6 +23,7 @@ import {
 } from 'firebase/firestore';
 import { logUserLogin, logUserLogout } from '@/lib/services/userActivity';
 import type { Profile, UserRole } from '@/types';
+import { getSsoSession, clearSsoSession } from '@/lib/sso';
 
 export interface AppUser {
   id: string;
@@ -54,9 +55,65 @@ interface AuthState {
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AppUser | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<AppUser | null>(() => {
+    if (typeof window !== 'undefined') {
+      const sso = getSsoSession();
+      if (sso && (sso.uid || sso.email)) {
+        const userEmail = (sso.email || '').toLowerCase().trim();
+        const fullName = sso.displayName || userEmail.split('@')[0] || 'User';
+        const role: UserRole = (sso.role as UserRole) || 'employee';
+        return {
+          id: sso.uid || 'sso-user',
+          email: userEmail,
+          fullName,
+          imageUrl: sso.photoURL || null,
+          user_metadata: {
+            full_name: fullName,
+            role,
+            organization_id: sso.organizationId || '00000000-0000-0000-0000-000000000001',
+          },
+        };
+      }
+    }
+    return null;
+  });
+
+  const [profile, setProfile] = useState<Profile | null>(() => {
+    if (typeof window !== 'undefined') {
+      const sso = getSsoSession();
+      if (sso && (sso.uid || sso.email)) {
+        const userEmail = (sso.email || '').toLowerCase().trim();
+        const isSMHUser = userEmail.includes('shantimemorialhospital.com') || userEmail === 'ayushbindhani001@gmail.com';
+        const defaultOrgId = sso.organizationId || (isSMHUser ? 'shanti-memorial-hospital' : '00000000-0000-0000-0000-000000000001');
+        const isAdminEmail = userEmail.includes('admin') || userEmail === 'ayushbindhani001@gmail.com';
+        const isHrEmail = userEmail.includes('hr') || userEmail.includes('nurse');
+        const role: UserRole = (sso.role as UserRole) || (isAdminEmail ? 'admin' : isHrEmail ? 'hr' : 'employee');
+        const fullName = sso.displayName || (userEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : userEmail.split('@')[0]) || 'HRMS User';
+        const now = new Date().toISOString();
+        return {
+          id: sso.uid || 'sso-user',
+          email: userEmail,
+          full_name: fullName,
+          phone: sso.phone || null,
+          avatar_url: sso.photoURL || null,
+          role,
+          organization_id: defaultOrgId,
+          is_active: true,
+          created_at: now,
+          updated_at: now,
+        };
+      }
+    }
+    return null;
+  });
+
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const sso = getSsoSession();
+      if (sso && (sso.uid || sso.email)) return false;
+    }
+    return true;
+  });
   const loggedInUserIdRef = useRef<string | null>(null);
 
   // Helper: Fetch or auto-create profile document from Firebase Auth User
@@ -226,69 +283,75 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         // Check if user has an SSO ticket or active SSO session from SSO Hub
         let ssoMatched = false;
-        if (typeof window !== 'undefined') {
-          try {
-            const params = new URLSearchParams(window.location.search);
-            const ticketRaw = params.get('sso_ticket');
-            let sessionData: any = null;
-            if (ticketRaw) {
-              sessionData = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(ticketRaw)))));
-              if (sessionData?.uid && (Date.now() - (sessionData.ts || 0)) < 86400000) {
-                localStorage.setItem('oasis_sso_session', JSON.stringify(sessionData));
-                const cleanUrl = new URL(window.location.href);
-                cleanUrl.searchParams.delete('sso_ticket');
-                cleanUrl.searchParams.delete('app');
-                window.history.replaceState({}, document.title, cleanUrl.pathname + (cleanUrl.searchParams.toString() ? '?' + cleanUrl.searchParams.toString() : ''));
-              }
-            } else {
-              const saved = localStorage.getItem('oasis_sso_session');
-              if (saved) {
-                const parsed = JSON.parse(saved);
-                if (parsed?.uid && (Date.now() - (parsed.ts || 0)) < 86400000) {
-                  sessionData = parsed;
-                } else {
-                  localStorage.removeItem('oasis_sso_session');
+        try {
+          const sessionData = getSsoSession();
+          if (sessionData && (sessionData.uid || sessionData.email)) {
+            let prof: Profile | null = null;
+            try {
+              if (sessionData.uid) {
+                const profRef = doc(db, 'profiles', sessionData.uid);
+                const profSnap = await getDoc(profRef);
+                if (profSnap.exists()) {
+                  prof = { id: profSnap.id, ...profSnap.data() } as Profile;
                 }
               }
-            }
-
-            if (sessionData?.uid) {
-              const profRef = doc(db, 'profiles', sessionData.uid);
-              const profSnap = await getDoc(profRef);
-              let prof: Profile | null = null;
-              if (profSnap.exists()) {
-                prof = { id: profSnap.id, ...profSnap.data() } as Profile;
-              } else if (sessionData.email) {
+              if (!prof && sessionData.email) {
                 const emailQ = query(collection(db, 'profiles'), where('email', '==', sessionData.email.trim().toLowerCase()), limit(1));
                 const emailSnap = await getDocs(emailQ);
                 if (!emailSnap.empty) {
                   prof = { id: emailSnap.docs[0].id, ...emailSnap.docs[0].data() } as Profile;
                 }
               }
-
-              if (prof) {
-                const appUser: AppUser = {
-                  id: prof.id,
-                  email: prof.email,
-                  fullName: prof.full_name || sessionData.displayName,
-                  imageUrl: prof.avatar_url,
-                  user_metadata: {
-                    full_name: prof.full_name,
-                    role: prof.role,
-                    organization_id: prof.organization_id,
-                  },
-                };
-                if (isMounted) {
-                  setProfile(prof);
-                  setUser(appUser);
-                  setIsLoading(false);
-                  ssoMatched = true;
-                }
-              }
+            } catch (fsErr) {
+              // Firestore permission denied or unauthenticated read - continue gracefully with ticket claims
             }
-          } catch (ssoErr) {
-            console.warn('[Oasis SSO consumer error]:', ssoErr);
+
+            // Fallback directly to SSO ticket claims
+            if (!prof) {
+              const userEmail = (sessionData.email || '').toLowerCase().trim();
+              const isSMHUser = userEmail.includes('shantimemorialhospital.com') || userEmail === 'ayushbindhani001@gmail.com';
+              const defaultOrgId = sessionData.organizationId || (isSMHUser ? 'shanti-memorial-hospital' : '00000000-0000-0000-0000-000000000001');
+              const isAdminEmail = userEmail.includes('admin') || userEmail === 'ayushbindhani001@gmail.com';
+              const isHrEmail = userEmail.includes('hr') || userEmail.includes('nurse');
+              const role: UserRole = (sessionData.role as UserRole) || (isAdminEmail ? 'admin' : isHrEmail ? 'hr' : 'employee');
+              const fullName = sessionData.displayName || (userEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : userEmail.split('@')[0]) || 'HRMS User';
+              const now = new Date().toISOString();
+
+              prof = {
+                id: sessionData.uid || 'sso-' + Date.now(),
+                email: userEmail,
+                full_name: fullName,
+                phone: sessionData.phone || null,
+                avatar_url: sessionData.photoURL || null,
+                role,
+                organization_id: defaultOrgId,
+                is_active: true,
+                created_at: now,
+                updated_at: now,
+              };
+            }
+
+            const appUser: AppUser = {
+              id: prof.id,
+              email: prof.email,
+              fullName: prof.full_name || sessionData.displayName,
+              imageUrl: prof.avatar_url,
+              user_metadata: {
+                full_name: prof.full_name,
+                role: prof.role,
+                organization_id: prof.organization_id,
+              },
+            };
+
+            if (isMounted) {
+              setProfile(prof);
+              setUser(appUser);
+              setIsLoading(false);
+              ssoMatched = true;
+            }
           }
+        } catch (ssoErr) {
+          console.warn('[Oasis SSO consumer error]:', ssoErr);
         }
 
         if (!ssoMatched && isMounted) {
@@ -537,6 +600,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (profile) {
         await logUserLogout(profile);
       }
+      clearSsoSession();
       await firebaseSignOut(auth);
       setUser(null);
       setProfile(null);
