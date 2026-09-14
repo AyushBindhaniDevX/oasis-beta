@@ -145,6 +145,7 @@ export default function UserManagementScreen() {
   const [editTransportAllowance, setEditTransportAllowance] = useState('0');
   const [editCustomItems, setEditCustomItems] = useState<CustomPayrollItem[]>([]);
   const [editStatus, setEditStatus] = useState('active');
+  const [editIsHhcEnabled, setEditIsHhcEnabled] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState('');
 
