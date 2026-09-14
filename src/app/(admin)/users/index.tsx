@@ -502,6 +502,7 @@ export default function UserManagementScreen() {
           employment_type: editEmploymentType as any,
           tax_config: updatedTaxConfig,
           employment_status: editStatus as any,
+          is_hhc_enabled: editIsHhcEnabled,
         });
       } else {
         const newEmpId = `emp-${Date.now()}`;
