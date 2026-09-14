@@ -134,7 +134,7 @@ export default function LoginScreen() {
   const busy = loading || googleLoading || authLoading;
 
   // ── Auth Form Card Component ───────────────────────────────────────────────
-  const showGoogleSignIn = Platform.OS === 'web';
+  const showGoogleSignIn = true;
 
   const authFormCard = (
     <View style={[styles.card, !isSplitScreen && !isTablet && styles.mobileCardNative]}>
@@ -160,7 +160,27 @@ export default function LoginScreen() {
         </Text>
       </View>
 
-      {/* Google Sign In Button */}
+              {/* Enterprise SSO Hub Button */}
+        <TouchableOpacity
+          onPress={() => {
+            const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+            const ssoBase = isLocal ? 'http://localhost:3001' : 'https://sso.subedge.com';
+            const returnUrl = encodeURIComponent(typeof window !== 'undefined' ? window.location.origin : 'https://oasis.subedge.com');
+            if (typeof window !== 'undefined') {
+              window.location.href = `${ssoBase}/?redirect_url=${returnUrl}&app=HRMS`;
+            } else {
+              void Linking.openURL(`${ssoBase}/?redirect_url=${returnUrl}&app=HRMS`);
+            }
+          }}
+          disabled={busy}
+          activeOpacity={0.85}
+          style={[styles.ssoBtn, busy && styles.btnDisabled]}
+        >
+          <Zap size={18} color="#0D7377" />
+          <Text style={styles.ssoBtnText}>Sign in with Subedge SSO</Text>
+        </TouchableOpacity>
+
+        {/* Google Sign In Button */}
       {showGoogleSignIn && (
         <>
           <TouchableOpacity
@@ -683,7 +703,34 @@ const styles = StyleSheet.create({
   },
 
   // Google Button
-  googleBtn: {
+  
+    ssoBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      height: 48,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      borderColor: 'rgba(13, 115, 119, 0.3)',
+      backgroundColor: '#F0F7F7',
+      marginBottom: 10,
+      ...Platform.select({
+        web: {
+          cursor: 'pointer',
+          boxShadow: '0 1px 3px rgba(13, 115, 119, 0.08)',
+        },
+        default: {
+          elevation: 1,
+        },
+      }),
+    },
+    ssoBtnText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: '#0D7377',
+    },
+    googleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
