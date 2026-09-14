@@ -581,6 +581,42 @@ export default function EmployeeDetailScreen() {
               ]}
             />
 
+            {/* Healthcare & HHC Toggle */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => setIsHhcEnabled(!isHhcEnabled)}
+              style={[
+                styles.hhcCard,
+                {
+                  backgroundColor: isHhcEnabled ? '#F0F9FF' : colors.surface,
+                  borderColor: isHhcEnabled ? '#0D7377' : colors.border,
+                },
+              ]}
+            >
+              <View style={{ flex: 1, paddingRight: 14 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <HeartPulse size={18} color={isHhcEnabled ? '#0D7377' : '#64748B'} />
+                  <Text style={[styles.hhcTitle, { color: isHhcEnabled ? '#0D7377' : colors.text }]}>
+                    Home Health Care (HHC) Provider
+                  </Text>
+                  {isHhcEnabled && (
+                    <View style={styles.hhcBadgeActive}>
+                      <Text style={styles.hhcBadgeActiveText}>ACTIVE DOCTOR / NURSE</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={[styles.hhcSubtitle, { color: colors.textSecondary }]}>
+                  Enable this doctor or staff member for clinical dispatch and patient leads in Cordeliakare HHC.
+                </Text>
+              </View>
+              <Switch
+                value={isHhcEnabled}
+                onValueChange={setIsHhcEnabled}
+                trackColor={{ false: '#E2E8F0', true: '#0D7377' }}
+                thumbColor="#FFFFFF"
+              />
+            </TouchableOpacity>
+
             <Input
               label="Joining Date (YYYY-MM-DD)"
               value={joiningDate}
@@ -721,6 +757,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     marginTop: 2,
+  },
+  hhcBadgeActive: {
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  hhcBadgeActiveText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0D7377',
   },
 
   container: { flex: 1 },

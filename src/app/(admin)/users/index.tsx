@@ -1485,6 +1485,42 @@ export default function UserManagementScreen() {
                   value={editStatus}
                   onValueChange={(val) => setEditStatus(val || 'active')}
                 />
+
+                {/* Healthcare & HHC Toggle */}
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => setEditIsHhcEnabled(!editIsHhcEnabled)}
+                  style={[
+                    styles.hhcCard,
+                    {
+                      backgroundColor: editIsHhcEnabled ? '#F0F9FF' : colors.surface,
+                      borderColor: editIsHhcEnabled ? '#0D7377' : colors.border,
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1, paddingRight: 14 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <HeartPulse size={18} color={editIsHhcEnabled ? '#0D7377' : '#64748B'} />
+                      <Text style={[styles.hhcTitle, { color: editIsHhcEnabled ? '#0D7377' : colors.text }]}>
+                        Home Health Care (HHC) Provider
+                      </Text>
+                      {editIsHhcEnabled && (
+                        <View style={styles.hhcBadgeActive}>
+                          <Text style={styles.hhcBadgeActiveText}>ACTIVE DOCTOR / NURSE</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.hhcSubtitle, { color: colors.textSecondary }]}>
+                      Enable this doctor or staff member for clinical dispatch and patient leads in Cordeliakare HHC.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={editIsHhcEnabled}
+                    onValueChange={setEditIsHhcEnabled}
+                    trackColor={{ false: '#E2E8F0', true: '#0D7377' }}
+                    thumbColor="#FFFFFF"
+                  />
+                </TouchableOpacity>
               </View>
 
               <View style={[styles.modalActions, { marginTop: 16, marginBottom: 12 }]}>
