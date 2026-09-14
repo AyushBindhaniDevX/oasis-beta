@@ -106,7 +106,7 @@ export async function updateUserRole(userId: string, role: string): Promise<void
 
 export async function updateUserProfileData(
   userId: string,
-  data: { full_name?: string; phone?: string | null; role?: string }
+  data: { full_name?: string; phone?: string | null; role?: string; is_hhc_enabled?: boolean }
 ): Promise<void> {
   await updateDoc(doc(db, 'profiles', userId), {
     ...data,
@@ -178,6 +178,7 @@ export async function createSystemUser(params: {
   transport_allowance?: number;
   custom_items?: any[];
   tax_config?: Record<string, any>;
+  is_hhc_enabled?: boolean;
 }): Promise<string> {
   let orgId = params.organization_id;
   if (!orgId) {
@@ -227,6 +228,7 @@ export async function createSystemUser(params: {
     phone: params.phone || null,
     avatar_url: null,
     is_active: true,
+    is_hhc_enabled: params.is_hhc_enabled ?? false,
     created_at: now,
     updated_at: now,
   };
@@ -259,6 +261,7 @@ export async function createSystemUser(params: {
       workplace_id: params.workplace_id || null,
       manager_id: params.manager_id || null,
       default_shift_id: params.default_shift_id || null,
+      is_hhc_enabled: params.is_hhc_enabled ?? false,
       basic_salary: params.basic_salary || 0,
       employment_status: 'active',
       onboarding_completed: true,

@@ -1,6 +1,6 @@
 import { HR_NAV } from '@/constants/navigation';
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
@@ -12,7 +12,7 @@ import { SidebarLayout } from '@/components/layout/Sidebar';
 import { getDepartments, createEmployee, getEmployees, getWorkplaces } from '@/lib/services/employee';
 import { getShifts } from '@/lib/services/shifts';
 import type { Department, Employee, WorkShift, Workplace } from '@/types';
-import { RefreshCw, ShieldCheck, ChevronDown, ChevronUp, Sliders, Eye, EyeOff, KeyRound } from 'lucide-react-native';
+import { RefreshCw, ShieldCheck, ChevronDown, ChevronUp, Sliders, Eye, EyeOff, KeyRound, HeartPulse } from 'lucide-react-native';
 
 export default function CreateEmployeeScreen() {
   const colors = useTheme();
@@ -40,6 +40,7 @@ export default function CreateEmployeeScreen() {
   const [shiftId, setShiftId] = useState<string | null>(null);
   const [role, setRole] = useState<string>('employee');
   const [designation, setDesignation] = useState('');
+  const [isHhcEnabled, setIsHhcEnabled] = useState(false);
   const [basicSalary, setBasicSalary] = useState('');
 
   // Tax config & custom percentages
@@ -172,6 +173,7 @@ export default function CreateEmployeeScreen() {
         default_shift_id: shiftId || undefined,
         role: role,
         designation: designation.trim() || undefined,
+        is_hhc_enabled: isHhcEnabled,
         basic_salary: parseFloat(basicSalary) || 0,
         tax_config: {
           pf_number: pfNumber.trim() || null,
@@ -335,6 +337,45 @@ export default function CreateEmployeeScreen() {
             value={role}
             onValueChange={(val) => setRole(val || 'employee')}
           />
+
+          {/* ─── Home Health Care (HHC) Provider Configuration ─── */}
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginTop: 16 }]}>
+            HEALTHCARE & EXTENSION ROLES
+          </Text>
+
+          <View
+            style={[
+              styles.hhcCard,
+              {
+                backgroundColor: isHhcEnabled ? '#F0F9FF' : colors.surface,
+                borderColor: isHhcEnabled ? '#0D7377' : colors.border,
+              },
+            ]}
+          >
+            <View style={{ flex: 1, paddingRight: 14 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <HeartPulse size={18} color={isHhcEnabled ? '#0D7377' : '#64748B'} />
+                <Text style={[styles.hhcTitle, { color: colors.text }]}>
+                  Home Health Care (HHC) Provider
+                </Text>
+                {isHhcEnabled && (
+                  <View style={styles.hhcBadgeActive}>
+                    <Text style={styles.hhcBadgeActiveText}>ACTIVE DOCTOR / NURSE</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.hhcSubtitle, { color: colors.textSecondary }]}>
+                Enable this staff member/doctor to be assigned patient care leads in the Home Health Care Portal and perform field visits.
+              </Text>
+            </View>
+            <Switch
+              value={isHhcEnabled}
+              onValueChange={setIsHhcEnabled}
+              trackColor={{ false: '#E2E8F0', true: '#0D7377' }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
 
           {/* ─── Tax & Statutory Configuration ──────────────────────────── */}
           <TouchableOpacity
@@ -519,6 +560,37 @@ export default function CreateEmployeeScreen() {
 }
 
 const styles = StyleSheet.create({
+  hhcCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    marginVertical: 6,
+  },
+  hhcTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  hhcSubtitle: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  hhcBadgeActive: {
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  hhcBadgeActiveText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0D7377',
+    letterSpacing: 0.5,
+  },
+
   container: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1 },
   title: { fontSize: 20, fontWeight: '700' },

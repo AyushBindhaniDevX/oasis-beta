@@ -66,6 +66,7 @@ import {
   Eye,
   MoreVertical,
   ChevronRight,
+  HeartPulse,
 } from 'lucide-react-native';
 
 export default function UserManagementScreen() {
@@ -410,6 +411,7 @@ export default function UserManagementScreen() {
         setEditTransportAllowance(tc.transport_allowance != null ? String(tc.transport_allowance) : '0');
         setEditCustomItems(Array.isArray(tc.custom_items) ? tc.custom_items : []);
         setEditStatus(empData.employment_status || 'active');
+          setEditIsHhcEnabled(!!empData?.is_hhc_enabled || !!u.is_hhc_enabled);
 
         let shiftVal = (empData as any).default_shift_id || null;
         if (!shiftVal) {
@@ -439,6 +441,7 @@ export default function UserManagementScreen() {
         setEditTransportAllowance('0');
         setEditCustomItems([]);
         setEditStatus('active');
+        setEditIsHhcEnabled(!!u.is_hhc_enabled);
       }
     } catch (e) {
       console.warn('Could not fetch linked employee for user edit:', e);
@@ -470,6 +473,7 @@ export default function UserManagementScreen() {
         full_name: editFullName.trim(),
         phone: editPhone.trim() || null,
         role: editRole,
+        is_hhc_enabled: editIsHhcEnabled,
       });
 
       const updatedTaxConfig = {
@@ -515,6 +519,7 @@ export default function UserManagementScreen() {
           tax_config: updatedTaxConfig,
           employment_status: editStatus as any,
           onboarding_completed: true,
+          is_hhc_enabled: editIsHhcEnabled,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
@@ -1816,6 +1821,36 @@ export default function UserManagementScreen() {
 }
 
 const styles = StyleSheet.create({
+  hhcCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    marginVertical: 10,
+  },
+  hhcTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  hhcSubtitle: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  hhcBadgeActive: {
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  hhcBadgeActiveText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0D7377',
+  },
+
   container: { flex: 1 },
   content: { padding: 20, gap: 24, paddingBottom: 60 },
   contentDesktop: { maxWidth: 1200, alignSelf: 'center', width: '100%', padding: 36, gap: 28 },

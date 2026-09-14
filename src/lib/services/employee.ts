@@ -230,6 +230,7 @@ export async function createEmployee(params: {
   workplace_id?: string;
   default_shift_id?: string;
   tax_config?: any;
+    is_hhc_enabled?: boolean;
 }): Promise<void> {
   const cleanEmail = params.email.trim().toLowerCase();
   let uid = generateUuid();
@@ -274,6 +275,7 @@ export async function createEmployee(params: {
     is_active: true,
     needs_password_change: true,
     must_change_password: true,
+    is_hhc_enabled: params.is_hhc_enabled ?? false,
     created_at: now,
     updated_at: now,
   };
@@ -297,6 +299,7 @@ export async function createEmployee(params: {
     basic_salary: params.basic_salary || 0,
     tax_config: params.tax_config || null,
     onboarding_completed: false,
+    is_hhc_enabled: params.is_hhc_enabled ?? false,
     created_at: now,
     updated_at: now,
   };
@@ -356,6 +359,37 @@ export async function createEmployee(params: {
 export async function updateEmployee(id: string, updates: Record<string, any>): Promise<void> {
   const payload = { ...updates, updated_at: new Date().toISOString() };
   await updateDoc(doc(db, 'employees', id), payload);
+  if (updates.is_hhc_enabled !== undefined) {
+    try {
+      const empSnap = await getDoc(doc(db, 'employees', id));
+      const profId = empSnap.data()?.profile_id;
+      if (profId) {
+        await updateDoc(doc(db, 'profiles', profId), {
+          is_hhc_enabled: updates.is_hhc_enabled,
+          updated_at: new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      console.warn('Could not sync profile is_hhc_enabled:', err);
+    }
+  }
+}
+
+export async function getHHCDoctors(organizationId?: string): Promise<Employee[]> {
+  try {
+    const snap = await getDocs(collection(db, 'employees'));
+    const list: Employee[] = [];
+    snap.forEach((d) => {
+      const data = d.data() as Employee;
+      if (data.is_hhc_enabled) {
+        list.push({ id: d.id, ...data });
+      }
+    });
+    return list;
+  } catch (e) {
+    console.error('getHHCDoctors error:', e);
+    return [];
+  }
 }
 
 export async function completeOnboarding(

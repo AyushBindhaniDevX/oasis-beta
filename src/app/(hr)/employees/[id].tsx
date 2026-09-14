@@ -1,6 +1,6 @@
 import { HR_NAV } from '@/constants/navigation';
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
@@ -27,7 +27,7 @@ import { updateUserProfileData } from '@/lib/services/organization';
 import { getLeaveBalances, getLeaveTypes, updateLeaveBalance } from '@/lib/services/leave';
 import { formatDate, formatCurrency } from '@/utils/format';
 import type { Employee, Department, Workplace, WorkShift, LeaveBalance, LeaveType } from '@/types';
-import { Edit3, AlertCircle, Umbrella, CheckCircle2 } from 'lucide-react-native';
+import { Edit3, AlertCircle, Umbrella, CheckCircle2, HeartPulse } from 'lucide-react-native';
 
 const statusVariant = (s: string): 'success' | 'danger' | 'warning' | 'neutral' => {
   if (s === 'active') return 'success';
@@ -78,6 +78,7 @@ export default function EmployeeDetailScreen() {
   const [managerId, setManagerId] = useState<string | null>(null);
   const [basicSalary, setBasicSalary] = useState('');
   const [status, setStatus] = useState<string>('active');
+  const [isHhcEnabled, setIsHhcEnabled] = useState(false);
   const [joiningDate, setJoiningDate] = useState('');
 
   // Tax Configuration State
@@ -171,6 +172,7 @@ export default function EmployeeDetailScreen() {
     setManagerId(emp.manager_id || null);
     setBasicSalary(emp.basic_salary ? String(emp.basic_salary) : '0');
     setStatus(emp.employment_status || 'active');
+    setIsHhcEnabled(!!emp.is_hhc_enabled || !!emp.profile?.is_hhc_enabled);
     setJoiningDate(emp.joining_date || '');
 
     // Populate tax config
@@ -218,6 +220,7 @@ export default function EmployeeDetailScreen() {
           full_name: fullName.trim(),
           phone: phone.trim() || null,
           role,
+          is_hhc_enabled: isHhcEnabled,
         });
       }
 
@@ -232,6 +235,7 @@ export default function EmployeeDetailScreen() {
         basic_salary: parseFloat(basicSalary) || 0,
         employment_status: status as any,
         joining_date: joiningDate || undefined,
+        is_hhc_enabled: isHhcEnabled,
         tax_config: {
           pf_number: pfNumber.trim() || null,
           tax_regime: taxRegime as any,
@@ -310,6 +314,9 @@ export default function EmployeeDetailScreen() {
             <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
               <Badge label={emp.employment_status || 'active'} variant={statusVariant(emp.employment_status || 'active')} />
               <Badge label={emp.profile?.role || 'employee'} variant="neutral" />
+              {(emp.is_hhc_enabled || emp.profile?.is_hhc_enabled) && (
+                <Badge label="HHC Provider" variant="success" />
+              )}
             </View>
           </Card>
 
@@ -325,6 +332,7 @@ export default function EmployeeDetailScreen() {
             <Row label="Assigned Shift" value={currentShift ? `${currentShift.name} (${currentShift.start_time} - ${currentShift.end_time})` : 'Standard'} colors={colors} />
             <Row label="Basic Salary" value={formatCurrency(emp.basic_salary)} colors={colors} />
             <Row label="Joining Date" value={emp.joining_date ? formatDate(emp.joining_date) : 'N/A'} colors={colors} />
+            <Row label="Home Health Care (HHC)" value={(emp.is_hhc_enabled || emp.profile?.is_hhc_enabled) ? 'Enabled (Doctor / Provider)' : 'Disabled'} colors={colors} />
           </Card>
 
           {/* Statutory & Tax Settings Card */}
@@ -696,6 +704,25 @@ function Row({ label, value, colors }: { label: string; value: string; colors: a
 }
 
 const styles = StyleSheet.create({
+  hhcCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    marginVertical: 10,
+  },
+  hhcTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  hhcSubtitle: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+
   container: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderBottomWidth: 1 },
   title: { fontSize: 17, fontWeight: '600' },

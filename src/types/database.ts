@@ -63,6 +63,7 @@ export interface Profile {
   biometric_enrolled?: boolean;
   needs_password_change?: boolean;
   must_change_password?: boolean;
+  is_hhc_enabled?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -120,6 +121,7 @@ export interface Employee {
   basic_salary: number;
   employment_status: EmploymentStatus;
   onboarding_completed: boolean;
+  is_hhc_enabled?: boolean;
   home_address?: string | null;
   bank_details?: {
     bank_name: string;
