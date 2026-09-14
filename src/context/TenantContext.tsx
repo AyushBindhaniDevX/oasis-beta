@@ -144,7 +144,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       }
       setAllOrganizations(Array.from(orgMap.values()));
     } catch (err) {
-      console.warn('Error fetching all organizations:', err);
+      if ((err as any)?.code !== 'permission-denied') { console.warn('Error fetching all organizations:', err); }
     }
   }, []);
 

@@ -196,21 +196,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 3. Auto-provision profile from auth user
-      const userEmail = authUser.email || '';
-      const isSMHUser = userEmail.toLowerCase().includes('shantimemorialhospital.com') || userEmail === 'ayushbindhani001@gmail.com';
-      const defaultOrgId = isSMHUser ? 'shanti-memorial-hospital' : '00000000-0000-0000-0000-000000000001';
+      // 3. Verify user authorization before provisioning
+      const userEmail = (authUser.email || '').trim().toLowerCase();
+      const isSuperAdmin =
+        userEmail === 'ayushbindhani001@gmail.com' ||
+        userEmail.endsWith('@shantimemorialhospital.com') ||
+        userEmail.endsWith('@subedge.com') ||
+        userEmail.includes('admin');
+
+      let linkedEmployee: any = null;
+      try {
+        const empQ = query(collection(db, 'employees'), where('email', '==', userEmail), limit(1));
+        const empSnap = await getDocs(empQ);
+        if (!empSnap.empty) {
+          linkedEmployee = empSnap.docs[0].data();
+        } else {
+          const empWorkQ = query(collection(db, 'employees'), where('work_email', '==', userEmail), limit(1));
+          const empWorkSnap = await getDocs(empWorkQ);
+          if (!empWorkSnap.empty) {
+            linkedEmployee = empWorkSnap.docs[0].data();
+          }
+        }
+      } catch (empCheckErr) {
+        console.warn('[HCM Auth Directory]: Employee check note:', empCheckErr);
+      }
+
+      if (!linkedEmployee && !isSuperAdmin) {
+        console.warn(`[HCM Auth Guard]: Unauthorized login attempt rejected for ${userEmail}`);
+        await firebaseSignOut(auth);
+        throw new Error('ACCESS_DENIED: Your account (' + userEmail + ') is not registered as an employee in the system. Please contact HR.');
+      }
+
+      const isSMHUser = userEmail.includes('shantimemorialhospital.com') || userEmail === 'ayushbindhani001@gmail.com';
+      const defaultOrgId = linkedEmployee?.organization_id || (isSMHUser ? 'shanti-memorial-hospital' : '00000000-0000-0000-0000-000000000001');
       const isAdminEmail = userEmail.includes('admin') || userEmail === 'ayushbindhani001@gmail.com';
       const isHrEmail = userEmail.includes('hr') || userEmail.includes('nurse');
-      const role: UserRole = isAdminEmail ? 'admin' : isHrEmail ? 'hr' : 'employee';
-      const fullName = authUser.displayName || (userEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : userEmail.split('@')[0]) || 'HRMS User';
+      const role: UserRole = isSuperAdmin ? 'admin' : (linkedEmployee?.role as UserRole) || (isAdminEmail ? 'admin' : isHrEmail ? 'hr' : 'employee');
+      const fullName = linkedEmployee?.name || linkedEmployee?.full_name || authUser.displayName || (userEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : userEmail.split('@')[0]) || 'HRMS User';
       const now = new Date().toISOString();
 
       const newProfPayload: Profile = {
         id: authUser.uid,
         email: userEmail,
         full_name: fullName,
-        phone: authUser.phoneNumber || null,
+        phone: linkedEmployee?.phone || authUser.phoneNumber || null,
         avatar_url: authUser.photoURL || null,
         role,
         organization_id: defaultOrgId,
@@ -348,6 +377,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setUser(appUser);
               setIsLoading(false);
               ssoMatched = true;
+
+              // Concurrently authenticate Firebase Auth in background so request.auth != null for all Firestore operations
+              if (!auth.currentUser) {
+                (async () => {
+                  try {
+                    if (sessionData.googleIdToken) {
+                      const { GoogleAuthProvider, signInWithCredential } = await import('firebase/auth');
+                      const cred = GoogleAuthProvider.credential(sessionData.googleIdToken);
+                      await signInWithCredential(auth, cred);
+                      console.log('[Oasis SSO]: Background Google Auth handshake established successfully.');
+                    } else if (sessionData.email && sessionData.pass) {
+                      await signInWithEmailAndPassword(auth, sessionData.email, sessionData.pass);
+                      console.log('[Oasis SSO]: Background Password Auth handshake established successfully.');
+                    }
+                  } catch (bgAuthErr) {
+                    console.warn('[Oasis SSO]: Background Firebase Auth sync note:', bgAuthErr);
+                  }
+                })();
+              }
             }
           }
         } catch (ssoErr) {
@@ -397,6 +445,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(appUser);
         }
       } catch (err: any) {
+        if (err?.message?.includes('ACCESS_DENIED')) {
+          throw new Error('Access Denied: Your account is not registered in the employee directory. Please contact HR.');
+        }
         let msg = err.message || 'Invalid email or password';
         if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
           msg = 'Invalid email or password. Please verify your credentials.';
@@ -520,6 +571,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (err: any) {
+      if (err?.message?.includes('ACCESS_DENIED')) {
+        throw new Error('Access Denied: Your account is not registered in the employee directory. Please contact HR.');
+      }
       if (err.code === 'auth/popup-closed-by-user') {
         throw new Error('Sign-in cancelled. You closed the Google sign-in window.');
       } else if (err.code === 'auth/cancelled-popup-request') {

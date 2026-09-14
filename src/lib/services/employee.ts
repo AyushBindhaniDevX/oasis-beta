@@ -97,7 +97,7 @@ export async function getEmployeeByProfileId(profileId: string, organizationId?:
       workplace: wpSnap?.exists() ? ({ id: wpSnap.id, ...wpSnap.data() } as Workplace) : undefined,
     };
   } catch (err) {
-    console.error('Error fetching employee by profile ID:', err);
+    if ((err as any)?.code !== 'permission-denied') { console.error('Error fetching employee by profile ID:', err); }
     return null;
   }
 }

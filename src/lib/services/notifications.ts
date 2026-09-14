@@ -211,7 +211,7 @@ export function subscribeToUserNotifications(
       onUpdate(notifs.slice(0, 50));
     },
     (err) => {
-      console.warn('subscribeToUserNotifications error:', err);
+      if ((err as any)?.code !== 'permission-denied') { console.warn('subscribeToUserNotifications error:', err); }
     }
   );
 

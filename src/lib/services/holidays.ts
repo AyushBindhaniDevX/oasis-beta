@@ -75,7 +75,7 @@ export async function getHolidays(organizationId?: string, year?: number): Promi
       return allHolidays;
     }
   } catch (err) {
-    console.warn('Error querying Firestore holidays:', err);
+    if ((err as any)?.code !== 'permission-denied') { console.warn('Error querying Firestore holidays:', err); }
   }
 
   return await getFallbackHolidays(organizationId, currentYear);
