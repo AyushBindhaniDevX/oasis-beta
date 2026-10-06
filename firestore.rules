@@ -1,34 +1,11 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
+    match /profiles/{userId} {
+      allow read: if true;
     }
-    
-    function getUserProfile() {
-      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data;
-    }
-
-    function isAdmin() {
-      return isAuthenticated() && (
-        getUserProfile().role == 'admin' ||
-        request.auth.token.role == 'admin'
-      );
-    }
-
-    function isHR() {
-      return isAuthenticated() && (
-        getUserProfile().role == 'hr' ||
-        getUserProfile().role == 'admin' ||
-        request.auth.token.role == 'hr' ||
-        request.auth.token.role == 'admin'
-      );
-    }
-
-    // Default multi-tenant collections: Allow authenticated read/write for seamless operations
-    match /{collection}/{docId} {
-      allow read, write: if true;
+    match /{document=**} {
+      allow read, write: if request.auth != null;
     }
   }
 }

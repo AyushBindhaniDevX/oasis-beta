@@ -216,6 +216,7 @@ export async function createSystemUser(params: {
     }
     // If account exists in Firebase Auth or admin context
     console.warn('Firebase Auth user creation notice:', authErr?.message || authErr);
+    throw authErr; // Important: prevent creating orphaned firestore records with a random UID
   }
 
   const now = new Date().toISOString();

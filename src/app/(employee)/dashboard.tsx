@@ -706,26 +706,6 @@ export default function EmployeeDashboard() {
         </View>
       </ScrollView>
 
-      {/* Ovi AI Floating Action Button */}
-      <Animated.View
-        entering={FadeInUp.delay(500).springify().damping(15)}
-        style={[
-          styles.fab,
-          { 
-            backgroundColor: primaryColor, 
-            shadowColor: primaryColor,
-            bottom: MOBILE.FAB_BOTTOM_OFFSET
-          }
-        ]}
-      >
-        <TouchableOpacity
-          onPress={() => router.push('/(employee)/call-ovi' as never)}
-          style={{ width: 56, height: 56, alignItems: 'center', justifyContent: 'center' }}
-          activeOpacity={0.85}
-        >
-          <Mic size={26} color="#FFF" />
-        </TouchableOpacity>
-      </Animated.View>
 
       {/* Face Verification Modal */}
       <FaceVerificationModal

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, useWindowDimensions, Linking, Modal, Platform, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, useWindowDimensions, Linking, Modal, Platform, StatusBar, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
@@ -79,7 +79,7 @@ export default function DirectoryScreen() {
   };
 
   const handleChat = (emp: Employee) => {
-    router.push('/(employee)/call-ovi' as never);
+    Alert.alert('Chat coming soon', 'Direct messaging with colleagues will be available in a future update.');
   };
 
   if (loading) return <LoadingState />;

@@ -79,11 +79,11 @@ export default function LoginScreen() {
   // Handle standard email/password login
   const handleLogin = useCallback(async () => {
     if (loading || googleLoading || authLoading) return;
-    const trimmedEmail = email.trim();
+    const trimmedInput = email.trim();
     const trimmedPassword = password.trim();
 
-    if (!trimmedEmail || !trimmedPassword) {
-      setError('Please provide both your work email and password.');
+    if (!trimmedInput || !trimmedPassword) {
+      setError('Please provide your email/phone and password.');
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
@@ -91,10 +91,24 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      await signIn(trimmedEmail, trimmedPassword, tenant?.id);
+      let finalEmail = trimmedInput;
+      // If input looks like a phone number (contains numbers and optional +)
+      if (/^\+?[0-9\-\s]+$/.test(trimmedInput) && trimmedInput.replace(/[^0-9]/g, '').length >= 6) {
+        const { collection, query, where, getDocs } = await import('firebase/firestore');
+        const { db } = await import('@/lib/firebase');
+        const q = query(collection(db, 'profiles'), where('phone', '==', trimmedInput));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          finalEmail = snap.docs[0].data().email;
+        } else {
+          throw new Error('No account found with this phone number.');
+        }
+      }
+
+      await signIn(finalEmail, trimmedPassword, tenant?.id);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid email or password.');
+      setError(err instanceof Error ? err.message : 'Invalid credentials.');
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);
@@ -231,12 +245,12 @@ export default function LoginScreen() {
       {/* Input Fields */}
       <View style={styles.inputsGroup}>
         <View style={styles.inputWrap}>
-          <Text style={styles.inputLabel}>Work Email</Text>
+          <Text style={styles.inputLabel}>Work Email or Phone Number</Text>
           <View style={styles.inputContainer}>
             <Mail color="#64748B" size={18} style={styles.inputIcon} />
             <TextInput
               style={styles.textInput}
-              placeholder="name@company.com"
+              placeholder="name@company.com or +1234567890"
               placeholderTextColor="#94A3B8"
               value={email}
               onChangeText={setEmail}
