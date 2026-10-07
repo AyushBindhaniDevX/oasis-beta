@@ -115,6 +115,7 @@ export interface Employee {
   department_id: string | null;
   designation: string | null;
   joining_date: string | null;
+  date_of_birth?: string | null;
   workplace_id: string | null;
   manager_id?: string | null;
   default_shift_id?: string | null;

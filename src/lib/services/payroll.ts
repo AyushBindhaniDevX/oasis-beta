@@ -143,7 +143,46 @@ async function countLopDays(employeeId: string, month: number, year: number): Pr
       }
     });
 
-    return absentDays + unpaidLeaveDays;
+    // Handle Late Days based on Org Settings
+    let lateDays = 0;
+    const lateQ = query(
+      collection(db, 'attendance'),
+      where('employee_id', '==', employeeId),
+      where('status', '==', 'late')
+    );
+    const lateSnap = await getDocs(lateQ);
+    lateSnap.forEach((d) => {
+      const data = d.data();
+      if (data.date >= startDate && data.date < endDate && !holidayDates.has(data.date)) {
+        lateDays++;
+      }
+    });
+
+    // Check Org Settings for late deduction
+    let lateLopPenalty = 0;
+    try {
+      const empSnap = await getDoc(doc(db, 'employees', employeeId));
+      if (empSnap.exists()) {
+        const orgId = empSnap.data().organization_id;
+        if (orgId) {
+          const orgSnap = await getDoc(doc(db, 'organizations', orgId));
+          if (orgSnap.exists()) {
+            const settings = orgSnap.data().settings || {};
+            if (settings.late_attendance_deduction_enabled) {
+              const maxLate = settings.max_late_days_allowed || 3;
+              if (lateDays > maxLate) {
+                // E.g., for every late day above maxLate, add 0.5 LOP day
+                lateLopPenalty = (lateDays - maxLate) * 0.5;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not calculate late penalty:', e);
+    }
+
+    return absentDays + unpaidLeaveDays + lateLopPenalty;
   } catch {
     return 0;
   }

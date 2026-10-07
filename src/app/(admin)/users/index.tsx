@@ -113,6 +113,7 @@ export default function UserManagementScreen() {
   const [newShiftId, setNewShiftId] = useState<string | null>(null);
   const [newManagerId, setNewManagerId] = useState<string | null>(null);
   const [newSalary, setNewSalary] = useState('');
+  const [newDob, setNewDob] = useState('');
   const [newEpfPercentage, setNewEpfPercentage] = useState('12');
   const [newSocsoPercentage, setNewSocsoPercentage] = useState('0.5');
   const [newTaxPercentage, setNewTaxPercentage] = useState('5');
@@ -137,6 +138,7 @@ export default function UserManagementScreen() {
   const [editShiftId, setEditShiftId] = useState<string | null>(null);
   const [editManagerId, setEditManagerId] = useState<string | null>(null);
   const [editSalary, setEditSalary] = useState('');
+  const [editDob, setEditDob] = useState('');
   const [editEpfPercentage, setEditEpfPercentage] = useState('12');
   const [editSocsoPercentage, setEditSocsoPercentage] = useState('0.5');
   const [editTaxPercentage, setEditTaxPercentage] = useState('5');
@@ -218,6 +220,7 @@ export default function UserManagementScreen() {
     setNewShiftId(null);
     setNewManagerId(null);
     setNewSalary('50000');
+    setNewDob('');
     setFormError('');
     setFormSuccess(false);
     setAddModalOpen(true);
@@ -300,6 +303,7 @@ export default function UserManagementScreen() {
         workplace_id: newWorkplaceId || undefined,
         default_shift_id: newShiftId || undefined,
         manager_id: newManagerId || undefined,
+        date_of_birth: newDob.trim() || undefined,
         basic_salary: parseFloat(newSalary) || 0,
         employment_type: newEmploymentType,
         epf_percentage: parseFloat(newEpfPercentage) || 0,
@@ -402,6 +406,7 @@ export default function UserManagementScreen() {
         setEditWorkplaceId(empData.workplace_id || null);
         setEditManagerId(empData.manager_id || null);
         setEditSalary(empData.basic_salary ? String(empData.basic_salary) : '0');
+        setEditDob(empData.date_of_birth || '');
         setEditEmploymentType((empData as any).employment_type || 'full_time');
         const tc = (empData as any).tax_config || {};
         setEditEpfPercentage(tc.epf_percentage != null ? String(tc.epf_percentage) : '12');
@@ -434,6 +439,7 @@ export default function UserManagementScreen() {
         setEditShiftId(null);
         setEditManagerId(null);
         setEditSalary('');
+        setEditDob('');
         setEditEmploymentType('full_time');
         setEditEpfPercentage('12');
         setEditSocsoPercentage('0.5');
@@ -498,6 +504,7 @@ export default function UserManagementScreen() {
           workplace_id: editWorkplaceId || null,
           default_shift_id: editShiftId || null,
           manager_id: editManagerId || null,
+          date_of_birth: editDob.trim() || null,
           basic_salary: parseFloat(editSalary) || 0,
           employment_type: editEmploymentType as any,
           tax_config: updatedTaxConfig,
@@ -517,6 +524,7 @@ export default function UserManagementScreen() {
           employment_type: editEmploymentType || 'full_time',
           manager_id: editManagerId || null,
           default_shift_id: editShiftId || null,
+          date_of_birth: editDob.trim() || null,
           basic_salary: parseFloat(editSalary) || 0,
           tax_config: updatedTaxConfig,
           employment_status: editStatus as any,
@@ -1154,6 +1162,13 @@ export default function UserManagementScreen() {
                       onChangeText={setNewDesignation}
                     />
 
+                    <Input
+                      label="Date of Birth (YYYY-MM-DD)"
+                      placeholder="e.g. 1990-01-01"
+                      value={newDob}
+                      onChangeText={setNewDob}
+                    />
+
                     <Select
                       label="Department"
                       options={departments.map((d) => ({ label: d.name, value: d.id }))}
@@ -1390,6 +1405,13 @@ export default function UserManagementScreen() {
                   ]}
                   value={editShiftId || ''}
                   onValueChange={(val) => setEditShiftId(val || null)}
+                />
+
+                <Input
+                  label="Date of Birth (YYYY-MM-DD)"
+                  placeholder="e.g. 1990-01-01"
+                  value={editDob}
+                  onChangeText={setEditDob}
                 />
 
                 <Select

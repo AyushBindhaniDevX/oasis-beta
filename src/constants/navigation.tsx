@@ -25,6 +25,7 @@ import {
   Gift,
   Workflow,
   Building2,
+  FileSpreadsheet,
 } from 'lucide-react-native';
 import type { UserRole } from '@/types';
 
@@ -61,6 +62,8 @@ export const ADMIN_NAV: NavItem[] = [
   { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard, feature: 'payroll' },
   { label: 'Locations', href: '/(hr)/locations', icon: MapPin, feature: 'locations' },
   { label: 'Audit Logs', href: '/(admin)/audit-logs', icon: Shield, feature: 'audit_logs' },
+  { label: 'Approval Workflows', href: '/(admin)/approval-workflows', icon: Workflow },
+  { label: 'Data Management', href: '/(admin)/data-management', icon: FileSpreadsheet },
   { label: 'Settings', href: '/(admin)/settings', icon: Settings },
 ];
 

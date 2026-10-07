@@ -65,6 +65,21 @@ export default function SettingsScreen() {
   const [autoApproveExpense, setAutoApproveExpense] = useState(false);
   const [expenseThreshold, setExpenseThreshold] = useState('1000');
 
+  // PF / EPF Settings
+  const [enablePf, setEnablePf] = useState(false);
+  const [empContribution, setEmpContribution] = useState('12');
+  const [emprContribution, setEmprContribution] = useState('8.3');
+
+  // Late Attendance Settings
+  const [enableLatePolicy, setEnableLatePolicy] = useState(false);
+  const [consecutiveLateDays, setConsecutiveLateDays] = useState('3');
+  const [lateDeductionAmount, setLateDeductionAmount] = useState('500');
+  const [lateApprovalRequired, setLateApprovalRequired] = useState(true);
+
+  // Notification Settings
+  const [enableCompanyAnnouncements, setEnableCompanyAnnouncements] = useState(true);
+  const [enableBirthdayNotifications, setEnableBirthdayNotifications] = useState(true);
+
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
@@ -88,6 +103,21 @@ export default function SettingsScreen() {
           if (typeof s.auto_welcome_email === 'boolean') setAutoWelcomeEmail(s.auto_welcome_email);
           if (typeof s.auto_approve_expense === 'boolean') setAutoApproveExpense(s.auto_approve_expense);
           if (s.expense_threshold) setExpenseThreshold(String(s.expense_threshold));
+
+          // PF / EPF
+          if (typeof s.enable_pf === 'boolean') setEnablePf(s.enable_pf);
+          if (s.employee_contribution_percent) setEmpContribution(String(s.employee_contribution_percent));
+          if (s.employer_contribution_percent) setEmprContribution(String(s.employer_contribution_percent));
+
+          // Late Attendance
+          if (typeof s.enable_late_policy === 'boolean') setEnableLatePolicy(s.enable_late_policy);
+          if (s.consecutive_late_days) setConsecutiveLateDays(String(s.consecutive_late_days));
+          if (s.late_deduction_amount) setLateDeductionAmount(String(s.late_deduction_amount));
+          if (typeof s.late_approval_required === 'boolean') setLateApprovalRequired(s.late_approval_required);
+
+          // Notifications
+          if (typeof s.enable_company_announcements === 'boolean') setEnableCompanyAnnouncements(s.enable_company_announcements);
+          if (typeof s.enable_birthday_notifications === 'boolean') setEnableBirthdayNotifications(s.enable_birthday_notifications);
         }
       } catch (err) {
         console.error('Error fetching org settings:', err);
@@ -122,6 +152,18 @@ export default function SettingsScreen() {
           auto_welcome_email: autoWelcomeEmail,
           auto_approve_expense: autoApproveExpense,
           expense_threshold: parseInt(expenseThreshold, 10) || 1000,
+          
+          enable_pf: enablePf,
+          employee_contribution_percent: parseFloat(empContribution) || 12,
+          employer_contribution_percent: parseFloat(emprContribution) || 8.3,
+          
+          enable_late_policy: enableLatePolicy,
+          consecutive_late_days: parseInt(consecutiveLateDays, 10) || 3,
+          late_deduction_amount: parseFloat(lateDeductionAmount) || 500,
+          late_approval_required: lateApprovalRequired,
+          
+          enable_company_announcements: enableCompanyAnnouncements,
+          enable_birthday_notifications: enableBirthdayNotifications,
         },
       });
 
@@ -393,6 +435,132 @@ export default function SettingsScreen() {
                 keyboardType="numeric"
               />
             )}
+          </View>
+        </View>
+
+        {/* 5. PF / EPF Configuration */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.iconWrap, { backgroundColor: '#f3e8ff' }]}>
+              <Coins size={18} color="#7e22ce" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>PF / EPF Configuration</Text>
+              <Text style={[styles.cardSub, { color: colors.textSecondary }]}>Manage employee and employer provident fund contributions</Text>
+            </View>
+          </View>
+          <View style={{ gap: 14 }}>
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={[styles.switchLabel, { color: colors.text }]}>Enable EPF/PF</Text>
+                <Text style={[styles.switchSub, { color: colors.textSecondary }]}>Apply PF deductions in payroll calculations</Text>
+              </View>
+              <Switch value={enablePf} onValueChange={setEnablePf} trackColor={{ true: colors.primary }} />
+            </View>
+            {enablePf && (
+              <View style={isDesktop ? styles.rowFields : { gap: 14 }}>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label="Employee Contribution %"
+                    placeholder="12"
+                    value={empContribution}
+                    onChangeText={setEmpContribution}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label="Employer Contribution %"
+                    placeholder="8.3"
+                    value={emprContribution}
+                    onChangeText={setEmprContribution}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* 6. Late Attendance Policy */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.iconWrap, { backgroundColor: '#ffe4e6' }]}>
+              <AlertCircle size={18} color="#e11d48" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Late Attendance Policy</Text>
+              <Text style={[styles.cardSub, { color: colors.textSecondary }]}>Configure automatic salary deductions for consecutive late days</Text>
+            </View>
+          </View>
+          <View style={{ gap: 14 }}>
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={[styles.switchLabel, { color: colors.text }]}>Enable Policy</Text>
+                <Text style={[styles.switchSub, { color: colors.textSecondary }]}>Trigger deductions automatically on late days</Text>
+              </View>
+              <Switch value={enableLatePolicy} onValueChange={setEnableLatePolicy} trackColor={{ true: colors.primary }} />
+            </View>
+            {enableLatePolicy && (
+              <View style={{ gap: 14 }}>
+                <View style={isDesktop ? styles.rowFields : { gap: 14 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="Consecutive Late Days"
+                      placeholder="3"
+                      value={consecutiveLateDays}
+                      onChangeText={setConsecutiveLateDays}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="Deduction Amount (₹)"
+                      placeholder="500"
+                      value={lateDeductionAmount}
+                      onChangeText={setLateDeductionAmount}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+                <View style={styles.switchRow}>
+                  <View style={{ flex: 1, paddingRight: 10 }}>
+                    <Text style={[styles.switchLabel, { color: colors.text }]}>Approval Required</Text>
+                    <Text style={[styles.switchSub, { color: colors.textSecondary }]}>HR/Admin must approve before payroll deduction</Text>
+                  </View>
+                  <Switch value={lateApprovalRequired} onValueChange={setLateApprovalRequired} trackColor={{ true: colors.primary }} />
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* 7. Notifications */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.iconWrap, { backgroundColor: '#fef9c3' }]}>
+              <Radio size={18} color="#ca8a04" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Notifications</Text>
+              <Text style={[styles.cardSub, { color: colors.textSecondary }]}>Manage company announcements and employee birthday notifications</Text>
+            </View>
+          </View>
+          <View style={{ gap: 14 }}>
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={[styles.switchLabel, { color: colors.text }]}>Enable Company Announcements</Text>
+                <Text style={[styles.switchSub, { color: colors.textSecondary }]}>Allow HR to publish company-wide announcements</Text>
+              </View>
+              <Switch value={enableCompanyAnnouncements} onValueChange={setEnableCompanyAnnouncements} trackColor={{ true: colors.primary }} />
+            </View>
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={[styles.switchLabel, { color: colors.text }]}>Enable Birthday Notifications</Text>
+                <Text style={[styles.switchSub, { color: colors.textSecondary }]}>Automatically send birthday wishes to employees</Text>
+              </View>
+              <Switch value={enableBirthdayNotifications} onValueChange={setEnableBirthdayNotifications} trackColor={{ true: colors.primary }} />
+            </View>
           </View>
         </View>
 

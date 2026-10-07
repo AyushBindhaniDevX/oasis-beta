@@ -29,7 +29,7 @@ import {
   CalendarDays, CheckCircle2,
   Clock, LogIn, LogOut as LogOutIcon,
   Mic, Navigation, Receipt,
-  Users, Globe, Lock, Building2,
+  Users, Globe, Lock, Building2, Cake, Heart, PartyPopper
 } from 'lucide-react-native';
 
 // Components & Context
@@ -345,6 +345,13 @@ export default function EmployeeDashboard() {
 
   const stripEmoji = (s: string) => s.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]/gu, '').trim();
 
+  const isBirthday = React.useMemo(() => {
+    if (!employee?.date_of_birth) return false;
+    const today = new Date();
+    const dob = new Date(employee.date_of_birth);
+    return today.getDate() === dob.getDate() && today.getMonth() === dob.getMonth();
+  }, [employee]);
+
   if (loading) return <LoadingState />;
 
   const netPay = latestPayslip?.payroll?.net_salary ?? 0;
@@ -437,6 +444,26 @@ export default function EmployeeDashboard() {
         <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
           {/* Main column */}
           <View style={[styles.col, isDesktop && { flex: 3 }]}>
+            
+            {/* Birthday Alert Card */}
+            {isBirthday && (
+              <Animated.View entering={FadeInDown.springify()}>
+                <Card variant="default" padding={20} radius={22} style={{ backgroundColor: '#FEF08A', borderColor: '#FDE047', marginBottom: 20 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                    <View style={{ backgroundColor: '#FDF08A', padding: 12, borderRadius: 16 }}>
+                      <PartyPopper size={32} color="#A16207" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 20, fontWeight: '800', color: '#854D0E', marginBottom: 4 }}>Happy Birthday, {profile?.full_name?.split(' ')[0]}! 🎉</Text>
+                      <Text style={{ fontSize: 14, color: '#A16207', fontWeight: '500' }}>
+                        Wishing you a fantastic day from all of us at {organization?.name || 'the team'}!
+                      </Text>
+                    </View>
+                  </View>
+                </Card>
+              </Animated.View>
+            )}
+
             {/* Clock Action Card */}
             <Animated.View entering={FadeInDown.delay(100).springify()}>
               <Card variant="default" padding={18} radius={22}>
