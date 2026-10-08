@@ -56,8 +56,8 @@ interface TabItem {
   feature?: string;
 }
 
-const TABS: TabItem[] = [
-  { key: 'home', label: 'Home', icon: LayoutDashboard, href: '/(employee)/dashboard' },
+const getTabsForRole = (role?: string | null): TabItem[] => [
+  { key: 'home', label: 'Home', icon: LayoutDashboard, href: role === 'admin' ? '/(admin)/dashboard' : role === 'hr' ? '/(hr)/dashboard' : '/(employee)/dashboard' },
   { key: 'attendance', label: 'Attendance', icon: CalendarClock, href: '/(employee)/attendance', feature: 'attendance' },
   { key: 'leave', label: 'Leave', icon: CalendarDays, href: '/(employee)/leave', feature: 'leave' },
   { key: 'payslips', label: 'Payslips', icon: Banknote, href: '/(employee)/payslips', feature: 'payroll' },
@@ -98,7 +98,7 @@ interface BottomTabBarProps {
   moreItems?: MoreItem[];
 }
 
-export function BottomTabBar({ children, tabs = TABS, moreItems = MORE_ITEMS }: BottomTabBarProps) {
+export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomTabBarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { width } = useWindowDimensions();
@@ -106,8 +106,10 @@ export function BottomTabBar({ children, tabs = TABS, moreItems = MORE_ITEMS }: 
   const colors = useTheme();
   const insets = useSafeAreaInsets();
   const { isFeatureEnabled, organization, companyName, companyLogoUrl, activePlan } = useTenant();
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, role } = useAuth();
   const { unreadCount } = useNotifications();
+
+  const resolvedTabs = tabs || getTabsForRole(profile?.role || role);
 
   // Safe bottom inset: ensures Android 3-button nav / gesture bar & iOS home indicators never cover UI
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 20 : 12);
@@ -373,7 +375,7 @@ export function BottomTabBar({ children, tabs = TABS, moreItems = MORE_ITEMS }: 
           },
         ]}
       >
-        {tabs.map((tab) => {
+        {resolvedTabs.map((tab) => {
           const isActive = activeTab === tab.key;
           const isLocked = isTabLocked(tab);
           const Icon = tab.icon;

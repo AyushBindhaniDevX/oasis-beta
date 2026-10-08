@@ -94,8 +94,9 @@ export default function HRDashboard() {
   ];
 
   const hrQuickActions = [
+    { label: 'My Attendance', icon: Clock, href: '/(employee)/attendance', color: '#7C3AED', bg: '#EDE9FE' },
     { label: 'Users & Staff', icon: Users, href: '/(admin)/users', color: '#0D7377', bg: '#E6F4F4' },
-    { label: 'Attendance', icon: Calendar, href: '/(hr)/attendance', color: '#059669', bg: '#D1FAE5' },
+    { label: 'Team Attendance', icon: Calendar, href: '/(hr)/attendance', color: '#059669', bg: '#D1FAE5' },
     { label: 'Leave', icon: Umbrella, href: '/(hr)/leave', color: '#7C3AED', bg: '#EDE9FE' },
     { label: 'Payroll', icon: CreditCard, href: '/(hr)/payroll', color: '#0369A1', bg: '#E0F2FE' },
     { label: 'Performance', icon: Award, href: '/(hr)/performance', color: '#DC2626', bg: '#FEE2E2' },

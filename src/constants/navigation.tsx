@@ -38,9 +38,10 @@ export interface NavItem {
 
 export const HR_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/(hr)/dashboard', icon: LayoutDashboard },
+  { label: 'My Attendance', href: '/(employee)/attendance', icon: CalendarClock, feature: 'attendance' },
   { label: 'Users & Employees', href: '/(admin)/users', icon: Users, feature: 'users' },
   { label: 'Departments', href: '/(hr)/departments', icon: Network, feature: 'departments' },
-  { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar, feature: 'attendance' },
+  { label: 'Team Attendance', href: '/(hr)/attendance', icon: Calendar, feature: 'attendance' },
   { label: 'Leave', href: '/(hr)/leave', icon: Umbrella, feature: 'leave' },
   { label: 'Holiday Calendar', href: '/(hr)/holidays', icon: CalendarDays, feature: 'holidays' },
   { label: 'Shifts & Rosters', href: '/(hr)/shifts', icon: Clock, feature: 'shifts' },
@@ -52,9 +53,10 @@ export const HR_NAV: NavItem[] = [
 export const ADMIN_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/(admin)/dashboard', icon: LayoutDashboard },
   { label: 'Central Portal', href: '/(admin)/portal', icon: Building2 },
+  { label: 'My Attendance', href: '/(employee)/attendance', icon: CalendarClock, feature: 'attendance' },
   { label: 'Users & Employees', href: '/(admin)/users', icon: Users, feature: 'users' },
   { label: 'Departments', href: '/(hr)/departments', icon: Network, feature: 'departments' },
-  { label: 'Attendance', href: '/(hr)/attendance', icon: Calendar, feature: 'attendance' },
+  { label: 'Team Attendance', href: '/(hr)/attendance', icon: Calendar, feature: 'attendance' },
   { label: 'Leave', href: '/(hr)/leave', icon: Umbrella, feature: 'leave' },
   { label: 'Holiday Calendar', href: '/(hr)/holidays', icon: CalendarDays, feature: 'holidays' },
   { label: 'Shifts & Rosters', href: '/(hr)/shifts', icon: Clock, feature: 'shifts' },

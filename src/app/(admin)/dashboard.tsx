@@ -212,8 +212,9 @@ export default function AdminDashboard() {
   ];
 
   const mobileAdminActions = [
+    { label: 'My Attendance', icon: Clock, href: '/(employee)/attendance', color: '#7C3AED', bg: '#EDE9FE' },
     { label: 'Users & Staff', icon: Users, href: '/(admin)/users', color: '#0D7377', bg: '#E6F4F4' },
-    { label: 'Attendance', icon: Calendar, href: '/(hr)/attendance', color: '#059669', bg: '#D1FAE5' },
+    { label: 'Team Attendance', icon: Calendar, href: '/(hr)/attendance', color: '#059669', bg: '#D1FAE5' },
     { label: 'Shifts', icon: Clock, href: '/(hr)/shifts', color: '#D97706', bg: '#FEF3C7' },
     { label: 'Audit Logs', icon: Shield, href: '/(admin)/audit-logs', color: '#DC2626', bg: '#FEE2E2' },
     { label: 'Performance', icon: Award, href: '/(hr)/performance', color: '#7C3AED', bg: '#EDE9FE' },
