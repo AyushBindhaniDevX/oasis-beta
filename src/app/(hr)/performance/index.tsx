@@ -251,18 +251,35 @@ export default function HRPerformanceScreen() {
     setSavingAppraisal(true);
     try {
       const orgId = tenantOrg?.id || profile?.organization_id || '';
-      await createAppraisal(
-        {
-          organization_id: orgId,
-          employee_id: newAppraisalEmpId,
-          cycle_name: newAppraisalCycle,
-          period: newAppraisalPeriod,
-          status: 'self_review',
-          self_rating: 0,
-          self_comments: null,
-        },
-        profile?.id
-      );
+      
+      if (newAppraisalEmpId === 'all') {
+        const promises = employees.map(emp => 
+          createAppraisal({
+            organization_id: orgId,
+            employee_id: emp.id,
+            cycle_name: newAppraisalCycle,
+            period: newAppraisalPeriod,
+            status: 'self_review',
+            self_rating: 0,
+            self_comments: null,
+          }, profile?.id)
+        );
+        await Promise.all(promises);
+      } else {
+        await createAppraisal(
+          {
+            organization_id: orgId,
+            employee_id: newAppraisalEmpId,
+            cycle_name: newAppraisalCycle,
+            period: newAppraisalPeriod,
+            status: 'self_review',
+            self_rating: 0,
+            self_comments: null,
+          },
+          profile?.id
+        );
+      }
+      
       setShowAppraisalModal(false);
       await loadData();
     } catch (e) {
@@ -925,6 +942,22 @@ export default function HRPerformanceScreen() {
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>Select Employee *</Text>
               <ScrollView style={{ maxHeight: 150, borderWidth: 1, borderColor: colors.border, borderRadius: 8 }}>
+                <TouchableOpacity
+                  onPress={() => setNewAppraisalEmpId('all')}
+                  style={[
+                    styles.empOption,
+                    newAppraisalEmpId === 'all' && { backgroundColor: '#eff6ff' },
+                  ]}
+                >
+                  <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#e0e7ff', alignItems: 'center', justifyContent: 'center' }}>
+                    <Users size={16} color="#4f46e5" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>All Employees</Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary }}>Launch for entire organization</Text>
+                  </View>
+                  {newAppraisalEmpId === 'all' && <Check size={18} color={colors.primary} />}
+                </TouchableOpacity>
                 {employees.map((emp) => (
                   <TouchableOpacity
                     key={emp.id}

@@ -113,8 +113,8 @@ export default function EmployeePerformanceScreen() {
       setEmployee(emp);
 
       const [gList, aList, kList, eList] = await Promise.all([
-        getGoals(orgId ? { organizationId: orgId } : undefined),
-        getAppraisals(orgId ? { organizationId: orgId } : undefined),
+        getGoals(orgId ? { organizationId: orgId, employeeId: emp?.id } : { employeeId: emp?.id }),
+        getAppraisals(orgId ? { organizationId: orgId, employeeId: emp?.id } : { employeeId: emp?.id }),
         getKudos(),
         getEmployees(orgId ? { organization_id: orgId } : undefined),
       ]);

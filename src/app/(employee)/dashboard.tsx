@@ -54,9 +54,10 @@ import { getLeaveBalances } from '@/lib/services/leave';
 import { calculateDistance, getCurrentLocation } from '@/lib/services/location';
 import { cancelClockInNotification, sendClockInNotification } from '@/lib/services/notifications';
 import { getPayslips } from '@/lib/services/payroll';
+import { getAppraisals } from '@/lib/services/performance';
 
 // Types & Utils
-import type { Attendance, Employee, LeaveBalance, Payslip } from '@/types';
+import type { Attendance, Employee, LeaveBalance, Payslip, AppraisalReview } from '@/types';
 import { formatCurrency, formatDate, formatMinutes, formatTime, getGreeting } from '@/utils/format';
 import { ScreenErrorFallback } from '@/components/ui/ScreenErrorBoundary';
 
@@ -165,6 +166,7 @@ export default function EmployeeDashboard() {
   const [recentAttendance, setRecentAttendance] = useState<Attendance[]>([]);
   const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
   const [latestPayslip, setLatestPayslip] = useState<Payslip | null>(null);
+  const [pendingAppraisal, setPendingAppraisal] = useState<AppraisalReview | null>(null);
   const [clockLoading, setClockLoading] = useState(false);
   const [clockError, setClockError] = useState('');
   const [distance, setDistance] = useState<number | null>(null);
@@ -184,16 +186,18 @@ export default function EmployeeDashboard() {
       }
       setEmployee(emp);
       if (emp) {
-        const [today, history, balances, payslips] = await Promise.all([
+        const [today, history, balances, payslips, appraisals] = await Promise.all([
           getTodayAttendance(emp.id),
           getAttendanceHistory(emp.id, 5),
           getLeaveBalances(emp.id, undefined, activeOrgId),
           getPayslips(emp.id),
+          getAppraisals({ employeeId: emp.id, status: 'self_review', organizationId: activeOrgId })
         ]);
         setTodayAttendance(today);
         setRecentAttendance(history);
         setLeaveBalances(balances);
         setLatestPayslip(payslips.length > 0 ? payslips[0] : null);
+        setPendingAppraisal(appraisals.length > 0 ? appraisals[0] : null);
       }
     } catch (err) { console.error('Dashboard load error:', err); }
     finally { setLoading(false); }
@@ -445,6 +449,31 @@ export default function EmployeeDashboard() {
           {/* Main column */}
           <View style={[styles.col, isDesktop && { flex: 3 }]}>
             
+            {/* Pending Appraisal Alert Card */}
+            {pendingAppraisal && (
+              <Animated.View entering={FadeInDown.springify()}>
+                <Card style={[styles.card, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', marginBottom: 20 }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                    <View style={{ backgroundColor: '#dcfce7', padding: 12, borderRadius: 999 }}>
+                      <Award size={26} color="#16a34a" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: '800', color: '#166534' }}>Appraisal Cycle Open!</Text>
+                      <Text style={{ fontSize: 13, color: '#166534', marginTop: 3 }}>
+                        Your self-review for <Text style={{ fontWeight: '700' }}>{pendingAppraisal.cycle_name}</Text> is now due.
+                      </Text>
+                    </View>
+                    <TouchableOpacity 
+                      onPress={() => router.push('/(employee)/performance' as never)}
+                      style={{ backgroundColor: '#16a34a', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 }}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Fill Review</Text>
+                    </TouchableOpacity>
+                  </View>
+                </Card>
+              </Animated.View>
+            )}
+
             {/* Birthday Alert Card */}
             {isBirthday && (
               <Animated.View entering={FadeInDown.springify()}>
