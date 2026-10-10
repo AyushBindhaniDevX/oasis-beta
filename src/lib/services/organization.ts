@@ -170,6 +170,10 @@ export async function createSystemUser(params: {
   employment_type?: 'full_time' | 'part_time' | 'contract' | 'intern' | string;
   default_shift_id?: string;
   manager_id?: string;
+  date_of_birth?: string;
+  uan_number?: string;
+  esi_number?: string;
+  esi_exempt?: boolean;
   epf_percentage?: number | string;
   socso_percentage?: number | string;
   tax_percentage?: number | string;
@@ -263,10 +267,16 @@ export async function createSystemUser(params: {
       manager_id: params.manager_id || null,
       default_shift_id: params.default_shift_id || null,
       is_hhc_enabled: params.is_hhc_enabled ?? false,
+      date_of_birth: params.date_of_birth || null,
       basic_salary: params.basic_salary || 0,
       employment_status: 'active',
       onboarding_completed: true,
-      tax_config: taxConfig,
+      tax_config: {
+        ...taxConfig,
+        uan_number: params.uan_number || null,
+        esi_number: params.esi_number || null,
+        esi_exempt: params.esi_exempt ?? false,
+      },
       created_at: now,
       updated_at: now,
     };

@@ -3,9 +3,32 @@
 export type UserRole = 'employee' | 'hr' | 'admin';
 export type EmploymentStatus = 'active' | 'inactive' | 'terminated';
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'half_day' | 'on_leave';
-export type LeaveRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+export type LeaveRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'l1_approved' | 'l2_approved';
 export type PayrollStatus = 'draft' | 'processed' | 'paid';
 export type PayrollPeriodStatus = 'open' | 'processing' | 'closed';
+
+export type ApprovalLevel = 1 | 2 | 3;
+export interface ApprovalStep {
+  level: ApprovalLevel;
+  status: 'pending' | 'approved' | 'rejected';
+  approver_id: string | null;
+  acted_by?: string | null;
+  acted_at?: string | null;
+  comments?: string | null;
+}
+
+export interface ApprovalConfig {
+  id: string;
+  organization_id: string;
+  module: 'leave' | 'attendance' | 'late_deduction' | 'expense' | 'overtime';
+  levels: number; // 1 to 3
+  l1_approver_role?: 'manager' | 'department_head' | 'hr' | 'admin' | 'specific_user';
+  l1_specific_user_id?: string;
+  l2_approver_role?: 'manager' | 'department_head' | 'hr' | 'admin' | 'specific_user';
+  l2_specific_user_id?: string;
+  l3_approver_role?: 'manager' | 'department_head' | 'hr' | 'admin' | 'specific_user';
+  l3_specific_user_id?: string;
+}
 
 export type SubscriptionPlan = 'starter' | 'growth' | 'enterprise';
 
@@ -94,6 +117,8 @@ export interface CustomPayrollItem {
 
 export interface TaxConfig {
   pf_number?: string | null;
+  uan_number?: string | null;
+  esi_number?: string | null;
   tax_regime?: 'old' | 'new' | 'custom' | string;
   tds_percentage?: number | null;
   epf_percentage?: number | null;
@@ -103,6 +128,7 @@ export interface TaxConfig {
   esop_value?: number | null;
   hra_type?: 'metro' | 'non-metro' | 'custom';
   epf_exempt?: boolean;
+  esi_exempt?: boolean;
   transport_allowance?: number | null;
   custom_items?: CustomPayrollItem[];
 }
@@ -262,6 +288,23 @@ export interface AttendanceRegularization {
   employee?: Employee;
 }
 
+export interface LateAttendanceDeduction {
+  id: string;
+  organization_id: string;
+  employee_id: string;
+  payroll_period_id: string;
+  consecutive_days: number;
+  late_dates: string[];
+  amount: number;
+  status: LeaveRequestStatus; // reuse status
+  approval_steps?: ApprovalStep[];
+  current_approval_level?: number;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  employee?: Employee;
+}
+
 export interface PayrollPeriod {
   id: string;
   organization_id: string;
@@ -326,6 +369,21 @@ export interface Notification {
   type: string;
   is_read: boolean;
   action_url: string | null;
+  created_at: string;
+}
+
+export interface Announcement {
+  id: string;
+  organization_id: string;
+  title: string;
+  message: string;
+  target_audience: 'all' | 'department' | 'branch';
+  target_department_id?: string | null;
+  target_branch_id?: string | null;
+  published_by: string; // Profile ID
+  published_at: string;
+  expiry_date?: string | null;
+  priority: 'low' | 'normal' | 'high';
   created_at: string;
 }
 

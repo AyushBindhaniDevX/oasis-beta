@@ -229,6 +229,7 @@ export async function createEmployee(params: {
   basic_salary?: number;
   workplace_id?: string;
   default_shift_id?: string;
+  date_of_birth?: string;
   tax_config?: any;
     is_hhc_enabled?: boolean;
 }): Promise<void> {
@@ -295,6 +296,7 @@ export async function createEmployee(params: {
     default_shift_id: params.default_shift_id || null,
     employment_status: 'active',
     joining_date: now.split('T')[0],
+    date_of_birth: params.date_of_birth || null,
     designation: params.designation || null,
     basic_salary: params.basic_salary || 0,
     tax_config: params.tax_config || null,

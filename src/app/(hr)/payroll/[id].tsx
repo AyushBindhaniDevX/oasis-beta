@@ -57,6 +57,8 @@ import {
   Download,
 } from 'lucide-react-native';
 
+import { exportExcel, exportTxt } from '@/utils/excel';
+
 export default function PayrollDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useTheme();
@@ -315,7 +317,7 @@ export default function PayrollDetailScreen() {
     }
   };
 
-  const handleExportECR = () => {
+  const handleExportECR = async () => {
     if (entries.length === 0) {
       Alert.alert('Validation Error', 'No payroll entries found for ECR generation.');
       return;
@@ -325,7 +327,7 @@ export default function PayrollDetailScreen() {
     const lines = entries.map(entry => {
       const emp = entry.employee as any;
       const tc = emp?.tax_config || {};
-      const uan = tc.pf_number || '';
+      const uan = tc.uan_number || tc.pf_number || '';
       const name = emp?.profile?.full_name || '';
       const gross = Math.round(entry.gross_salary || 0);
       const epfWages = Math.min(Math.round(entry.basic_salary || 0), 15000);
@@ -345,45 +347,36 @@ export default function PayrollDetailScreen() {
     });
 
     const content = lines.join('\n');
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ECR_${period?.month}_${period?.year}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+    await exportTxt(`ECR_${period?.month}_${period?.year}`, content);
   };
 
-  const handleExportESI = () => {
+  const handleExportESI = async () => {
     if (entries.length === 0) {
       Alert.alert('Validation Error', 'No payroll entries found for ESI generation.');
       return;
     }
     
     // ESI Format: IP Number, IP Name, No. of Days, Total Monthly Wages, Reason Code, Last Working Day
-    const lines = entries.map(entry => {
+    const rows = entries.map(entry => {
       const emp = entry.employee as any;
       const tc = emp?.tax_config || {};
-      // Assuming ESI IP number might be stored in custom tax fields or we use a fallback
       const ipNum = tc.esi_number || '';
       const name = emp?.profile?.full_name || '';
+      // sanitize name: letters and spaces only
+      const sanitizedName = name.replace(/[^a-zA-Z\s]/g, '');
       const days = 30 - (entry.lop_days || 0);
       const gross = Math.round(entry.gross_salary || 0);
       const reasonCode = days === 0 ? '2' : '';
       const lwd = ''; // Assuming no resignation handling in this basic export
       
-      return `${ipNum},${name},${days},${gross},${reasonCode},${lwd}`;
+      return [ipNum, sanitizedName, days, gross, reasonCode, lwd];
     });
 
-    const headers = 'IP Number,IP Name,No. of Days,Total Monthly Wages,Reason Code,Last Working Day';
-    const content = [headers, ...lines].join('\n');
-    const blob = new Blob([content], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ESI_${period?.month}_${period?.year}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const headers = ['IP Number', 'IP Name', 'No. of Days', 'Total Monthly Wages', 'Reason Code', 'Last Working Day'];
+    
+    await exportExcel(`ESI_${period?.month}_${period?.year}`, [
+      { name: 'ESI Voucher', headers, rows }
+    ]);
   };
 
   if (loading) return <LoadingState />;

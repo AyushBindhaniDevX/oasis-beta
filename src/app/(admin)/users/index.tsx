@@ -114,6 +114,9 @@ export default function UserManagementScreen() {
   const [newManagerId, setNewManagerId] = useState<string | null>(null);
   const [newSalary, setNewSalary] = useState('');
   const [newDob, setNewDob] = useState('');
+  const [newUan, setNewUan] = useState('');
+  const [newEsi, setNewEsi] = useState('');
+  const [newEsiExempt, setNewEsiExempt] = useState(false);
   const [newEpfPercentage, setNewEpfPercentage] = useState('12');
   const [newSocsoPercentage, setNewSocsoPercentage] = useState('0.5');
   const [newTaxPercentage, setNewTaxPercentage] = useState('5');
@@ -139,6 +142,9 @@ export default function UserManagementScreen() {
   const [editManagerId, setEditManagerId] = useState<string | null>(null);
   const [editSalary, setEditSalary] = useState('');
   const [editDob, setEditDob] = useState('');
+  const [editUan, setEditUan] = useState('');
+  const [editEsi, setEditEsi] = useState('');
+  const [editEsiExempt, setEditEsiExempt] = useState(false);
   const [editEpfPercentage, setEditEpfPercentage] = useState('12');
   const [editSocsoPercentage, setEditSocsoPercentage] = useState('0.5');
   const [editTaxPercentage, setEditTaxPercentage] = useState('5');
@@ -221,6 +227,9 @@ export default function UserManagementScreen() {
     setNewManagerId(null);
     setNewSalary('50000');
     setNewDob('');
+    setNewUan('');
+    setNewEsi('');
+    setNewEsiExempt(false);
     setFormError('');
     setFormSuccess(false);
     setAddModalOpen(true);
@@ -282,6 +291,10 @@ export default function UserManagementScreen() {
       setFormError('Phone number is required and must be at least 6 characters (used as default password)');
       return;
     }
+    if (newEsi && !newEsiExempt && !/^\d{10}$/.test(newEsi.trim())) {
+      setFormError('ESI Insurance Number must be exactly 10 digits.');
+      return;
+    }
 
     setFormError('');
     setSavingUser(true);
@@ -304,6 +317,9 @@ export default function UserManagementScreen() {
         default_shift_id: newShiftId || undefined,
         manager_id: newManagerId || undefined,
         date_of_birth: newDob.trim() || undefined,
+        uan_number: newUan.trim() || undefined,
+        esi_number: newEsi.trim() || undefined,
+        esi_exempt: newEsiExempt,
         basic_salary: parseFloat(newSalary) || 0,
         employment_type: newEmploymentType,
         epf_percentage: parseFloat(newEpfPercentage) || 0,
@@ -409,6 +425,9 @@ export default function UserManagementScreen() {
         setEditDob(empData.date_of_birth || '');
         setEditEmploymentType((empData as any).employment_type || 'full_time');
         const tc = (empData as any).tax_config || {};
+        setEditUan(tc.uan_number || '');
+        setEditEsi(tc.esi_number || '');
+        setEditEsiExempt(!!tc.esi_exempt);
         setEditEpfPercentage(tc.epf_percentage != null ? String(tc.epf_percentage) : '12');
         setEditSocsoPercentage(tc.socso_percentage != null ? String(tc.socso_percentage) : '0.5');
         setEditTaxPercentage(tc.tax_percentage != null ? String(tc.tax_percentage) : tc.tds_percentage != null ? String(tc.tds_percentage) : '5');
@@ -440,6 +459,9 @@ export default function UserManagementScreen() {
         setEditManagerId(null);
         setEditSalary('');
         setEditDob('');
+        setEditUan('');
+        setEditEsi('');
+        setEditEsiExempt(false);
         setEditEmploymentType('full_time');
         setEditEpfPercentage('12');
         setEditSocsoPercentage('0.5');
@@ -471,6 +493,10 @@ export default function UserManagementScreen() {
       setEditError('Full name cannot be empty');
       return;
     }
+    if (editEsi && !editEsiExempt && !/^\d{10}$/.test(editEsi.trim())) {
+      setEditError('ESI Insurance Number must be exactly 10 digits.');
+      return;
+    }
 
     setSavingEdit(true);
     setEditError('');
@@ -484,6 +510,9 @@ export default function UserManagementScreen() {
       });
 
       const updatedTaxConfig = {
+        uan_number: editUan.trim() || null,
+        esi_number: editEsi.trim() || null,
+        esi_exempt: editEsiExempt,
         epf_percentage: parseFloat(editEpfPercentage) || 0,
         socso_percentage: parseFloat(editSocsoPercentage) || 0,
         tax_percentage: parseFloat(editTaxPercentage) || 0,
@@ -1245,6 +1274,43 @@ export default function UserManagementScreen() {
                         </View>
                       </View>
 
+                      <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                        <View style={{ flex: 1 }}>
+                          <Input
+                            label="ESI Number (10 digits)"
+                            placeholder="e.g. 1234567890"
+                            value={newEsi}
+                            onChangeText={setNewEsi}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Input
+                            label="UAN Number (12 digits)"
+                            placeholder="e.g. 100000000000"
+                            value={newUan}
+                            onChangeText={setNewUan}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                      </View>
+                      
+                      <View style={[styles.switchCard, { backgroundColor: '#fff', borderColor: '#e2e8f0', marginTop: 5 }]}>
+                        <View style={{ flex: 1, paddingRight: 10 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
+                            ESI Exempt
+                          </Text>
+                          <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                            Toggle if this employee is exempt from ESI
+                          </Text>
+                        </View>
+                        <Switch
+                          value={newEsiExempt}
+                          onValueChange={setNewEsiExempt}
+                          trackColor={{ true: colors.primary }}
+                        />
+                      </View>
+
                       <View style={{ flexDirection: 'row', gap: 10 }}>
                         <View style={{ flex: 1 }}>
                           <Input
@@ -1459,6 +1525,44 @@ export default function UserManagementScreen() {
                         keyboardType="numeric"
                       />
                     </View>
+                    </View>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Input
+                        label="ESI Number (10 digits)"
+                        placeholder="e.g. 1234567890"
+                        value={editEsi}
+                        onChangeText={setEditEsi}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Input
+                        label="UAN Number (12 digits)"
+                        placeholder="e.g. 100000000000"
+                        value={editUan}
+                        onChangeText={setEditUan}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+
+                  <View style={[styles.switchCard, { backgroundColor: '#fff', borderColor: '#e2e8f0', marginTop: 5, padding: 10 }]}>
+                    <View style={{ flex: 1, paddingRight: 10 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
+                        ESI Exempt
+                      </Text>
+                      <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                        Toggle if this employee is exempt from ESI
+                      </Text>
+                    </View>
+                    <Switch
+                      value={editEsiExempt}
+                      onValueChange={setEditEsiExempt}
+                      trackColor={{ true: colors.primary }}
+                    />
                   </View>
 
                   <View style={{ flexDirection: 'row', gap: 10 }}>

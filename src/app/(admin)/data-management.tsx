@@ -5,16 +5,24 @@ import { SidebarLayout } from '@/components/layout/Sidebar';
 import { useTheme } from '@/hooks/use-theme';
 import { Button } from '@/components/ui/Button';
 import { Download, Upload, FileText, FileSpreadsheet, CheckCircle2, AlertCircle } from 'lucide-react-native';
-import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { useTenant } from '@/context/TenantContext';
+import { useAuth } from '@/hooks/useAuth';
+import { IMPORT_MODULES, downloadTemplate, processImport } from '@/lib/services/importExport';
+import { generateReport } from '@/lib/services/reports';
+import { importExcelObjects } from '@/utils/excel';
 
 export default function DataManagementScreen() {
   const colors = useTheme();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
+  const { organization } = useTenant();
+  const { profile } = useAuth();
   
   const [activeTab, setActiveTab] = useState<'export' | 'import'>('export');
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
+  const [selectedModule, setSelectedModule] = useState<string>('employees');
   
   const reports = [
     { id: 'employee', name: 'Employee Directory', desc: 'Basic details of all employees' },
@@ -27,44 +35,43 @@ export default function DataManagementScreen() {
     { id: 'pf', name: 'PF / EPF Report', desc: 'Provident fund contribution summary' },
   ];
 
-  const handleDownloadTemplate = () => {
-    // Generate a CSV template
-    const headers = 'Employee Code,Full Name,Email,Phone,Department,Designation,Date of Joining(DD/MM/YYYY),Basic Salary\nEMP001,John Doe,john@example.com,9876543210,Engineering,Software Engineer,01/01/2026,50000';
-    const blob = new Blob([headers], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'Oasis_HRMS_Employee_Import_Template.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleDownloadTemplate = async () => {
+    try {
+      await downloadTemplate(selectedModule);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to download template');
+    }
   };
 
-  const handleSimulateImport = () => {
-    setImporting(true);
-    setImportResult(null);
-    setTimeout(() => {
+  const handleUploadAndImport = async () => {
+    try {
+      const sheets = await importExcelObjects();
+      if (!sheets) {
+        return;
+      }
+      const orgId = organization?.id || profile?.organization_id;
+      if (!orgId) throw new Error('Organization not found');
+
+      setImporting(true);
+      setImportResult(null);
+
+      const result = await processImport(orgId, selectedModule, sheets);
+      setImportResult(result);
+    } catch (e: any) {
+      Alert.alert('Import Failed', e.message || 'Failed to import records');
+    } finally {
       setImporting(false);
-      setImportResult({
-        total: 10,
-        success: 8,
-        failed: 1,
-        skipped: 1,
-        duplicates: 1,
-        errors: [{ row: 3, error: 'Invalid Date of Joining format' }]
-      });
-    }, 2000);
+    }
   };
 
-  const handleExport = (reportId: string) => {
-    // Simulate generic export
-    const content = `Report: ${reportId}\nGenerated At: ${new Date().toISOString()}`;
-    const blob = new Blob([content], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Oasis_${reportId}_Report.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleExport = async (reportId: string) => {
+    try {
+      const orgId = organization?.id || profile?.organization_id;
+      if (!orgId) throw new Error('Organization not found');
+      await generateReport(orgId, reportId);
+    } catch (e: any) {
+      Alert.alert('Export Failed', e.message || 'Failed to generate report');
+    }
   };
 
   return (
@@ -126,19 +133,27 @@ export default function DataManagementScreen() {
                   <FileSpreadsheet size={20} color="#16a34a" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.cardTitle, { color: colors.text }]}>1. Download Template</Text>
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>1. Select Dataset & Download Template</Text>
                   <Text style={[styles.cardSub, { color: colors.textSecondary }]}>
-                    Download the sample Excel/CSV template with required columns and data formats.
+                    Select the data you want to import and download its specific Excel template.
                   </Text>
                 </View>
               </View>
-              <Button
-                title="Download Sample Template"
-                icon={<Download size={16} color="#000" />}
-                onPress={handleDownloadTemplate}
-                variant="outline"
-                style={{ alignSelf: 'flex-start' }}
-              />
+              <View style={{ gap: 16 }}>
+                <Select
+                  label="Select Dataset"
+                  options={IMPORT_MODULES.map(m => ({ label: m.name, value: m.id }))}
+                  value={selectedModule}
+                  onValueChange={(v) => setSelectedModule(v)}
+                />
+                <Button
+                  title="Download Sample Template"
+                  icon={<Download size={16} color="#000" />}
+                  onPress={handleDownloadTemplate}
+                  variant="outline"
+                  style={{ alignSelf: 'flex-start' }}
+                />
+              </View>
             </View>
 
             <View style={[styles.fullCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
@@ -149,22 +164,16 @@ export default function DataManagementScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.cardTitle, { color: colors.text }]}>2. Upload & Validate</Text>
                   <Text style={[styles.cardSub, { color: colors.textSecondary }]}>
-                    Upload your filled template to validate and import records into the database.
+                    Upload your filled template to validate and import records into the database. Make sure you delete the sample records from the downloaded template before importing.
                   </Text>
                 </View>
               </View>
               
-              <View style={{ borderWidth: 2, borderStyle: 'dashed', borderColor: '#cbd5e1', padding: 40, borderRadius: 12, alignItems: 'center' }}>
-                <Upload size={32} color="#94a3b8" />
-                <Text style={{ marginTop: 12, fontSize: 16, fontWeight: '600' }}>Click or drag file to this area to upload</Text>
-                <Text style={{ marginTop: 4, fontSize: 12, color: '#64748b' }}>Support for a single or bulk upload. Strictly prohibit from uploading company data or other band files</Text>
-              </View>
-
               <Button
-                title="Simulate Import"
-                onPress={handleSimulateImport}
+                title="Select File & Import"
+                onPress={handleUploadAndImport}
                 loading={importing}
-                style={{ backgroundColor: colors.primary, marginTop: 12 }}
+                style={{ backgroundColor: colors.primary, marginTop: 12, height: 60 }}
               />
               
               {importResult && (
