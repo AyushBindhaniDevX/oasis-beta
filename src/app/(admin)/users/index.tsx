@@ -1525,7 +1525,6 @@ export default function UserManagementScreen() {
                         keyboardType="numeric"
                       />
                     </View>
-                    </View>
                   </View>
 
                   <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
