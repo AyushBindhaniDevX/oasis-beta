@@ -191,12 +191,12 @@ export default function ShiftsScreen() {
                     <tr>
                       <td class="emp-name">${emp.profile?.full_name || 'Staff'}</td>
                       ${weekDates.map(d => {
-                        const shiftId = rosterMap[\`\${emp.id}_\${d.dateStr}\`];
+                        const shiftId = rosterMap[emp.id + '_' + d.dateStr];
                         const shiftDef = shifts.find(s => s.id === shiftId);
                         if (shiftId && shiftId !== 'OFF' && shiftDef) {
-                          return \`<td><span class="shift-cell" style="background-color: \${shiftDef.color}20; color: \${shiftDef.color};">\${shiftDef.name}</span></td>\`;
+                          return '<td><span class="shift-cell" style="background-color: ' + shiftDef.color + '20; color: ' + shiftDef.color + ';">' + shiftDef.name + '</span></td>';
                         } else {
-                          return \`<td style="color: #94A3B8;">OFF</td>\`;
+                          return '<td style="color: #94A3B8;">OFF</td>';
                         }
                       }).join('')}
                     </tr>
