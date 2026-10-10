@@ -33,7 +33,10 @@ import {
   Sparkles,
   CheckCircle2,
   X,
+  Download,
 } from 'lucide-react-native';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
@@ -155,6 +158,66 @@ export default function ShiftsScreen() {
     await loadData();
   };
 
+  const handleDownloadPDF = async () => {
+    try {
+      setLoading(true);
+      const htmlContent = `
+        <html>
+          <head>
+            <style>
+              body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 20px; }
+              h1 { color: #0D7377; text-align: center; }
+              h3 { text-align: center; color: #64748B; margin-bottom: 30px; }
+              table { width: 100%; border-collapse: collapse; font-size: 12px; }
+              th, td { border: 1px solid #E2E8F0; padding: 8px; text-align: center; }
+              th { background-color: #F8FAFC; color: #334155; font-weight: bold; }
+              td.emp-name { text-align: left; font-weight: bold; color: #0F172A; }
+              .shift-cell { font-weight: bold; border-radius: 4px; padding: 2px 4px; display: inline-block; }
+            </style>
+          </head>
+          <body>
+            <h1>Weekly Shift Roster</h1>
+            <h3>Week of ${weekDates[0].dateStr} — ${weekDates[6].dateStr}</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th style="text-align: left;">Employee</th>
+                  ${weekDates.map((d, i) => `<th>${DAYS[i]}<br/>${d.dateStr}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                ${employees.map(emp => {
+                  return `
+                    <tr>
+                      <td class="emp-name">${emp.profile?.full_name || 'Staff'}</td>
+                      ${weekDates.map(d => {
+                        const shiftId = rosterMap[\`\${emp.id}_\${d.dateStr}\`];
+                        const shiftDef = shifts.find(s => s.id === shiftId);
+                        if (shiftId && shiftId !== 'OFF' && shiftDef) {
+                          return \`<td><span class="shift-cell" style="background-color: \${shiftDef.color}20; color: \${shiftDef.color};">\${shiftDef.name}</span></td>\`;
+                        } else {
+                          return \`<td style="color: #94A3B8;">OFF</td>\`;
+                        }
+                      }).join('')}
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </body>
+        </html>
+      `;
+      
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+    } catch (error) {
+      console.error('Failed to generate PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCreateOrUpdateShift = async () => {
     if (!newShiftName.trim()) return;
     setSavingShift(true);
@@ -231,6 +294,13 @@ export default function ShiftsScreen() {
             style={[styles.addBtn, { backgroundColor: colors.primary }]}>
               <Plus size={16} color="#FFF" />
               <Text style={styles.addBtnText}>New Shift Type</Text>
+            </TouchableOpacity>
+          )}
+
+          {selectedView === 'roster' && (
+            <TouchableOpacity onPress={handleDownloadPDF} style={[styles.addBtn, { backgroundColor: '#10b981' }]}>
+              <Download size={16} color="#FFF" />
+              <Text style={styles.addBtnText}>Export PDF</Text>
             </TouchableOpacity>
           )}
         </View>

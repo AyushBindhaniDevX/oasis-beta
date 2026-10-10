@@ -55,9 +55,10 @@ import { calculateDistance, getCurrentLocation } from '@/lib/services/location';
 import { cancelClockInNotification, sendClockInNotification } from '@/lib/services/notifications';
 import { getPayslips } from '@/lib/services/payroll';
 import { getAppraisals } from '@/lib/services/performance';
+import { getEmployeeShiftForDate } from '@/lib/services/shifts';
 
 // Types & Utils
-import type { Attendance, Employee, LeaveBalance, Payslip, AppraisalReview } from '@/types';
+import type { Attendance, Employee, LeaveBalance, Payslip, AppraisalReview, WorkShift } from '@/types';
 import { formatCurrency, formatDate, formatMinutes, formatTime, getGreeting } from '@/utils/format';
 import { ScreenErrorFallback } from '@/components/ui/ScreenErrorBoundary';
 
@@ -167,6 +168,7 @@ export default function EmployeeDashboard() {
   const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
   const [latestPayslip, setLatestPayslip] = useState<Payslip | null>(null);
   const [pendingAppraisal, setPendingAppraisal] = useState<AppraisalReview | null>(null);
+  const [todayShift, setTodayShift] = useState<WorkShift | null>(null);
   const [clockLoading, setClockLoading] = useState(false);
   const [clockError, setClockError] = useState('');
   const [distance, setDistance] = useState<number | null>(null);
@@ -186,18 +188,21 @@ export default function EmployeeDashboard() {
       }
       setEmployee(emp);
       if (emp) {
-        const [today, history, balances, payslips, appraisals] = await Promise.all([
+        const todayDateStr = new Date().toISOString().split('T')[0];
+        const [today, history, balances, payslips, appraisals, shift] = await Promise.all([
           getTodayAttendance(emp.id),
           getAttendanceHistory(emp.id, 5),
           getLeaveBalances(emp.id, undefined, activeOrgId),
           getPayslips(emp.id),
-          getAppraisals({ employeeId: emp.id, status: 'self_review', organizationId: activeOrgId })
+          getAppraisals({ employeeId: emp.id, status: 'self_review', organizationId: activeOrgId }),
+          getEmployeeShiftForDate(emp.id, todayDateStr)
         ]);
         setTodayAttendance(today);
         setRecentAttendance(history);
         setLeaveBalances(balances);
         setLatestPayslip(payslips.length > 0 ? payslips[0] : null);
         setPendingAppraisal(appraisals.length > 0 ? appraisals[0] : null);
+        setTodayShift(shift);
       }
     } catch (err) { console.error('Dashboard load error:', err); }
     finally { setLoading(false); }
@@ -426,6 +431,7 @@ export default function EmployeeDashboard() {
             </View>
           }
           stats={[
+            { label: 'Shift Start', value: todayShift ? todayShift.start_time : '--:--' },
             { label: 'Clock In', value: todayAttendance?.clock_in ? formatTime(todayAttendance.clock_in) : '--:--' },
             { label: 'Clock Out', value: todayAttendance?.clock_out ? formatTime(todayAttendance.clock_out) : '--:--' },
             { label: 'Hours', value: todayAttendance?.working_minutes ? formatMinutes(todayAttendance.working_minutes) : '0h 0m', valueColor: '#6EE7B7' },
@@ -449,6 +455,26 @@ export default function EmployeeDashboard() {
           {/* Main column */}
           <View style={[styles.col, isDesktop && { flex: 3 }]}>
             
+            {/* Today's Shift Card */}
+            {todayShift && (
+              <Animated.View entering={FadeInDown.springify().delay(50)}>
+                <Card style={[styles.card, { backgroundColor: '#f8fafc', borderColor: '#e2e8f0', marginBottom: 20 }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                    <View style={{ backgroundColor: `${todayShift.color}20`, padding: 12, borderRadius: 999 }}>
+                      <Clock size={24} color={todayShift.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, color: '#64748b', fontWeight: '600', textTransform: 'uppercase' }}>Today's Shift</Text>
+                      <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', marginTop: 2 }}>{todayShift.name}</Text>
+                      <Text style={{ fontSize: 13, color: '#475569', marginTop: 3 }}>
+                        {todayShift.start_time} — {todayShift.end_time}
+                      </Text>
+                    </View>
+                  </View>
+                </Card>
+              </Animated.View>
+            )}
+
             {/* Pending Appraisal Alert Card */}
             {pendingAppraisal && (
               <Animated.View entering={FadeInDown.springify()}>

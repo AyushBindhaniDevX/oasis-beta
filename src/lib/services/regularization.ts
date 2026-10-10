@@ -160,6 +160,36 @@ export async function submitRegularization(
   };
 
   await setDoc(doc(db, 'attendance_regularizations', regId), record);
+
+  // Background: Email notification to Manager
+  try {
+    const freshEmpSnap = await getDoc(doc(db, 'employees', params.employee_id));
+    if (freshEmpSnap.exists()) {
+      const empData = freshEmpSnap.data() as any;
+      const managerId = empData.manager_id;
+      let empName = 'Employee';
+      if (empData.profile_id) {
+        const empProfSnap = await getDoc(doc(db, 'profiles', empData.profile_id));
+        if (empProfSnap.exists()) empName = empProfSnap.data().full_name || 'Employee';
+      }
+      if (managerId) {
+        const mgrProfSnap = await getDoc(doc(db, 'profiles', managerId));
+        if (mgrProfSnap.exists()) {
+          const mgrProf = mgrProfSnap.data() as any;
+          const { sendAttendanceRegularizationEmail } = await import('./resend');
+          await sendAttendanceRegularizationEmail(
+            mgrProf.email,
+            mgrProf.full_name || 'Manager',
+            empName,
+            day,
+            params.reason,
+            { organizationId: orgId }
+          );
+        }
+      }
+    }
+  } catch (err) {}
+
   return record;
 }
 
@@ -238,6 +268,23 @@ export async function reviewRegularization(
     if (empSnap.exists()) {
       const emp = empSnap.data() as Employee;
       if (emp.profile_id) {
+        // Send Email
+        try {
+          const profSnap = await getDoc(doc(db, 'profiles', emp.profile_id));
+          if (profSnap.exists()) {
+            const prof = profSnap.data() as any;
+            const { sendRegularizationStatusEmail } = await import('./resend');
+            await sendRegularizationStatusEmail(
+              prof.email,
+              prof.full_name || 'Employee',
+              action === 'approve' ? 'approved' : 'rejected',
+              ymd(reg.date),
+              reviewerId || 'HR Management',
+              { organizationId: reg.organization_id }
+            );
+          }
+        } catch (e) {}
+
         const { createNotification } = await import('./notifications');
         await createNotification(
           emp.profile_id,

@@ -92,6 +92,25 @@ export async function getRoster(
   }
 }
 
+export async function getEmployeeShiftForDate(employeeId: string, date: string): Promise<WorkShift | null> {
+  try {
+    const id = `${employeeId}_${date}`;
+    const snap = await getDoc(doc(db, 'employee_shifts', id));
+    if (!snap.exists()) return null;
+    
+    const empShift = snap.data() as EmployeeShift;
+    if (!empShift.shift_id || empShift.shift_id === 'OFF') return null;
+
+    const shiftSnap = await getDoc(doc(db, 'shifts', empShift.shift_id));
+    if (!shiftSnap.exists()) return null;
+
+    return { id: shiftSnap.id, ...shiftSnap.data() } as WorkShift;
+  } catch (e) {
+    console.error('Error fetching shift:', e);
+    return null;
+  }
+}
+
 export async function assignEmployeeShift(
   employeeId: string,
   date: string,

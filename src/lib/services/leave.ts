@@ -243,6 +243,40 @@ export async function applyLeave(params: {
 
   await setDoc(doc(db, 'leave_requests', reqId), request);
   request.leave_type = matchedType;
+
+  // Background: Email notification to Manager
+  try {
+    const empSnap = await getDoc(doc(db, 'employees', empId));
+    if (empSnap.exists()) {
+      const empData = empSnap.data() as any;
+      const managerId = empData.manager_id;
+      let empName = 'Employee';
+      if (empData.profile_id) {
+        const empProfSnap = await getDoc(doc(db, 'profiles', empData.profile_id));
+        if (empProfSnap.exists()) empName = empProfSnap.data().full_name || 'Employee';
+      }
+
+      if (managerId) {
+        const mgrProfSnap = await getDoc(doc(db, 'profiles', managerId));
+        if (mgrProfSnap.exists()) {
+          const mgrProf = mgrProfSnap.data() as any;
+          const { sendLeaveApplicationEmail } = await import('./resend');
+          await sendLeaveApplicationEmail(
+            mgrProf.email,
+            mgrProf.full_name || 'Manager',
+            empName,
+            matchedType?.name || 'Leave',
+            `${params.start_date} to ${params.end_date} (${calculatedDays} days)`,
+            params.reason,
+            { organizationId: params.organization_id }
+          );
+        }
+      }
+    }
+  } catch (emailErr) {
+    console.error('Failed to send leave application email:', emailErr);
+  }
+
   return request;
 }
 

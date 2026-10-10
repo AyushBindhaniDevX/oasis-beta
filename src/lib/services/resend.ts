@@ -509,7 +509,76 @@ export async function sendWelcomeEmail(
 }
 
 /**
- * 2. Leave Request Approval / Rejection
+ * 2a. New Leave Request Notification (To Manager)
+ */
+export async function sendLeaveApplicationEmail(
+  managerEmail: string,
+  managerName: string,
+  employeeName: string,
+  leaveType: string,
+  dates: string,
+  reason: string,
+  extra?: {
+    organizationId?: string | null;
+    organizationName?: string | null;
+  }
+) {
+  const orgCtx = await resolveOrgContext(
+    extra?.organizationId || extra?.organizationName
+      ? {
+          organizationId: extra?.organizationId || undefined,
+          organizationName: extra?.organizationName || undefined,
+        }
+      : undefined
+  );
+
+  const orgName = orgCtx.organizationName || 'Oasis HRMS';
+  const portalUrl = orgCtx.portalUrl || 'https://hrms-ayushbindhanidevxs-projects.vercel.app';
+
+  const htmlContent = `
+    <h2>Hello ${managerName},</h2>
+    <p><strong>${employeeName}</strong> has submitted a new leave request that requires your review.</p>
+    
+    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+          <td style="padding: 6px 0; color: #64748B;">Applicant:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${employeeName}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+          <td style="padding: 6px 0; color: #64748B;">Leave Category:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${leaveType}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+          <td style="padding: 6px 0; color: #64748B;">Dates:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${dates}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748B;">Reason:</td>
+          <td style="padding: 6px 0; color: #334155; text-align: right;">${reason}</td>
+        </tr>
+      </table>
+    </div>
+
+    <div style="text-align: center; margin: 26px 0 10px 0;">
+      <a href="${portalUrl}" style="display: inline-block; background: ${orgCtx.brandColor || '#0D7377'}; color: #FFFFFF !important; padding: 12px 28px; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none;">
+        Review Request in Portal →
+      </a>
+    </div>
+  `;
+
+  return sendResendEmail({
+    to: managerEmail,
+    subject: `Action Required: Leave Request from ${employeeName} | ${orgName}`,
+    category: 'leave',
+    htmlContent,
+    orgContext: orgCtx,
+    organizationId: orgCtx.organizationId,
+  });
+}
+
+/**
+ * 2b. Leave Request Approval / Rejection
  */
 export async function sendLeaveStatusEmail(
   to: string,
@@ -600,7 +669,137 @@ export async function sendLeaveStatusEmail(
 }
 
 /**
- * 3. Expense Claim Settlement
+ * 3a. Attendance Regularization Request (To Manager)
+ */
+export async function sendAttendanceRegularizationEmail(
+  managerEmail: string,
+  managerName: string,
+  employeeName: string,
+  date: string,
+  reason: string,
+  extra?: {
+    organizationId?: string | null;
+    organizationName?: string | null;
+  }
+) {
+  const orgCtx = await resolveOrgContext(
+    extra?.organizationId || extra?.organizationName
+      ? {
+          organizationId: extra?.organizationId || undefined,
+          organizationName: extra?.organizationName || undefined,
+        }
+      : undefined
+  );
+
+  const orgName = orgCtx.organizationName || 'Oasis HRMS';
+  const portalUrl = orgCtx.portalUrl || 'https://hrms-ayushbindhanidevxs-projects.vercel.app';
+
+  const htmlContent = `
+    <h2>Hello ${managerName},</h2>
+    <p><strong>${employeeName}</strong> has requested an <strong>Attendance Regularization</strong> for the date <strong>${date}</strong>.</p>
+    
+    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+          <td style="padding: 6px 0; color: #64748B;">Employee:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${employeeName}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+          <td style="padding: 6px 0; color: #64748B;">Date:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${date}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748B;">Reason:</td>
+          <td style="padding: 6px 0; color: #334155; text-align: right;">${reason}</td>
+        </tr>
+      </table>
+    </div>
+
+    <div style="text-align: center; margin: 26px 0 10px 0;">
+      <a href="${portalUrl}" style="display: inline-block; background: ${orgCtx.brandColor || '#0D7377'}; color: #FFFFFF !important; padding: 12px 28px; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none;">
+        Review Request in Portal →
+      </a>
+    </div>
+  `;
+
+  return sendResendEmail({
+    to: managerEmail,
+    subject: `Action Required: Attendance Regularization from ${employeeName} | ${orgName}`,
+    category: 'general',
+    htmlContent,
+    orgContext: orgCtx,
+    organizationId: orgCtx.organizationId,
+  });
+}
+
+/**
+ * 3b. Attendance Regularization Status (To Employee)
+ */
+export async function sendRegularizationStatusEmail(
+  to: string,
+  name: string,
+  status: 'approved' | 'rejected',
+  date: string,
+  reviewer: string,
+  extra?: {
+    organizationId?: string | null;
+    organizationName?: string | null;
+  }
+) {
+  const orgCtx = await resolveOrgContext(
+    extra?.organizationId || extra?.organizationName
+      ? {
+          organizationId: extra?.organizationId || undefined,
+          organizationName: extra?.organizationName || undefined,
+        }
+      : undefined
+  );
+
+  const isApproved = status === 'approved';
+  const orgName = orgCtx.organizationName || 'Oasis HRMS';
+  const portalUrl = orgCtx.portalUrl || 'https://hrms-ayushbindhanidevxs-projects.vercel.app';
+
+  const htmlContent = `
+    <h2>Hello ${name},</h2>
+    <p>Your Attendance Regularization request for <strong>${date}</strong> has been <strong>${status.toUpperCase()}</strong>.</p>
+    
+    <div style="background: ${isApproved ? '#ECFDF5' : '#FEF2F2'}; border: 1px solid ${isApproved ? '#A7F3D0' : '#FECACA'}; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
+      <div style="margin-bottom: 12px;">
+        <span style="font-weight: 700; font-size: 14px; color: ${isApproved ? '#065F46' : '#991B1B'};">
+          Decision: ${isApproved ? '✅ Approved' : '❌ Declined'}
+        </span>
+      </div>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+          <td style="padding: 6px 0; color: #64748B;">Date:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${date}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 0; color: #64748B;">Reviewed By:</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #0F172A; text-align: right;">${reviewer}</td>
+        </tr>
+      </table>
+    </div>
+
+    <div style="text-align: center; margin: 26px 0 10px 0;">
+      <a href="${portalUrl}" style="display: inline-block; background: ${orgCtx.brandColor || '#0D7377'}; color: #FFFFFF !important; padding: 12px 28px; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none;">
+        View Attendance History →
+      </a>
+    </div>
+  `;
+
+  return sendResendEmail({
+    to,
+    subject: `Attendance Regularization ${isApproved ? 'Approved ✅' : 'Declined ❌'} — ${date} | ${orgName}`,
+    category: 'general',
+    htmlContent,
+    orgContext: orgCtx,
+    organizationId: orgCtx.organizationId,
+  });
+}
+
+/**
+ * 4. Expense Claim Settlement
  */
 export async function sendExpenseStatusEmail(
   to: string,
