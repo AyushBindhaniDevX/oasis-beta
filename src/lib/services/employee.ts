@@ -356,6 +356,20 @@ export async function createEmployee(params: {
   } catch (mailErr) {
     console.warn('Resend welcome notification dispatch warning:', mailErr);
   }
+
+  // Automated Appointment Letter Generation for New Joiners (Requirement 3)
+  try {
+    const { createAndStoreAppointmentLetter } = await import('./appointmentLetters');
+    await createAndStoreAppointmentLetter(
+      {
+        ...empPayload,
+        profile: profPayload,
+      },
+      resolvedOrgId
+    );
+  } catch (aptErr) {
+    console.warn('Auto appointment letter generation notice:', aptErr);
+  }
 }
 
 export async function updateEmployee(id: string, updates: Record<string, any>): Promise<void> {
@@ -384,7 +398,7 @@ export async function getHHCDoctors(organizationId?: string): Promise<Employee[]
     snap.forEach((d) => {
       const data = d.data() as Employee;
       if (data.is_hhc_enabled) {
-        list.push({ id: d.id, ...data });
+        list.push({ ...data, id: d.id });
       }
     });
     return list;

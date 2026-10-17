@@ -218,6 +218,43 @@ export function RegularizationModal({
               </View>
             ) : null}
 
+            {/* Monthly Policy Tracker (Hospital 5-times per month rule) */}
+            {(() => {
+              const monthKey = date ? date.toISOString().slice(0, 7) : new Date().toISOString().slice(0, 7);
+              const usedThisMonth = requests.filter(
+                (r) => (r.date || r.created_at || '').slice(0, 7) === monthKey && r.status !== 'cancelled'
+              ).length;
+              const remaining = Math.max(0, 5 - usedThisMonth);
+              const isBlocked = usedThisMonth >= 5;
+
+              return (
+                <View
+                  style={{
+                    padding: 12,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    backgroundColor: isBlocked ? '#FEF2F2' : '#F0FDFA',
+                    borderColor: isBlocked ? '#FCA5A5' : '#99F6E4',
+                    gap: 3,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: isBlocked ? '#DC2626' : '#0F766E' }}>
+                      Monthly Quota: {usedThisMonth} / 5 Used
+                    </Text>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: isBlocked ? '#B91C1C' : '#0D9488' }}>
+                      {remaining} remaining for {monthKey}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 11, color: isBlocked ? '#991B1B' : '#115E59' }}>
+                    {isBlocked
+                      ? '⚠️ Maximum 5 regularizations per month policy reached. Contact HR for administrative assistance.'
+                      : 'Hospital Policy: Employees may regularize missed punches a maximum of 5 times per month.'}
+                  </Text>
+                </View>
+              );
+            })()}
+
             {/* Date */}
             <DatePicker label="Date to Regularize" value={date} onChange={setDate} />
 
@@ -292,18 +329,34 @@ export function RegularizationModal({
             </View>
 
             {/* Submit */}
-            <TouchableOpacity
-              onPress={handleSubmit}
-              disabled={submitting}
-              activeOpacity={0.85}
-              style={[styles.submitBtn, { backgroundColor: colors.primary }, submitting && { opacity: 0.7 }]}
-            >
-              {submitting ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.submitText}>Submit Request</Text>
-              )}
-            </TouchableOpacity>
+            {(() => {
+              const monthKey = date ? date.toISOString().slice(0, 7) : new Date().toISOString().slice(0, 7);
+              const usedThisMonth = requests.filter(
+                (r) => (r.date || r.created_at || '').slice(0, 7) === monthKey && r.status !== 'cancelled'
+              ).length;
+              const isBlocked = usedThisMonth >= 5;
+
+              return (
+                <TouchableOpacity
+                  onPress={handleSubmit}
+                  disabled={submitting || isBlocked}
+                  activeOpacity={0.85}
+                  style={[
+                    styles.submitBtn,
+                    { backgroundColor: isBlocked ? colors.border : colors.primary },
+                    (submitting || isBlocked) && { opacity: 0.7 },
+                  ]}
+                >
+                  {submitting ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={[styles.submitText, isBlocked && { color: colors.textSecondary }]}>
+                      {isBlocked ? 'Limit Reached (5/5 this month)' : 'Submit Request'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })()}
 
             {/* My requests */}
             <View style={{ marginTop: 4, gap: 10 }}>

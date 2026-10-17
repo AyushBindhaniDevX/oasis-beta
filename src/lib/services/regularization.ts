@@ -102,6 +102,38 @@ export async function getPendingRegularizations(
   return getOrgRegularizations(organizationId, 'pending');
 }
 
+export const MAX_MONTHLY_REGULARIZATIONS = 5;
+
+export async function getMonthlyRegularizationCount(
+  employeeId: string,
+  monthYear: string
+): Promise<{ count: number; remaining: number; max: number }> {
+  try {
+    const q = query(
+      collection(db, 'attendance_regularizations'),
+      where('employee_id', '==', employeeId)
+    );
+    const snap = await getDocs(q);
+    let count = 0;
+    snap.forEach((d) => {
+      const data = d.data() as AttendanceRegularization;
+      if (data.status === 'cancelled') return;
+      const dateKey = (data.date || data.created_at || '').slice(0, 7);
+      if (dateKey === monthYear) {
+        count++;
+      }
+    });
+    return {
+      count,
+      remaining: Math.max(0, MAX_MONTHLY_REGULARIZATIONS - count),
+      max: MAX_MONTHLY_REGULARIZATIONS,
+    };
+  } catch (err) {
+    console.error('getMonthlyRegularizationCount error:', err);
+    return { count: 0, remaining: MAX_MONTHLY_REGULARIZATIONS, max: MAX_MONTHLY_REGULARIZATIONS };
+  }
+}
+
 export interface SubmitRegularizationParams {
   employee_id: string;
   date: string;
@@ -109,6 +141,7 @@ export interface SubmitRegularizationParams {
   requested_clock_out?: string | null;
   requested_status?: AttendanceStatus | null;
   reason: string;
+  bypass_limit?: boolean; // For authorized administrative intervention
 }
 
 export async function submitRegularization(
@@ -127,6 +160,18 @@ export async function submitRegularization(
   }
 
   const day = ymd(params.date);
+  const monthKey = day.slice(0, 7);
+
+  // Enforce Policy: No more than 5 times per month
+  if (!params.bypass_limit) {
+    const { count, max } = await getMonthlyRegularizationCount(params.employee_id, monthKey);
+    if (count >= max) {
+      throw new Error(
+        `Monthly policy limit reached: You have already submitted ${count} of ${max} allowed regularization requests for ${monthKey}. As per hospital policy, employees may regularize missed punches no more than 5 times per calendar month.`
+      );
+    }
+  }
+
   let orgId: string | null = null;
 
   try {

@@ -30,6 +30,7 @@ import {
   createLeaveType,
   updateLeaveType,
   deleteLeaveType,
+  HOSPITAL_LEAVE_TIERS,
 } from '@/lib/services/leave';
 import { formatDate } from '@/utils/format';
 import type { LeaveRequest, LeaveType } from '@/types';
@@ -496,6 +497,27 @@ export default function HRLeaveWorkflowScreen() {
                               </Text>
                             )}
 
+                            {/* 4-Tier Workflow Stage */}
+                            {(() => {
+                              const tierNum = req.current_tier || 1;
+                              const tierInfo = HOSPITAL_LEAVE_TIERS.find((t) => t.tier === tierNum) || HOSPITAL_LEAVE_TIERS[0];
+                              return (
+                                <View style={{ marginVertical: 6, padding: 6, backgroundColor: '#f0f9ff', borderRadius: 8, borderWidth: 1, borderColor: '#bae6fd', gap: 2 }}>
+                                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#0369a1' }}>
+                                      Tier {tierNum} of 4: {tierInfo.code}
+                                    </Text>
+                                    <Text style={{ fontSize: 10, color: '#0284c7', fontWeight: '600' }}>
+                                      Pending Approval
+                                    </Text>
+                                  </View>
+                                  <Text style={{ fontSize: 10, color: '#075985' }}>
+                                    Current Approver: {tierInfo.name}
+                                  </Text>
+                                </View>
+                              );
+                            })()}
+
                             {/* Quick Action Buttons */}
                             <View style={styles.cardActions}>
                               <TouchableOpacity
@@ -504,7 +526,9 @@ export default function HRLeaveWorkflowScreen() {
                                 disabled={processingId === req.id}
                               >
                                 <CheckCircle2 size={13} color="#FFF" />
-                                <Text style={styles.btnActionText}>Approve</Text>
+                                <Text style={styles.btnActionText}>
+                                  {(req.current_tier || 1) >= 4 ? 'Finalize & Lock' : `Approve Tier ${req.current_tier || 1}`}
+                                </Text>
                               </TouchableOpacity>
                               <TouchableOpacity
                                 style={[styles.btnReject, { backgroundColor: '#ba1a1a' }]}
@@ -599,6 +623,12 @@ export default function HRLeaveWorkflowScreen() {
                             <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
                               {formatDate(req.start_date)} – {formatDate(req.end_date)}
                             </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6, backgroundColor: '#ecfdf5', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, alignSelf: 'flex-start' }}>
+                              <ShieldCheck size={12} color="#059669" />
+                              <Text style={{ fontSize: 10, fontWeight: '700', color: '#047857' }}>
+                                Fully Approved · Locked (All 4 Tiers)
+                              </Text>
+                            </View>
                           </View>
                         );
                       })}

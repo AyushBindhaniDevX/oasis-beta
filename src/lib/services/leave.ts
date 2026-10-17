@@ -235,6 +235,9 @@ export async function applyLeave(params: {
     is_half_day: params.is_half_day,
     reason: params.reason,
     status: 'pending',
+    current_tier: 1, // Hospital 4-Tier: Tier 1 (Reporting Officer) -> Tier 2 (HOD) -> Tier 3 (Medical Superintendent) -> Tier 4 (HR/Admin)
+    approval_history: [],
+    is_locked: false,
     reviewed_by: null,
     reviewed_at: null,
     created_at: now,
@@ -280,7 +283,21 @@ export async function applyLeave(params: {
   return request;
 }
 
-export async function cancelLeave(requestId: string): Promise<void> {
+export async function cancelLeave(requestId: string, userRole?: string): Promise<void> {
+  const reqSnap = await getDoc(doc(db, 'leave_requests', requestId));
+  if (!reqSnap.exists()) throw new Error('Leave request not found');
+  const reqData = reqSnap.data() as LeaveRequest;
+
+  // Enforce administrative lock once fully approved
+  if (reqData.is_locked || reqData.status === 'approved') {
+    const isAuthorizedAdmin = userRole === 'admin' || userRole === 'superadmin' || userRole === 'hr';
+    if (!isAuthorizedAdmin) {
+      throw new Error(
+        'Leave request has completed the four-tier approval process and is locked. Modifications or cancellation require authorized administrative intervention.'
+      );
+    }
+  }
+
   await updateDoc(doc(db, 'leave_requests', requestId), {
     status: 'cancelled',
     updated_at: new Date().toISOString(),
@@ -357,10 +374,23 @@ async function getFilteredLeaveRequests(
   }
 }
 
+export const HOSPITAL_LEAVE_TIERS = [
+  { tier: 1, name: 'Reporting Officer / Supervisor', code: 'L1' },
+  { tier: 2, name: 'Immediate Head of Department (HOD)', code: 'L2' },
+  { tier: 3, name: 'Medical Superintendent / Operations Head', code: 'L3' },
+  { tier: 4, name: 'HR Head / Administration (Final Approval)', code: 'L4' },
+];
+
 export async function processLeaveRequest(
   requestId: string,
   action: 'approve' | 'reject',
-  approverName?: string
+  approverName?: string,
+  options?: {
+    approverId?: string;
+    approverRole?: string;
+    notes?: string;
+    forceFinalApproval?: boolean;
+  }
 ): Promise<LeaveProcessResponse> {
   const now = new Date().toISOString();
 
@@ -368,7 +398,29 @@ export async function processLeaveRequest(
   if (!reqSnap.exists()) throw new Error('Leave request not found');
   const reqData = reqSnap.data() as LeaveRequest;
 
-  if (action === 'approve') {
+  // Prevent modifying an already locked request without administrative intervention
+  if (reqData.is_locked && !options?.forceFinalApproval) {
+    throw new Error('This leave request has completed the 4-tier approval process and is locked.');
+  }
+
+  const currentTier = reqData.current_tier || 1;
+  const currentTierInfo = HOSPITAL_LEAVE_TIERS.find((t) => t.tier === currentTier) || HOSPITAL_LEAVE_TIERS[0];
+  const history = Array.isArray(reqData.approval_history) ? [...reqData.approval_history] : [];
+
+  history.push({
+    tier: currentTier,
+    role_title: options?.approverRole || currentTierInfo.name,
+    approver_id: options?.approverId || 'system',
+    approver_name: approverName || 'HR Management',
+    action: action === 'approve' ? 'approved' : 'rejected',
+    timestamp: now,
+    notes: options?.notes || null,
+  });
+
+  const isFinalTier = options?.forceFinalApproval || currentTier >= 4;
+
+  if (action === 'approve' && isFinalTier) {
+    // Final tier 4 approved - deduct balances and lock
     const y = new Date(reqData.start_date).getFullYear();
     const balId = `bal_${reqData.employee_id}_${reqData.leave_type_id}_${y}`;
     const balSnap = await getDoc(doc(db, 'leave_balances', balId));
@@ -399,14 +451,38 @@ export async function processLeaveRequest(
         updated_at: now,
       });
     }
-  }
 
-  // Update request status
-  await updateDoc(doc(db, 'leave_requests', requestId), {
-    status: action === 'approve' ? 'approved' : 'rejected',
-    approved_by: approverName || 'HR Management',
-    updated_at: now,
-  });
+    await updateDoc(doc(db, 'leave_requests', requestId), {
+      status: 'approved',
+      current_tier: 5, // 5 denotes fully approved through all 4 tiers
+      approval_history: history,
+      is_locked: true,
+      approved_by: approverName || 'HR Management',
+      reviewed_by: approverName || 'HR Management',
+      reviewed_at: now,
+      updated_at: now,
+    });
+  } else if (action === 'approve') {
+    // Intermediate tier approved - forward to next tier
+    const nextTier = currentTier + 1;
+    await updateDoc(doc(db, 'leave_requests', requestId), {
+      current_tier: nextTier,
+      approval_history: history,
+      reviewed_by: approverName || 'Department Reviewer',
+      reviewed_at: now,
+      updated_at: now,
+    });
+  } else {
+    // Rejected at any tier
+    await updateDoc(doc(db, 'leave_requests', requestId), {
+      status: 'rejected',
+      approval_history: history,
+      approved_by: approverName || 'Management',
+      reviewed_by: approverName || 'Management',
+      reviewed_at: now,
+      updated_at: now,
+    });
+  }
 
   // Notify employee via In-App Notification & Resend Email
   try {

@@ -149,6 +149,13 @@ export interface Employee {
   employment_status: EmploymentStatus;
   onboarding_completed: boolean;
   is_hhc_enabled?: boolean;
+  is_pf_eligible?: boolean; // PF vs Non-PF categorization
+  is_overtime_eligible?: boolean; // Overtime calculation designated staff
+  hospital_unit?: 'Shanti Memorial Hospital' | 'Chikitsa Unit' | string;
+  conveyance_allowance?: number;
+  washing_allowance?: number;
+  special_allowance?: number;
+  ot_deduction?: number; // miscellaneous deductions
   home_address?: string | null;
   bank_details?: {
     bank_name: string;
@@ -248,6 +255,16 @@ export interface LeaveBalance {
   leave_type?: LeaveType;
 }
 
+export interface LeaveApprovalTierAction {
+  tier: number; // 1, 2, 3, 4
+  role_title: string; // e.g. "Reporting Manager", "HOD", "Medical Superintendent", "HR Head"
+  approver_id: string;
+  approver_name: string;
+  action: 'approved' | 'rejected';
+  timestamp: string;
+  notes?: string | null;
+}
+
 export interface LeaveRequest {
   id: string;
   employee_id: string;
@@ -260,6 +277,10 @@ export interface LeaveRequest {
   status: LeaveRequestStatus;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  // Four-tier approval fields
+  current_tier?: number; // 1: Reporting Officer, 2: HOD, 3: Medical Superintendent, 4: HR Admin, 5: Fully Approved
+  approval_history?: LeaveApprovalTierAction[];
+  is_locked?: boolean; // Locked once fully approved, cannot be modified without authorized admin intervention
   created_at: string;
   updated_at: string;
   // Joined
@@ -327,6 +348,29 @@ export interface Payroll {
   gross_salary: number;
   net_salary: number;
   status: PayrollStatus;
+  // Shanti Memorial Hospital & Chikitsa Unit explicit breakdown fields
+  hospital_unit?: string;
+  is_pf_eligible?: boolean;
+  salary_details?: number; // Base monthly scale
+  payable_days?: number; // Standard 30 days
+  present_days?: number;
+  off_days?: number;
+  leave_days?: number;
+  holiday_days?: number;
+  paid_days?: number;
+  basic?: number; // 50% of G. Salary
+  hra?: number; // 20% of G. Salary
+  conveyance?: number;
+  washing?: number;
+  special_allowance?: number;
+  pt_tds?: number;
+  esi?: number;
+  pf?: number;
+  ot_ded?: number; // miscellaneous deductions
+  gross_deductions?: number;
+  ot_hours_or_days?: number;
+  ot_amount?: number;
+  other_allowances?: number;
   created_at: string;
   updated_at: string;
   // Joined

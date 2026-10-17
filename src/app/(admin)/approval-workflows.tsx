@@ -27,11 +27,12 @@ export default function ApprovalWorkflowsScreen() {
   
   const defaultWorkflows = modules.reduce((acc, mod) => {
     acc[mod] = {
-      enabled: false,
-      levels: 2,
-      l1: 'Reporting Manager',
-      l2: 'HR',
-      l3: 'Admin',
+      enabled: mod === 'Leave',
+      levels: mod === 'Leave' ? 4 : 2,
+      l1: 'Reporting Manager / Supervisor',
+      l2: 'Department Manager / HOD',
+      l3: 'Medical Superintendent / Unit Operations Head',
+      l4: 'HR Head / Administration',
     };
     return acc;
   }, {} as any);
@@ -87,6 +88,14 @@ export default function ApprovalWorkflowsScreen() {
 
   if (loading) return <LoadingState />;
 
+  const APPROVER_OPTIONS = [
+    { label: 'Reporting Manager / Supervisor (Tier 1)', value: 'Reporting Manager / Supervisor' },
+    { label: 'Department Manager / Immediate HOD (Tier 2)', value: 'Department Manager / HOD' },
+    { label: 'Medical Superintendent / Operations Head (Tier 3)', value: 'Medical Superintendent / Unit Operations Head' },
+    { label: 'HR Head / Administration (Tier 4)', value: 'HR Head / Administration' },
+    { label: 'Super Admin', value: 'Admin' },
+  ];
+
   return (
     <SidebarLayout items={ADMIN_NAV}>
       <ScrollView
@@ -97,7 +106,7 @@ export default function ApprovalWorkflowsScreen() {
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>Approval Workflows</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Configure L1, L2, L3 approval hierarchies for different system modules.
+            Configure 1 to 4-tier approval hierarchies for hospital departments and operations.
           </Text>
         </View>
 
@@ -119,16 +128,18 @@ export default function ApprovalWorkflowsScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.cardTitle, { color: colors.text }]}>{mod} Module</Text>
-                  <Text style={[styles.cardSub, { color: colors.textSecondary }]}>Manage approval hierarchy for {mod.toLowerCase()}</Text>
+                  <Text style={[styles.cardSub, { color: colors.textSecondary }]}>
+                    {mod === 'Leave' ? 'Hospital 4-Tier Approval Workflow' : `Manage approval hierarchy for ${mod.toLowerCase()}`}
+                  </Text>
                 </View>
                 <Switch
-                  value={workflows[mod].enabled}
+                  value={workflows[mod]?.enabled}
                   onValueChange={(val) => updateWorkflow(mod, 'enabled', val)}
                   trackColor={{ true: colors.primary }}
                 />
               </View>
               
-              {workflows[mod].enabled && (
+              {workflows[mod]?.enabled && (
                 <View style={{ gap: 14 }}>
                   <Select
                     label="Number of Approval Levels"
@@ -136,48 +147,42 @@ export default function ApprovalWorkflowsScreen() {
                       { label: '1 Level', value: '1' },
                       { label: '2 Levels', value: '2' },
                       { label: '3 Levels', value: '3' },
+                      { label: '4 Levels (Hospital 4-Tier: Supervisor -> HOD -> Medical Superintendent -> HR Admin)', value: '4' },
                     ]}
-                    value={String(workflows[mod].levels)}
+                    value={String(workflows[mod].levels || 2)}
                     onValueChange={(val) => updateWorkflow(mod, 'levels', parseInt(val))}
                   />
                   
                   {workflows[mod].levels >= 1 && (
                     <Select
                       label="Level 1 Approver"
-                      options={[
-                        { label: 'Reporting Manager', value: 'Reporting Manager' },
-                        { label: 'Department Manager', value: 'Department Manager' },
-                        { label: 'HR', value: 'HR' },
-                        { label: 'Admin', value: 'Admin' },
-                      ]}
-                      value={workflows[mod].l1}
+                      options={APPROVER_OPTIONS}
+                      value={workflows[mod].l1 || 'Reporting Manager / Supervisor'}
                       onValueChange={(val) => updateWorkflow(mod, 'l1', val)}
                     />
                   )}
                   {workflows[mod].levels >= 2 && (
                     <Select
                       label="Level 2 Approver"
-                      options={[
-                        { label: 'Reporting Manager', value: 'Reporting Manager' },
-                        { label: 'Department Manager', value: 'Department Manager' },
-                        { label: 'HR', value: 'HR' },
-                        { label: 'Admin', value: 'Admin' },
-                      ]}
-                      value={workflows[mod].l2}
+                      options={APPROVER_OPTIONS}
+                      value={workflows[mod].l2 || 'Department Manager / HOD'}
                       onValueChange={(val) => updateWorkflow(mod, 'l2', val)}
                     />
                   )}
                   {workflows[mod].levels >= 3 && (
                     <Select
                       label="Level 3 Approver"
-                      options={[
-                        { label: 'Reporting Manager', value: 'Reporting Manager' },
-                        { label: 'Department Manager', value: 'Department Manager' },
-                        { label: 'HR', value: 'HR' },
-                        { label: 'Admin', value: 'Admin' },
-                      ]}
-                      value={workflows[mod].l3}
+                      options={APPROVER_OPTIONS}
+                      value={workflows[mod].l3 || 'Medical Superintendent / Unit Operations Head'}
                       onValueChange={(val) => updateWorkflow(mod, 'l3', val)}
+                    />
+                  )}
+                  {workflows[mod].levels >= 4 && (
+                    <Select
+                      label="Level 4 Approver (Final Authority)"
+                      options={APPROVER_OPTIONS}
+                      value={workflows[mod].l4 || 'HR Head / Administration'}
+                      onValueChange={(val) => updateWorkflow(mod, 'l4', val)}
                     />
                   )}
                 </View>
