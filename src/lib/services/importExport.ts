@@ -13,30 +13,36 @@ export const IMPORT_MODULES = [
 export async function downloadTemplate(moduleId: string) {
   if (moduleId === 'employees') {
     const instructions = [
-      ['Instructions for Employee Import'],
+      ['Instructions for Employee Import - Shanti Memorial Hospital & Chikitsa Unit'],
       [''],
       ['Column', 'Required', 'Data Type', 'Description/Valid Values'],
-      ['Employee Code', 'Yes', 'Text', 'Unique identifier (e.g. EMP001)'],
+      ['Employee Code', 'Yes', 'Text', 'Unique identifier (e.g. SMH-1502)'],
       ['Full Name', 'Yes', 'Text', 'First and Last name'],
       ['Email', 'Yes', 'Text', 'Unique valid email address'],
-      ['Phone', 'No', 'Text', 'Phone number'],
-      ['Department', 'No', 'Text', 'Name of existing department'],
+      ['Phone', 'No', 'Text', '10-digit mobile number'],
+      ['Department', 'No', 'Text', 'Name of department (e.g. Security & Safety, Nursing, Pharmacy)'],
       ['Designation', 'No', 'Text', 'Job title'],
-      ['Date of Joining', 'Yes', 'Date', 'Format: DD/MM/YYYY'],
-      ['Date of Birth', 'No', 'Date', 'Format: DD/MM/YYYY'],
-      ['Basic Salary', 'Yes', 'Number', 'Monthly basic salary in digits'],
-      ['ESI Number', 'No', 'Text', '10-digit ESI Insurance Number'],
-      ['UAN Number', 'No', 'Text', '12-digit PF UAN'],
-      ['PF Number', 'No', 'Text', 'PF Account Number']
+      ['Hospital Unit', 'No', 'Text', 'Shanti Memorial Hospital OR Chikitsa Unit of Shanti Memorial Hospital'],
+      ['Date of Joining', 'Yes', 'Date', 'Format: YYYY-MM-DD or DD/MM/YYYY'],
+      ['Date of Birth', 'No', 'Date', 'Format: YYYY-MM-DD or DD/MM/YYYY'],
+      ['Basic Salary', 'Yes', 'Number', 'Monthly gross/basic salary in digits'],
+      ['PF Eligible', 'No', 'Text', 'YES (PF sheet covered) or NO (Consultant / Non-PF)'],
+      ['Overtime Eligible', 'No', 'Text', 'YES (Eligible after 8hr shift) or NO'],
+      ['ESI Number', 'No', 'Text', '10-digit ESI Insurance Number (for Gross <= 21,000)'],
+      ['UAN Number', 'No', 'Text', '12-digit EPFO Universal Account Number'],
+      ['PF Number', 'No', 'Text', 'EPFO Member ID (e.g. OR/CTC/1502)']
     ];
     const headers = [
-      'Employee Code', 'Full Name', 'Email', 'Phone', 'Department', 'Designation',
-      'Date of Joining', 'Date of Birth', 'Basic Salary', 'ESI Number', 'UAN Number', 'PF Number'
+      'Employee Code', 'Full Name', 'Email', 'Phone', 'Department', 'Designation', 'Hospital Unit',
+      'Date of Joining', 'Date of Birth', 'Basic Salary', 'PF Eligible', 'Overtime Eligible',
+      'ESI Number', 'UAN Number', 'PF Number'
     ];
     const rows = [
-      ['EMP001', 'John Doe', 'john@example.com', '9876543210', 'Engineering', 'Software Engineer', '01/01/2026', '15/05/1990', 50000, '1234567890', '100000000000', 'MH/BAN/12345']
+      ['SMH-1502', 'Abhiram Hatua', 'abhiram.hatua@shantimemorial.in', '9861015021', 'Security & Safety', 'Security Guard', 'Shanti Memorial Hospital', '2021-04-01', '1988-05-15', 13000, 'YES', 'YES', '2100015021', '101502100001', 'OR/CTC/1502'],
+      ['SMH-023', 'Ajay Swain', 'ajay.swain@shantimemorial.in', '9861002301', 'Housekeeping & Support', 'Hospital Attendant', 'Shanti Memorial Hospital', '2019-06-15', '1992-10-20', 12000, 'YES', 'NO', '2100002301', '100023100002', 'OR/CTC/0023'],
+      ['SMH-1021', 'Abhijit Chakrabarty', 'abhijit.c@shantimemorial.in', '9861010211', 'Medical Consulting & Surgery', 'Consultant Surgeon', 'Chikitsa Unit of Shanti Memorial Hospital', '2018-01-01', '1978-06-25', 29000, 'NO', 'YES', '', '', '']
     ];
-    await exportExcel('Employee_Import_Template', [
+    await exportExcel('SMH_Employee_Import_Template', [
       { name: 'Instructions', rows: instructions },
       { name: 'Import Data', headers, rows }
     ]);
@@ -125,7 +131,7 @@ export async function processImport(orgId: string, moduleId: string, sheets: Rec
       const email = row['Email'];
       
       // Skip sample row
-      if (email === 'john@example.com' && code === 'EMP001' && rowIdx === 2) {
+      if ((email === 'john@example.com' || email === 'abhiram.hatua@shantimemorial.in') && rowIdx === 2) {
         skipped++;
         rowIdx++;
         continue;
@@ -142,6 +148,16 @@ export async function processImport(orgId: string, moduleId: string, sheets: Rec
         const empRef = doc(collection(db, 'employees'));
         const deptId = row['Department'] ? deptMap.get(String(row['Department']).toLowerCase()) || null : null;
         
+        const pfEligible = row['PF Eligible'] !== undefined 
+          ? String(row['PF Eligible']).trim().toUpperCase() !== 'NO' 
+          : true;
+        const otEligible = row['Overtime Eligible'] !== undefined 
+          ? String(row['Overtime Eligible']).trim().toUpperCase() === 'YES' 
+          : false;
+        const hospitalUnit = row['Hospital Unit'] 
+          ? String(row['Hospital Unit']).trim() 
+          : 'Shanti Memorial Hospital';
+
         const newEmp = {
           id: empRef.id,
           organization_id: orgId,
@@ -149,10 +165,14 @@ export async function processImport(orgId: string, moduleId: string, sheets: Rec
           employee_code: String(code),
           department_id: deptId,
           designation: row['Designation'] ? String(row['Designation']) : null,
+          hospital_unit: hospitalUnit,
           joining_date: row['Date of Joining'] ? String(row['Date of Joining']) : null,
           date_of_birth: row['Date of Birth'] ? String(row['Date of Birth']) : null,
           basic_salary: Number(row['Basic Salary']) || 0,
+          is_pf_eligible: pfEligible,
+          is_overtime_eligible: otEligible,
           employment_status: 'active',
+          employment_type: pfEligible ? 'full_time' : 'contract',
           onboarding_completed: true,
           tax_config: {
             esi_number: row['ESI Number'] ? String(row['ESI Number']) : null,
@@ -172,6 +192,7 @@ export async function processImport(orgId: string, moduleId: string, sheets: Rec
           organization_id: orgId,
           full_name: name,
           email: String(email).toLowerCase(),
+          phone: row['Phone'] ? String(row['Phone']) : undefined,
           role: 'employee',
           is_active: true,
           created_at: new Date().toISOString(),

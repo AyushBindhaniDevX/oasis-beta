@@ -4,13 +4,14 @@ import { ADMIN_NAV } from '@/constants/navigation';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { useTheme } from '@/hooks/use-theme';
 import { Button } from '@/components/ui/Button';
-import { Download, Upload, FileText, FileSpreadsheet, CheckCircle2, AlertCircle } from 'lucide-react-native';
+import { Download, Upload, FileText, FileSpreadsheet, CheckCircle2, AlertCircle, Users } from 'lucide-react-native';
 import { Select } from '@/components/ui/Select';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/hooks/useAuth';
 import { IMPORT_MODULES, downloadTemplate, processImport } from '@/lib/services/importExport';
 import { generateReport } from '@/lib/services/reports';
 import { importExcelObjects } from '@/utils/excel';
+import { seedHospitalInitialMasterData } from '@/lib/services/hospitalMasterData';
 
 export default function DataManagementScreen() {
   const colors = useTheme();
@@ -23,6 +24,24 @@ export default function DataManagementScreen() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
   const [selectedModule, setSelectedModule] = useState<string>('employees');
+  const [seeding, setSeeding] = useState(false);
+
+  const handleSeedHospitalData = async () => {
+    try {
+      const orgId = organization?.id || profile?.organization_id;
+      if (!orgId) throw new Error('Organization not found');
+      setSeeding(true);
+      const res = await seedHospitalInitialMasterData(orgId);
+      Alert.alert(
+        'Hospital Master Staff Initialized',
+        `Processed: ${res.totalProcessed} records\nInserted: ${res.insertedCount} new staff profiles\nSkipped: ${res.skippedCount} (already existing in database)`
+      );
+    } catch (e: any) {
+      Alert.alert('Initialization Failed', e.message || 'Failed to seed hospital master records');
+    } finally {
+      setSeeding(false);
+    }
+  };
   
   const reports = [
     { id: 'employee', name: 'Employee Master Directory', desc: 'Complete master details of all hospital employees' },
@@ -208,6 +227,27 @@ export default function DataManagementScreen() {
                   )}
                 </View>
               )}
+            </View>
+
+            <View style={[styles.fullCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+              <View style={styles.cardHeader}>
+                <View style={[styles.iconWrap, { backgroundColor: '#f0fdfa' }]}>
+                  <Users size={20} color="#0d7377" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.cardTitle, { color: colors.text }]}>3. Fast Initialization: Hospital Baseline Staff (Requirement 13)</Text>
+                  <Text style={[styles.cardSub, { color: colors.textSecondary }]}>
+                    Seed initial baseline employee records for Shanti Memorial Hospital and Chikitsa Unit (SMH-1502 Abhiram Hatua, SMH-023 Ajay Swain, SMH-1021 Abhijit Chakrabarty, etc.) with pre-configured hospital departments, PF/Non-PF eligibility, and overtime flags.
+                  </Text>
+                </View>
+              </View>
+              
+              <Button
+                title="Seed Hospital Baseline Staff"
+                onPress={handleSeedHospitalData}
+                loading={seeding}
+                style={{ backgroundColor: '#0d7377', marginTop: 8 }}
+              />
             </View>
           </View>
         )}
