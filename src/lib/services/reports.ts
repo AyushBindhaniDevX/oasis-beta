@@ -3,6 +3,8 @@ import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firesto
 import { exportExcel, exportTxt } from '@/utils/excel';
 import { Employee, Department, Attendance, LeaveRequest, Payroll, LeaveType, Profile } from '@/types';
 import { getConsolidatedAppraisalReport } from './performance';
+import { generateEpfoEcrTextFile, generateEsicChallanExcel } from './statutoryChallans';
+import { calculateEmployeeGratuity } from './gratuity';
 
 export async function generateReport(orgId: string, reportId: string, options?: { employeeId?: string; month?: number; year?: number }) {
   const currentYear = options?.year || new Date().getFullYear();
@@ -364,5 +366,55 @@ export async function generateReport(orgId: string, reportId: string, options?: 
 
     const headers = ['Employee Code', 'Leave Type', 'Start Date', 'End Date', 'Days', 'Half Day', 'Approval Stage', 'Status', 'Locked State', 'Reason'];
     await exportExcel('Leave_Report', [{ name: 'Leaves', headers, rows }]);
+  } else if (reportId === 'epfo_ecr') {
+    // Official EPFO Electronic Challan cum Return text file (#~# delimiter)
+    const periodsSnap = await getDocs(query(collection(db, 'payroll_periods'), where('organization_id', '==', orgId)));
+    let latestPeriodId = `PERIOD_${currentYear}_${String(currentMonth).padStart(2, '0')}`;
+    if (!periodsSnap.empty) {
+      latestPeriodId = periodsSnap.docs[periodsSnap.docs.length - 1].id;
+    }
+    await generateEpfoEcrTextFile(latestPeriodId, orgId);
+  } else if (reportId === 'esic_challan') {
+    // Official ESIC monthly upload spreadsheet
+    const periodsSnap = await getDocs(query(collection(db, 'payroll_periods'), where('organization_id', '==', orgId)));
+    let latestPeriodId = `PERIOD_${currentYear}_${String(currentMonth).padStart(2, '0')}`;
+    if (!periodsSnap.empty) {
+      latestPeriodId = periodsSnap.docs[periodsSnap.docs.length - 1].id;
+    }
+    await generateEsicChallanExcel(latestPeriodId, orgId);
+  } else if (reportId === 'gratuity' || reportId === 'gratuity_statement') {
+    // Payment of Gratuity Act 1972 Statutory Register
+    const empsSnap = await getDocs(query(collection(db, 'employees'), where('organization_id', '==', orgId)));
+    const profQ = query(collection(db, 'profiles'), where('organization_id', '==', orgId));
+    const profSnap = await getDocs(profQ);
+    const profMap = new Map();
+    profSnap.forEach(d => profMap.set(d.id, d.data()));
+
+    const rows: any[][] = [];
+    empsSnap.forEach(d => {
+      const emp = { id: d.id, ...d.data() } as Employee;
+      emp.profile = emp.profile_id ? profMap.get(emp.profile_id) : undefined;
+      const res = calculateEmployeeGratuity(emp);
+      rows.push([
+        res.employee_code,
+        res.employee_name,
+        res.joining_date,
+        `${res.completed_years} yrs ${res.fraction_months} mos`,
+        res.rounded_qualifying_years,
+        res.last_drawn_basic,
+        res.is_eligible ? 'Eligible (>= 5 Yrs)' : 'Not Eligible (< 5 Yrs)',
+        res.gratuity_amount,
+        res.statutory_maximum_limit,
+        res.final_payable_gratuity,
+        res.formula_applied
+      ]);
+    });
+
+    const headers = [
+      'Employee Code', 'Employee Name', 'Joining Date', 'Length of Service',
+      'Rounded Qualifying Years', 'Last Basic Salary (INR)', 'Statutory Eligibility',
+      'Calculated Gratuity (INR)', 'Statutory Cap (INR)', 'Payable Gratuity (INR)', 'Formula Applied'
+    ];
+    await exportExcel('SMH_Gratuity_Statutory_Register', [{ name: 'Gratuity Register', headers, rows }]);
   }
 }
