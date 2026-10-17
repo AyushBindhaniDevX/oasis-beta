@@ -1,7 +1,7 @@
 import { db } from '@/lib/firebase';
 import { collection, writeBatch, doc, getDoc, getDocs, query, where, setDoc } from 'firebase/firestore';
 import { exportExcel, importExcelObjects } from '@/utils/excel';
-import { Employee, Department, LeaveType } from '@/types';
+import { Employee, Department, LeaveType, Profile } from '@/types';
 
 export const IMPORT_MODULES = [
   { id: 'employees', name: 'Employees' },
@@ -28,6 +28,10 @@ export async function downloadTemplate(moduleId: string) {
       ['Basic Salary', 'Yes', 'Number', 'Monthly gross/basic salary in digits'],
       ['PF Eligible', 'No', 'Text', 'YES (PF sheet covered) or NO (Consultant / Non-PF)'],
       ['Overtime Eligible', 'No', 'Text', 'YES (Eligible after 8hr shift) or NO'],
+      ['L1 Manager', 'No', 'Text', 'L1 Immediate Supervisor (Employee Code, e.g. SMH-023, or Email)'],
+      ['L2 Manager', 'No', 'Text', 'L2 Department Head / HOD (Employee Code or Email)'],
+      ['L3 Manager', 'No', 'Text', 'L3 HR Manager / Operations Head (Employee Code or Email)'],
+      ['L4 Manager', 'No', 'Text', 'L4 Director / Medical Superintendent / Admin (Employee Code or Email)'],
       ['ESI Number', 'No', 'Text', '10-digit ESI Insurance Number (for Gross <= 21,000)'],
       ['UAN Number', 'No', 'Text', '12-digit EPFO Universal Account Number'],
       ['PF Number', 'No', 'Text', 'EPFO Member ID (e.g. OR/CTC/1502)']
@@ -35,12 +39,13 @@ export async function downloadTemplate(moduleId: string) {
     const headers = [
       'Employee Code', 'Full Name', 'Email', 'Phone', 'Department', 'Designation', 'Hospital Unit',
       'Date of Joining', 'Date of Birth', 'Basic Salary', 'PF Eligible', 'Overtime Eligible',
+      'L1 Manager', 'L2 Manager', 'L3 Manager', 'L4 Manager',
       'ESI Number', 'UAN Number', 'PF Number'
     ];
     const rows = [
-      ['SMH-1502', 'Abhiram Hatua', 'abhiram.hatua@shantimemorial.in', '9861015021', 'Security & Safety', 'Security Guard', 'Shanti Memorial Hospital', '2021-04-01', '1988-05-15', 13000, 'YES', 'YES', '2100015021', '101502100001', 'OR/CTC/1502'],
-      ['SMH-023', 'Ajay Swain', 'ajay.swain@shantimemorial.in', '9861002301', 'Housekeeping & Support', 'Hospital Attendant', 'Shanti Memorial Hospital', '2019-06-15', '1992-10-20', 12000, 'YES', 'NO', '2100002301', '100023100002', 'OR/CTC/0023'],
-      ['SMH-1021', 'Abhijit Chakrabarty', 'abhijit.c@shantimemorial.in', '9861010211', 'Medical Consulting & Surgery', 'Consultant Surgeon', 'Chikitsa Unit of Shanti Memorial Hospital', '2018-01-01', '1978-06-25', 29000, 'NO', 'YES', '', '', '']
+      ['SMH-1502', 'Abhiram Hatua', 'abhiram.hatua@shantimemorial.in', '9861015021', 'Security & Safety', 'Security Guard', 'Shanti Memorial Hospital', '2021-04-01', '1988-05-15', 13000, 'YES', 'YES', 'SMH-023', 'SMH-1021', 'SMH-HR', 'SMH-DIR', '2100015021', '101502100001', 'OR/CTC/1502'],
+      ['SMH-023', 'Ajay Swain', 'ajay.swain@shantimemorial.in', '9861002301', 'Housekeeping & Support', 'Hospital Attendant', 'Shanti Memorial Hospital', '2019-06-15', '1992-10-20', 12000, 'YES', 'NO', 'SMH-1021', '', 'SMH-HR', 'SMH-DIR', '2100002301', '100023100002', 'OR/CTC/0023'],
+      ['SMH-1021', 'Abhijit Chakrabarty', 'abhijit.c@shantimemorial.in', '9861010211', 'Medical Consulting & Surgery', 'Consultant Surgeon', 'Chikitsa Unit of Shanti Memorial Hospital', '2018-01-01', '1978-06-25', 29000, 'NO', 'YES', '', '', 'SMH-HR', 'SMH-DIR', '', '', '']
     ];
     await exportExcel('SMH_Employee_Import_Template', [
       { name: 'Instructions', rows: instructions },
@@ -119,10 +124,36 @@ export async function processImport(orgId: string, moduleId: string, sheets: Rec
   };
 
   if (moduleId === 'employees') {
-    // Basic implementation for employees
-    const deptSnap = await getDocs(query(collection(db, 'departments'), where('organization_id', '==', orgId)));
+    // Load departments, existing employees, and profiles to resolve lookups
+    const [deptSnap, allEmpsSnap, allProfsSnap] = await Promise.all([
+      getDocs(query(collection(db, 'departments'), where('organization_id', '==', orgId))),
+      getDocs(collection(db, 'employees')),
+      getDocs(collection(db, 'profiles')),
+    ]);
+
     const deptMap = new Map<string, string>();
     deptSnap.forEach(d => deptMap.set(d.data().name.toLowerCase(), d.id));
+
+    const profMap = new Map<string, Profile>();
+    allProfsSnap.forEach(d => profMap.set(d.id, { id: d.id, ...d.data() } as Profile));
+
+    // Lookup map to resolve Manager Code, Email, or Name to employee.id
+    const empLookup = new Map<string, string>();
+    allEmpsSnap.forEach(d => {
+      const empData = d.data() as Employee;
+      const prof = empData.profile_id ? profMap.get(empData.profile_id) : undefined;
+      const empId = d.id;
+      if (empData.employee_code) empLookup.set(empData.employee_code.toLowerCase().trim(), empId);
+      if (prof?.email) empLookup.set(prof.email.toLowerCase().trim(), empId);
+      if (prof?.full_name) empLookup.set(prof.full_name.toLowerCase().trim(), empId);
+      empLookup.set(empId.toLowerCase().trim(), empId);
+    });
+
+    const resolveMgrId = (val: any): string | null => {
+      if (!val) return null;
+      const s = String(val).trim().toLowerCase();
+      return empLookup.get(s) || null;
+    };
 
     let rowIdx = 2; // header is row 1
     for (const row of data) {
@@ -158,12 +189,28 @@ export async function processImport(orgId: string, moduleId: string, sheets: Rec
           ? String(row['Hospital Unit']).trim() 
           : 'Shanti Memorial Hospital';
 
+        // Resolve 4-Tier Managers
+        const l1Val = row['L1 Manager'] || row['L1 Manager Code'] || row['Reporting Manager'] || row['Manager'];
+        const l2Val = row['L2 Manager'] || row['L2 Manager Code'] || row['HOD'] || row['Department Head'];
+        const l3Val = row['L3 Manager'] || row['L3 Manager Code'] || row['HR Manager'] || row['HR Head'];
+        const l4Val = row['L4 Manager'] || row['L4 Manager Code'] || row['Director'] || row['Medical Superintendent'] || row['Admin'];
+
+        const l1Id = resolveMgrId(l1Val);
+        const l2Id = resolveMgrId(l2Val);
+        const l3Id = resolveMgrId(l3Val);
+        const l4Id = resolveMgrId(l4Val);
+
         const newEmp = {
           id: empRef.id,
           organization_id: orgId,
           profile_id: empRef.id,
           employee_code: String(code),
           department_id: deptId,
+          manager_id: l1Id || null,
+          l1_manager_id: l1Id || null,
+          l2_manager_id: l2Id || null,
+          l3_manager_id: l3Id || null,
+          l4_manager_id: l4Id || null,
           designation: row['Designation'] ? String(row['Designation']) : null,
           hospital_unit: hospitalUnit,
           joining_date: row['Date of Joining'] ? String(row['Date of Joining']) : null,
@@ -184,6 +231,11 @@ export async function processImport(orgId: string, moduleId: string, sheets: Rec
         };
 
         batch.set(empRef, newEmp);
+
+        // Register new employee in local lookup map so subsequent rows can link to them
+        empLookup.set(String(code).toLowerCase().trim(), empRef.id);
+        empLookup.set(String(email).toLowerCase().trim(), empRef.id);
+        empLookup.set(String(name).toLowerCase().trim(), empRef.id);
         
         // Create matching profile
         const profileRef = doc(db, 'profiles', empRef.id);

@@ -12,8 +12,8 @@ export function decodeSsoTicket(ticket: string): Record<string, any> | null {
     let binary = '';
     if (typeof atob === 'function') {
       binary = atob(b64);
-    } else if (typeof Buffer !== 'undefined') {
-      binary = Buffer.from(b64, 'base64').toString('binary');
+    } else if (typeof (globalThis as any).Buffer !== 'undefined') {
+      binary = (globalThis as any).Buffer.from(b64, 'base64').toString('binary');
     }
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) {

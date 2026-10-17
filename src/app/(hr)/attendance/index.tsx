@@ -34,13 +34,14 @@ import {
   AlertCircle,
   RefreshCw,
 } from 'lucide-react-native';
+import { LateComersOverviewView } from '@/components/attendance/LateComersOverviewView';
 
 export default function HRAttendanceScreen() {
   const colors = useTheme();
   const { profile } = useAuth();
   const { organization: tenantOrg } = useTenant();
 
-  const [activeTab, setActiveTab] = useState<'logs' | 'regularizations'>('logs');
+  const [activeTab, setActiveTab] = useState<'logs' | 'regularizations' | 'late_overview'>('logs');
 
   // Daily Logs state
   const [date, setDate] = useState<Date>(new Date());
@@ -195,6 +196,23 @@ export default function HRAttendanceScreen() {
                 )}
               </View>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveTab('late_overview')}
+              style={[
+                styles.tabBtn,
+                activeTab === 'late_overview' && { backgroundColor: colors.primary, borderColor: colors.primary },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabBtnText,
+                  { color: activeTab === 'late_overview' ? '#FFFFFF' : colors.textSecondary },
+                ]}
+              >
+                Late Comers Overview
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -205,7 +223,9 @@ export default function HRAttendanceScreen() {
           </View>
         ) : null}
 
-        {activeTab === 'logs' ? (
+        {activeTab === 'late_overview' ? (
+          <LateComersOverviewView organizationId={orgId} />
+        ) : activeTab === 'logs' ? (
           <>
             <View style={{ padding: 16 }}>
               <DatePicker label="Select Attendance Date" value={date} onChange={setDate} />

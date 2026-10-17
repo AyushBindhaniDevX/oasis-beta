@@ -37,6 +37,10 @@ export default function CreateEmployeeScreen() {
   const [deptId, setDeptId] = useState<string | null>(null);
   const [workplaceId, setWorkplaceId] = useState<string | null>(null);
   const [managerId, setManagerId] = useState<string | null>(null);
+  const [l1ManagerId, setL1ManagerId] = useState<string | null>(null);
+  const [l2ManagerId, setL2ManagerId] = useState<string | null>(null);
+  const [l3ManagerId, setL3ManagerId] = useState<string | null>(null);
+  const [l4ManagerId, setL4ManagerId] = useState<string | null>(null);
   const [shiftId, setShiftId] = useState<string | null>(null);
   const [role, setRole] = useState<string>('employee');
   const [designation, setDesignation] = useState('');
@@ -141,7 +145,11 @@ export default function CreateEmployeeScreen() {
     setDeptId(val);
     if (val) {
       const dept = departments.find(d => d.id === val);
-      if (dept && dept.manager_id) setManagerId(dept.manager_id);
+      if (dept && dept.manager_id) {
+        setManagerId(dept.manager_id);
+        setL2ManagerId(dept.manager_id);
+        if (!l1ManagerId) setL1ManagerId(dept.manager_id);
+      }
     }
   };
 
@@ -169,7 +177,11 @@ export default function CreateEmployeeScreen() {
         employee_code: empCode.trim(),
         department_id: deptId || undefined,
         workplace_id: workplaceId || undefined,
-        manager_id: managerId || undefined,
+        manager_id: l1ManagerId || managerId || undefined,
+        l1_manager_id: l1ManagerId || managerId || undefined,
+        l2_manager_id: l2ManagerId || undefined,
+        l3_manager_id: l3ManagerId || undefined,
+        l4_manager_id: l4ManagerId || undefined,
         default_shift_id: shiftId || undefined,
         role: role,
         designation: designation.trim() || undefined,
@@ -312,12 +324,70 @@ export default function CreateEmployeeScreen() {
             onValueChange={setWorkplaceId}
           />
 
-          <Select
-            label="Reporting Manager"
-            options={managers.map((m) => ({ label: m.profile?.full_name || m.employee_code || 'Unknown', value: m.id }))}
-            value={managerId}
-            onValueChange={setManagerId}
-          />
+          {/* ─── Reporting Hierarchy (4-Tier Approval Chain) ─── */}
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginTop: 16 }]}>
+            REPORTING HIERARCHY (4-TIER APPROVAL CHAIN)
+          </Text>
+          <View style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 14, gap: 12 }}>
+            <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 2 }}>
+              Configure the 4-tier chain for leave approvals, duty rosters, and escalation hierarchy.
+            </Text>
+
+            <Select
+              label="L1 Manager (Immediate Reporting Supervisor)"
+              options={[
+                { label: 'None / Not Assigned', value: '' },
+                ...managers.map((m) => ({
+                  label: `${m.profile?.full_name || 'Staff'} (${m.employee_code || 'EMP'}${m.designation ? ' - ' + m.designation : ''})`,
+                  value: m.id,
+                })),
+              ]}
+              value={l1ManagerId || managerId || ''}
+              onValueChange={(val) => {
+                setL1ManagerId(val || null);
+                setManagerId(val || null);
+              }}
+            />
+
+            <Select
+              label="L2 Manager (Department Head / HOD)"
+              options={[
+                { label: 'None / Not Assigned', value: '' },
+                ...managers.map((m) => ({
+                  label: `${m.profile?.full_name || 'Staff'} (${m.employee_code || 'EMP'}${m.designation ? ' - ' + m.designation : ''})`,
+                  value: m.id,
+                })),
+              ]}
+              value={l2ManagerId || ''}
+              onValueChange={(val) => setL2ManagerId(val || null)}
+            />
+
+            <Select
+              label="L3 Manager (HR Manager / Operations Head)"
+              options={[
+                { label: 'None / Not Assigned', value: '' },
+                ...managers.map((m) => ({
+                  label: `${m.profile?.full_name || 'Staff'} (${m.employee_code || 'EMP'}${m.designation ? ' - ' + m.designation : ''})`,
+                  value: m.id,
+                })),
+              ]}
+              value={l3ManagerId || ''}
+              onValueChange={(val) => setL3ManagerId(val || null)}
+            />
+
+            <Select
+              label="L4 Manager (Director / Medical Superintendent / Admin)"
+              options={[
+                { label: 'None / Not Assigned', value: '' },
+                ...managers.map((m) => ({
+                  label: `${m.profile?.full_name || 'Staff'} (${m.employee_code || 'EMP'}${m.designation ? ' - ' + m.designation : ''})`,
+                  value: m.id,
+                })),
+              ]}
+              value={l4ManagerId || ''}
+              onValueChange={(val) => setL4ManagerId(val || null)}
+            />
+          </View>
 
           <Select
             label="Default Shift (For Attendance) *"

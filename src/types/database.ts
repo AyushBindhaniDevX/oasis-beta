@@ -144,6 +144,10 @@ export interface Employee {
   date_of_birth?: string | null;
   workplace_id: string | null;
   manager_id?: string | null;
+  l1_manager_id?: string | null; // L1: Immediate Reporting Supervisor
+  l2_manager_id?: string | null; // L2: Head of Department (HOD)
+  l3_manager_id?: string | null; // L3: HR Manager / Operations Head
+  l4_manager_id?: string | null; // L4: Director / Medical Superintendent / Admin
   default_shift_id?: string | null;
   basic_salary: number;
   employment_status: EmploymentStatus;
@@ -175,6 +179,10 @@ export interface Employee {
   department?: Department;
   workplace?: Workplace;
   manager?: Employee;
+  l1_manager?: Employee;
+  l2_manager?: Employee;
+  l3_manager?: Employee;
+  l4_manager?: Employee;
   shift?: WorkShift;
   direct_reports?: Employee[];
 }

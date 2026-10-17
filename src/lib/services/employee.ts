@@ -114,12 +114,44 @@ export async function getEmployeeById(id: string): Promise<Employee | null> {
       simpleEmp.workplace_id ? getDoc(doc(db, 'workplaces', simpleEmp.workplace_id)) : Promise.resolve(null),
     ]);
 
-    return {
+    const emp: Employee = {
       ...simpleEmp,
       profile: profSnap?.exists() ? ({ id: profSnap.id, ...profSnap.data() } as Profile) : undefined,
       department: deptSnap?.exists() ? ({ id: deptSnap.id, ...deptSnap.data() } as Department) : undefined,
       workplace: wpSnap?.exists() ? ({ id: wpSnap.id, ...wpSnap.data() } as Workplace) : undefined,
     };
+
+    // Load L1-L4 manager documents if present
+    const managerKeys: Array<{ key: 'l1_manager' | 'l2_manager' | 'l3_manager' | 'l4_manager'; id?: string | null }> = [
+      { key: 'l1_manager', id: emp.l1_manager_id || emp.manager_id },
+      { key: 'l2_manager', id: emp.l2_manager_id },
+      { key: 'l3_manager', id: emp.l3_manager_id },
+      { key: 'l4_manager', id: emp.l4_manager_id },
+    ];
+
+    await Promise.all(
+      managerKeys.map(async ({ key, id: mId }) => {
+        if (!mId) return;
+        try {
+          const mSnap = await getDoc(doc(db, 'employees', mId));
+          if (mSnap.exists()) {
+            const mData = { id: mSnap.id, ...mSnap.data() } as Employee;
+            if (mData.profile_id) {
+              const pSnap = await getDoc(doc(db, 'profiles', mData.profile_id));
+              if (pSnap.exists()) {
+                mData.profile = { id: pSnap.id, ...pSnap.data() } as Profile;
+              }
+            }
+            emp[key] = mData;
+            if (key === 'l1_manager') {
+              emp.manager = mData;
+            }
+          }
+        } catch (mErr) {}
+      })
+    );
+
+    return emp;
   } catch (err) {
     console.error('Error fetching employee by ID:', err);
     return null;
@@ -159,6 +191,22 @@ export async function getEmployees(params?: {
       emp.department = emp.department_id ? deptMap.get(emp.department_id) : undefined;
       emp.workplace = emp.workplace_id ? wpMap.get(emp.workplace_id) : undefined;
       employees.push(emp);
+    });
+
+    // Populate L1, L2, L3, L4 managers and direct reports
+    const empLookup = new Map<string, Employee>();
+    employees.forEach((e) => {
+      empLookup.set(e.id, e);
+      if (e.profile_id) empLookup.set(e.profile_id, e);
+    });
+
+    employees.forEach((emp) => {
+      const l1 = emp.l1_manager_id ? empLookup.get(emp.l1_manager_id) : (emp.manager_id ? empLookup.get(emp.manager_id) : undefined);
+      emp.l1_manager = l1;
+      emp.manager = l1;
+      emp.l2_manager = emp.l2_manager_id ? empLookup.get(emp.l2_manager_id) : undefined;
+      emp.l3_manager = emp.l3_manager_id ? empLookup.get(emp.l3_manager_id) : undefined;
+      emp.l4_manager = emp.l4_manager_id ? empLookup.get(emp.l4_manager_id) : undefined;
     });
 
     let results = employees;
@@ -225,13 +273,17 @@ export async function createEmployee(params: {
   employee_code: string;
   department_id?: string;
   manager_id?: string;
+  l1_manager_id?: string;
+  l2_manager_id?: string;
+  l3_manager_id?: string;
+  l4_manager_id?: string;
   designation?: string;
   basic_salary?: number;
   workplace_id?: string;
   default_shift_id?: string;
   date_of_birth?: string;
   tax_config?: any;
-    is_hhc_enabled?: boolean;
+  is_hhc_enabled?: boolean;
 }): Promise<void> {
   const cleanEmail = params.email.trim().toLowerCase();
   let uid = generateUuid();
@@ -283,6 +335,13 @@ export async function createEmployee(params: {
 
   await setDoc(doc(db, 'profiles', uid), profPayload);
 
+  // Resolved 4-Tier Managers
+  const cleanMgr = (id?: string | null) => (id && id !== 'none' && id !== 'null' && id.trim() !== '' ? id.trim() : null);
+  const resolvedL1 = cleanMgr(params.l1_manager_id) || cleanMgr(params.manager_id);
+  const resolvedL2 = cleanMgr(params.l2_manager_id);
+  const resolvedL3 = cleanMgr(params.l3_manager_id);
+  const resolvedL4 = cleanMgr(params.l4_manager_id);
+
   // Create Employee
   const empId = `emp-${Date.now()}`;
   const empPayload: Employee = {
@@ -291,7 +350,11 @@ export async function createEmployee(params: {
     organization_id: resolvedOrgId,
     employee_code: params.employee_code,
     department_id: params.department_id || null,
-    manager_id: params.manager_id || null,
+    manager_id: resolvedL1,
+    l1_manager_id: resolvedL1,
+    l2_manager_id: resolvedL2,
+    l3_manager_id: resolvedL3,
+    l4_manager_id: resolvedL4,
     workplace_id: params.workplace_id || null,
     default_shift_id: params.default_shift_id || null,
     employment_status: 'active',
@@ -373,7 +436,34 @@ export async function createEmployee(params: {
 }
 
 export async function updateEmployee(id: string, updates: Record<string, any>): Promise<void> {
-  const payload = { ...updates, updated_at: new Date().toISOString() };
+  const cleanMgr = (val?: string | null) => (val && val !== 'none' && val !== 'null' && val.trim() !== '' ? val.trim() : null);
+  const payload: Record<string, any> = { ...updates, updated_at: new Date().toISOString() };
+
+  // Sync manager_id and l1_manager_id
+  if (updates.l1_manager_id !== undefined) {
+    const cleanL1 = cleanMgr(updates.l1_manager_id);
+    payload.l1_manager_id = cleanL1;
+    if (updates.manager_id === undefined) {
+      payload.manager_id = cleanL1;
+    }
+  } else if (updates.manager_id !== undefined) {
+    const cleanMgrId = cleanMgr(updates.manager_id);
+    payload.manager_id = cleanMgrId;
+    if (updates.l1_manager_id === undefined) {
+      payload.l1_manager_id = cleanMgrId;
+    }
+  }
+
+  if (updates.l2_manager_id !== undefined) {
+    payload.l2_manager_id = cleanMgr(updates.l2_manager_id);
+  }
+  if (updates.l3_manager_id !== undefined) {
+    payload.l3_manager_id = cleanMgr(updates.l3_manager_id);
+  }
+  if (updates.l4_manager_id !== undefined) {
+    payload.l4_manager_id = cleanMgr(updates.l4_manager_id);
+  }
+
   await updateDoc(doc(db, 'employees', id), payload);
   if (updates.is_hhc_enabled !== undefined) {
     try {

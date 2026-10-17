@@ -131,7 +131,7 @@ export default function ShiftsScreen() {
       setDepartments(deptData || []);
 
       // If logged in as HOD/Manager, restrict to their department
-      if (profile?.role === 'manager') {
+      if ((profile?.role as any) === 'manager' && profile?.id) {
         const myEmp = (empData || []).find((e) => e.profile_id === profile.id);
         if (myEmp?.department_id) {
           setSelectedDeptId(myEmp.department_id);
@@ -568,7 +568,7 @@ export default function ShiftsScreen() {
                       </Text>
                     </View>
                   </View>
-                  {profile?.role === 'manager' && (
+                  {(profile?.role as any) === 'manager' && (
                     <View style={{ backgroundColor: '#CCFBF1', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }}>
                       <Text style={{ fontSize: 12, fontWeight: '700', color: '#0F766E' }}>
                         HOD Mode: {departments.find(d => d.id === selectedDeptId)?.name || 'My Department'}

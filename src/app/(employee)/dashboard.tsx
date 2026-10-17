@@ -458,7 +458,7 @@ export default function EmployeeDashboard() {
             {/* Today's Shift Card */}
             {todayShift && (
               <Animated.View entering={FadeInDown.springify().delay(50)}>
-                <Card style={[styles.card, { backgroundColor: '#f8fafc', borderColor: '#e2e8f0', marginBottom: 20 }]}>
+                <Card style={{ backgroundColor: '#f8fafc', borderColor: '#e2e8f0', marginBottom: 20 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
                     <View style={{ backgroundColor: `${todayShift.color}20`, padding: 12, borderRadius: 999 }}>
                       <Clock size={24} color={todayShift.color} />
@@ -478,7 +478,7 @@ export default function EmployeeDashboard() {
             {/* Pending Appraisal Alert Card */}
             {pendingAppraisal && (
               <Animated.View entering={FadeInDown.springify()}>
-                <Card style={[styles.card, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', marginBottom: 20 }]}>
+                <Card style={{ backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', marginBottom: 20 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
                     <View style={{ backgroundColor: '#dcfce7', padding: 12, borderRadius: 999 }}>
                       <Award size={26} color="#16a34a" />

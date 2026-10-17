@@ -76,6 +76,10 @@ export default function EmployeeDetailScreen() {
   const [workplaceId, setWorkplaceId] = useState<string | null>(null);
   const [shiftId, setShiftId] = useState<string | null>(null);
   const [managerId, setManagerId] = useState<string | null>(null);
+  const [l1ManagerId, setL1ManagerId] = useState<string | null>(null);
+  const [l2ManagerId, setL2ManagerId] = useState<string | null>(null);
+  const [l3ManagerId, setL3ManagerId] = useState<string | null>(null);
+  const [l4ManagerId, setL4ManagerId] = useState<string | null>(null);
   const [basicSalary, setBasicSalary] = useState('');
   const [status, setStatus] = useState<string>('active');
   const [isHhcEnabled, setIsHhcEnabled] = useState(false);
@@ -169,7 +173,11 @@ export default function EmployeeDetailScreen() {
     setDeptId(emp.department_id || null);
     setWorkplaceId(emp.workplace_id || null);
     setShiftId((emp as any).default_shift_id || null);
-    setManagerId(emp.manager_id || null);
+    setManagerId(emp.l1_manager_id || emp.manager_id || null);
+    setL1ManagerId(emp.l1_manager_id || emp.manager_id || null);
+    setL2ManagerId(emp.l2_manager_id || null);
+    setL3ManagerId(emp.l3_manager_id || null);
+    setL4ManagerId(emp.l4_manager_id || null);
     setBasicSalary(emp.basic_salary ? String(emp.basic_salary) : '0');
     setStatus(emp.employment_status || 'active');
     setIsHhcEnabled(!!emp.is_hhc_enabled || !!emp.profile?.is_hhc_enabled);
@@ -231,7 +239,11 @@ export default function EmployeeDetailScreen() {
         department_id: deptId || null,
         workplace_id: workplaceId || null,
         default_shift_id: shiftId || null,
-        manager_id: managerId || null,
+        manager_id: l1ManagerId || null,
+        l1_manager_id: l1ManagerId || null,
+        l2_manager_id: l2ManagerId || null,
+        l3_manager_id: l3ManagerId || null,
+        l4_manager_id: l4ManagerId || null,
         basic_salary: parseFloat(basicSalary) || 0,
         employment_status: status as any,
         joining_date: joiningDate || undefined,
@@ -292,7 +304,10 @@ export default function EmployeeDetailScreen() {
     );
   }
 
-  const currentManager = managers.find(m => m.id === emp.manager_id);
+  const l1Manager = managers.find(m => m.id === (emp.l1_manager_id || emp.manager_id)) || emp.l1_manager || emp.manager;
+  const l2Manager = managers.find(m => m.id === emp.l2_manager_id) || emp.l2_manager;
+  const l3Manager = managers.find(m => m.id === emp.l3_manager_id) || emp.l3_manager;
+  const l4Manager = managers.find(m => m.id === emp.l4_manager_id) || emp.l4_manager;
   const currentShift = shifts.find(s => s.id === (emp as any).default_shift_id);
   const tc = emp.tax_config || {};
 
@@ -328,7 +343,10 @@ export default function EmployeeDetailScreen() {
             <Row label="Phone Number" value={emp.profile?.phone || 'N/A'} colors={colors} />
             <Row label="Department" value={emp.department?.name || 'Unassigned'} colors={colors} />
             <Row label="Workplace Location" value={emp.workplace?.name || 'Unassigned'} colors={colors} />
-            <Row label="Reporting Manager" value={currentManager?.profile?.full_name || currentManager?.employee_code || 'None'} colors={colors} />
+            <Row label="L1 Manager (Supervisor)" value={l1Manager?.profile?.full_name || l1Manager?.employee_code || 'None / Not Assigned'} colors={colors} />
+            <Row label="L2 Manager (HOD)" value={l2Manager?.profile?.full_name ? `${l2Manager.profile.full_name} (${l2Manager.employee_code || 'HOD'})` : 'None / Not Assigned'} colors={colors} />
+            <Row label="L3 Manager (HR Head)" value={l3Manager?.profile?.full_name ? `${l3Manager.profile.full_name} (${l3Manager.employee_code || 'HR'})` : 'None / Not Assigned'} colors={colors} />
+            <Row label="L4 Manager (Director / MS)" value={l4Manager?.profile?.full_name ? `${l4Manager.profile.full_name} (${l4Manager.employee_code || 'Director'})` : 'None / Not Assigned'} colors={colors} />
             <Row label="Assigned Shift" value={currentShift ? `${currentShift.name} (${currentShift.start_time} - ${currentShift.end_time})` : 'Standard'} colors={colors} />
             <Row label="Basic Salary" value={formatCurrency(emp.basic_salary)} colors={colors} />
             <Row label="Joining Date" value={emp.joining_date ? formatDate(emp.joining_date) : 'N/A'} colors={colors} />
@@ -535,14 +553,58 @@ export default function EmployeeDetailScreen() {
               ]}
             />
 
+            <Text style={[styles.groupLabel, { color: colors.textSecondary, marginTop: 14 }]}>Reporting Hierarchy (4-Tier Approval Chain)</Text>
+
             <Select
-              label="Reporting Manager"
-              value={managerId}
-              onValueChange={setManagerId}
+              label="L1 Manager (Immediate Reporting Supervisor)"
+              value={l1ManagerId || ''}
+              onValueChange={(v) => {
+                setL1ManagerId(v || null);
+                setManagerId(v || null);
+              }}
               options={[
                 { label: 'None / Top Level', value: '' },
                 ...managers.map(m => ({
-                  label: m.profile?.full_name || m.employee_code || 'Unknown',
+                  label: `${m.profile?.full_name || 'Staff'} (${m.employee_code || 'EMP'}${m.designation ? ' - ' + m.designation : ''})`,
+                  value: m.id,
+                })),
+              ]}
+            />
+
+            <Select
+              label="L2 Manager (Department Head / HOD)"
+              value={l2ManagerId || ''}
+              onValueChange={(v) => setL2ManagerId(v || null)}
+              options={[
+                { label: 'None / Not Assigned', value: '' },
+                ...managers.map(m => ({
+                  label: `${m.profile?.full_name || 'Staff'} (${m.employee_code || 'EMP'}${m.designation ? ' - ' + m.designation : ''})`,
+                  value: m.id,
+                })),
+              ]}
+            />
+
+            <Select
+              label="L3 Manager (HR Manager / Operations Head)"
+              value={l3ManagerId || ''}
+              onValueChange={(v) => setL3ManagerId(v || null)}
+              options={[
+                { label: 'None / Not Assigned', value: '' },
+                ...managers.map(m => ({
+                  label: `${m.profile?.full_name || 'Staff'} (${m.employee_code || 'EMP'}${m.designation ? ' - ' + m.designation : ''})`,
+                  value: m.id,
+                })),
+              ]}
+            />
+
+            <Select
+              label="L4 Manager (Director / Medical Superintendent / Admin)"
+              value={l4ManagerId || ''}
+              onValueChange={(v) => setL4ManagerId(v || null)}
+              options={[
+                { label: 'None / Not Assigned', value: '' },
+                ...managers.map(m => ({
+                  label: `${m.profile?.full_name || 'Staff'} (${m.employee_code || 'EMP'}${m.designation ? ' - ' + m.designation : ''})`,
                   value: m.id,
                 })),
               ]}

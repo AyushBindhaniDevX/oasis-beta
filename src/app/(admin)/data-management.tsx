@@ -1,17 +1,18 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions, Alert, TextInput, Modal as RNModal } from 'react-native';
 import { ADMIN_NAV } from '@/constants/navigation';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { useTheme } from '@/hooks/use-theme';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Download, Upload, FileText, FileSpreadsheet, CheckCircle2, AlertCircle, Search, X } from 'lucide-react-native';
+import { Download, Upload, FileText, FileSpreadsheet, CheckCircle2, AlertCircle, Search, X, Eye, Clock } from 'lucide-react-native';
 import { Select } from '@/components/ui/Select';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/hooks/useAuth';
 import { IMPORT_MODULES, downloadTemplate, processImport } from '@/lib/services/importExport';
 import { generateReport } from '@/lib/services/reports';
 import { importExcelObjects } from '@/utils/excel';
+import { LateComersOverviewView } from '@/components/attendance/LateComersOverviewView';
 
 export default function DataManagementScreen() {
   const colors = useTheme();
@@ -26,6 +27,7 @@ export default function DataManagementScreen() {
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<any>(null);
   const [selectedModule, setSelectedModule] = useState<string>('employees');
+  const [showLateOverview, setShowLateOverview] = useState(false);
   
   const reports = [
     { id: 'employee', name: 'Employee Directory', desc: 'Basic details of all employees', badge: 'MASTER' },
@@ -140,6 +142,29 @@ export default function DataManagementScreen() {
               )}
             </View>
 
+            {/* Late Comers Live Overview Quick Access Banner */}
+            <View style={[styles.overviewBanner, { backgroundColor: '#e6f3f1', borderColor: '#b2ded8' }]}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Clock size={16} color="#006a61" />
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#006a61' }}>
+                    Late Comers Live Overview
+                  </Text>
+                  <Badge label="NO DOWNLOAD NEEDED" variant="accentLight" />
+                </View>
+                <Text style={{ fontSize: 12, color: '#334155' }}>
+                  Inspect daily punch-in times, grace limits (3/month), and 0.5 LOP penalties directly on-screen instead of repeatedly downloading PDFs or Excel files.
+                </Text>
+              </View>
+              <Button
+                title="Open Live Overview"
+                icon={<Eye size={14} color="#FFF" />}
+                onPress={() => setShowLateOverview(true)}
+                size="sm"
+                style={{ backgroundColor: '#006a61' }}
+              />
+            </View>
+
             <View style={styles.grid}>
               {filteredReports.map((report) => (
                 <View key={report.id} style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
@@ -153,14 +178,35 @@ export default function DataManagementScreen() {
                     <Text style={[styles.cardTitle, { color: colors.text }]}>{report.name}</Text>
                     <Text style={[styles.cardSub, { color: colors.textSecondary }]}>{report.desc}</Text>
                   </View>
-                  <Button
-                    title={exportingId === report.id ? 'Generating...' : 'Export CSV'}
-                    icon={<Download size={14} color="#FFF" />}
-                    onPress={() => handleExport(report.id)}
-                    loading={exportingId === report.id}
-                    style={{ marginTop: 16, backgroundColor: colors.primary }}
-                    size="sm"
-                  />
+
+                  {report.id === 'late_attendance' ? (
+                    <View style={{ gap: 8, marginTop: 16 }}>
+                      <Button
+                        title="View Live Overview"
+                        icon={<Eye size={14} color="#FFF" />}
+                        onPress={() => setShowLateOverview(true)}
+                        style={{ backgroundColor: '#006a61' }}
+                        size="sm"
+                      />
+                      <Button
+                        title={exportingId === report.id ? 'Generating...' : 'Export CSV'}
+                        icon={<Download size={14} color={colors.text} />}
+                        onPress={() => handleExport(report.id)}
+                        loading={exportingId === report.id}
+                        variant="outline"
+                        size="sm"
+                      />
+                    </View>
+                  ) : (
+                    <Button
+                      title={exportingId === report.id ? 'Generating...' : 'Export CSV'}
+                      icon={<Download size={14} color="#FFF" />}
+                      onPress={() => handleExport(report.id)}
+                      loading={exportingId === report.id}
+                      style={{ marginTop: 16, backgroundColor: colors.primary }}
+                      size="sm"
+                    />
+                  )}
                 </View>
               ))}
             </View>
@@ -252,6 +298,19 @@ export default function DataManagementScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Late Comers Live Interactive Overview Modal */}
+      <RNModal
+        visible={showLateOverview}
+        animationType="slide"
+        onRequestClose={() => setShowLateOverview(false)}
+      >
+        <LateComersOverviewView
+          organizationId={organization?.id || profile?.organization_id}
+          onClose={() => setShowLateOverview(false)}
+          isModal
+        />
+      </RNModal>
     </SidebarLayout>
   );
 }
@@ -286,5 +345,15 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     outlineStyle: 'none' as any,
+  },
+  overviewBanner: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 12,
   },
 });
