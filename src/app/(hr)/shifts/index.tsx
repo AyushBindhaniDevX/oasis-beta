@@ -38,8 +38,7 @@ import {
   ShieldCheck,
   UserCheck,
 } from 'lucide-react-native';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
+import { exportOrPrintPdf } from '@/utils/pdf';
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
@@ -176,55 +175,264 @@ export default function ShiftsScreen() {
   const handleDownloadPDF = async () => {
     try {
       setLoading(true);
+      const activeDeptName = selectedDeptId
+        ? departments.find(d => d.id === selectedDeptId)?.name || 'Department'
+        : 'All Hospital Departments';
+
+      const unitName = (tenantOrg as any)?.name || 'Shanti Memorial Hospital & Chikitsa Unit';
+      const hodName = profile?.full_name || 'Department HOD';
+
       const htmlContent = `
+        <!DOCTYPE html>
         <html>
           <head>
+            <meta charset="utf-8">
+            <title>Duty Roster - ${weekDates[0].dateStr} to ${weekDates[6].dateStr}</title>
             <style>
-              body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 20px; }
-              h1 { color: #0D7377; text-align: center; }
-              h3 { text-align: center; color: #64748B; margin-bottom: 30px; }
-              table { width: 100%; border-collapse: collapse; font-size: 12px; }
-              th, td { border: 1px solid #E2E8F0; padding: 8px; text-align: center; }
-              th { background-color: #F8FAFC; color: #334155; font-weight: bold; }
-              td.emp-name { text-align: left; font-weight: bold; color: #0F172A; }
-              .shift-cell { font-weight: bold; border-radius: 4px; padding: 2px 4px; display: inline-block; }
+              @page {
+                size: landscape;
+                margin: 8mm;
+              }
+              * {
+                box-sizing: border-box;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                margin: 0;
+                padding: 12px;
+                color: #0F172A;
+                background: #FFF;
+                font-size: 11px;
+              }
+              .header-box {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                border-bottom: 2.5px solid #0D7377;
+                padding-bottom: 10px;
+                margin-bottom: 12px;
+              }
+              .hospital-name {
+                font-size: 18px;
+                font-weight: 800;
+                color: #0D7377;
+                letter-spacing: 0.5px;
+                text-transform: uppercase;
+                margin: 0 0 4px 0;
+              }
+              .doc-title {
+                font-size: 13px;
+                font-weight: 700;
+                color: #D97706;
+                text-transform: uppercase;
+                margin: 0;
+              }
+              .meta-info {
+                text-align: right;
+                font-size: 11px;
+                color: #475569;
+                line-height: 1.5;
+              }
+              .meta-info strong {
+                color: #0F172A;
+              }
+              .legend-bar {
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 12px;
+                background: #F8FAFC;
+                border: 1px solid #E2E8F0;
+                border-radius: 6px;
+                padding: 8px 12px;
+                margin-bottom: 12px;
+              }
+              .legend-heading {
+                font-weight: 800;
+                color: #334155;
+                font-size: 10.5px;
+                text-transform: uppercase;
+                margin-right: 4px;
+              }
+              .legend-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                font-size: 10px;
+                font-weight: 600;
+                color: #334155;
+              }
+              .color-bullet {
+                width: 12px;
+                height: 12px;
+                border-radius: 3px;
+                border: 1px solid rgba(0,0,0,0.1);
+              }
+              table.roster-grid {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                font-size: 10px;
+              }
+              table.roster-grid th, table.roster-grid td {
+                border: 1.2px solid #CBD5E1;
+                padding: 6px 4px;
+                text-align: center;
+                vertical-align: middle;
+              }
+              table.roster-grid th {
+                background-color: #0F766E !important;
+                color: #FFFFFF !important;
+                font-weight: 700;
+                text-transform: uppercase;
+                font-size: 10px;
+              }
+              table.roster-grid th.emp-th {
+                width: 18%;
+                text-align: left;
+                padding-left: 8px;
+              }
+              table.roster-grid th.tot-th {
+                width: 7%;
+              }
+              table.roster-grid tr:nth-child(even) {
+                background-color: #F8FAFC;
+              }
+              .emp-info {
+                text-align: left;
+                padding-left: 8px;
+              }
+              .emp-name {
+                font-weight: 700;
+                color: #0F172A;
+                font-size: 11px;
+              }
+              .emp-role {
+                font-size: 9px;
+                color: #64748B;
+              }
+              .shift-chip {
+                display: inline-block;
+                padding: 3px 5px;
+                border-radius: 4px;
+                font-weight: 700;
+                font-size: 9px;
+                line-height: 1.2;
+                border: 1px solid rgba(0,0,0,0.12);
+              }
+              .off-text {
+                color: #94A3B8;
+                font-weight: 600;
+                font-size: 10px;
+              }
+              .footer-sign {
+                display: flex;
+                justify-content: space-between;
+                margin-top: 24px;
+                padding-top: 14px;
+              }
+              .sign-box {
+                width: 220px;
+                text-align: center;
+                border-top: 1.5px solid #475569;
+                padding-top: 4px;
+                font-size: 10.5px;
+                font-weight: 700;
+                color: #1E293B;
+              }
+              .sign-sub {
+                font-size: 9px;
+                font-weight: normal;
+                color: #64748B;
+              }
             </style>
           </head>
           <body>
-            <h1>Weekly Shift Roster</h1>
-            <h3>Week of ${weekDates[0].dateStr} — ${weekDates[6].dateStr}</h3>
-            <table>
+            <div class="header-box">
+              <div>
+                <div class="hospital-name">${unitName}</div>
+                <div class="doc-title">Weekly Staff Duty Roster</div>
+              </div>
+              <div class="meta-info">
+                <div><strong>Roster Period:</strong> ${weekDates[0].dateStr} to ${weekDates[6].dateStr}</div>
+                <div><strong>Department:</strong> ${activeDeptName}</div>
+                <div><strong>Prepared By:</strong> ${hodName} (HOD)</div>
+                <div><strong>Generated:</strong> ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+              </div>
+            </div>
+
+            <div class="legend-bar">
+              <span class="legend-heading">Shift Schedule:</span>
+              ${shifts.map(s => `
+                <div class="legend-chip">
+                  <span class="color-bullet" style="background-color: ${s.color};"></span>
+                  <span><strong>${s.name}</strong> (${s.start_time} - ${s.end_time})</span>
+                </div>
+              `).join('')}
+              <div class="legend-chip">
+                <span class="color-bullet" style="background-color: #E2E8F0;"></span>
+                <span><strong>OFF</strong> (Weekly Rest)</span>
+              </div>
+            </div>
+
+            <table class="roster-grid">
               <thead>
                 <tr>
-                  <th style="text-align: left;">Employee</th>
-                  ${weekDates.map((d, i) => `<th>${DAYS[i]}<br/>${d.dateStr}</th>`).join('')}
+                  <th class="emp-th">Employee / Staff</th>
+                  ${weekDates.map((d, i) => `<th>${DAYS[i]}<br/><span style="font-size: 9px; opacity: 0.9;">${d.dateStr}</span></th>`).join('')}
+                  <th class="tot-th">Duty Days</th>
                 </tr>
               </thead>
               <tbody>
                 ${employees.map(emp => {
+                  let dutyDaysCount = 0;
+                  const dayCells = weekDates.map(d => {
+                    const shiftId = rosterMap[emp.id + '_' + d.dateStr];
+                    const shiftDef = shifts.find(s => s.id === shiftId);
+                    if (shiftId && shiftId !== 'OFF' && shiftDef) {
+                      dutyDaysCount++;
+                      return `<td><span class="shift-chip" style="background-color: ${shiftDef.color}25; color: ${shiftDef.color}; border-color: ${shiftDef.color}60;">${shiftDef.name}</span></td>`;
+                    } else {
+                      return '<td><span class="off-text">OFF</span></td>';
+                    }
+                  }).join('');
+
                   return `
                     <tr>
-                      <td class="emp-name">${emp.profile?.full_name || 'Staff'}</td>
-                      ${weekDates.map(d => {
-                        const shiftId = rosterMap[emp.id + '_' + d.dateStr];
-                        const shiftDef = shifts.find(s => s.id === shiftId);
-                        if (shiftId && shiftId !== 'OFF' && shiftDef) {
-                          return '<td><span class="shift-cell" style="background-color: ' + shiftDef.color + '20; color: ' + shiftDef.color + ';">' + shiftDef.name + '</span></td>';
-                        } else {
-                          return '<td style="color: #94A3B8;">OFF</td>';
-                        }
-                      }).join('')}
+                      <td class="emp-info">
+                        <div class="emp-name">${emp.profile?.full_name || 'Staff Member'}</div>
+                        <div class="emp-role">${emp.employee_code || ''} · ${emp.designation || 'Staff'}</div>
+                      </td>
+                      ${dayCells}
+                      <td style="font-weight: 700; color: #0D7377;">${dutyDaysCount} / 7</td>
                     </tr>
                   `;
                 }).join('')}
               </tbody>
             </table>
+
+            <div class="footer-sign">
+              <div class="sign-box">
+                Immediate HOD Signature<br/>
+                <span class="sign-sub">${activeDeptName}</span>
+              </div>
+              <div class="sign-box">
+                Medical Superintendent<br/>
+                <span class="sign-sub">Clinical Administration</span>
+              </div>
+              <div class="sign-box">
+                HR & Payroll Department<br/>
+                <span class="sign-sub">Shanti Memorial Hospital</span>
+              </div>
+            </div>
           </body>
         </html>
       `;
       
-      const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+      const fileName = `SMH_Duty_Roster_${weekDates[0].dateStr}_${weekDates[6].dateStr}.pdf`;
+      await exportOrPrintPdf(htmlContent, fileName);
     } catch (error) {
       console.error('Failed to generate PDF:', error);
       alert('Failed to generate PDF. Please try again.');

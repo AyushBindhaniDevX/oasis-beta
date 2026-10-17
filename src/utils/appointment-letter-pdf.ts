@@ -1,5 +1,4 @@
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
+import { exportOrPrintPdf } from './pdf';
 import { Platform } from 'react-native';
 import { formatCurrency, formatDate } from '@/utils/format';
 import type { Employee, Organization } from '@/types';
@@ -307,32 +306,5 @@ export async function exportAppointmentLetterPdf(data: AppointmentLetterData): P
   const html = generateAppointmentLetterHtml(data);
   const empCode = data.employee.employee_code || 'EMP';
   const fileName = `Appointment_Letter_${empCode}.pdf`;
-
-  if (Platform.OS === 'web') {
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(html);
-      printWindow.document.close();
-      setTimeout(() => {
-        printWindow.print();
-      }, 500);
-      return 'printed';
-    }
-    return null;
-  }
-
-  try {
-    const { uri } = await Print.printToFileAsync({ html });
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(uri, {
-        UTI: '.pdf',
-        mimeType: 'application/pdf',
-        dialogTitle: fileName,
-      });
-    }
-    return uri;
-  } catch (err) {
-    console.error('Failed to export appointment letter PDF:', err);
-    return null;
-  }
+  return await exportOrPrintPdf(html, fileName);
 }

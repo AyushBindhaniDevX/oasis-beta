@@ -5,6 +5,7 @@
  */
 
 import { formatCurrency, formatDate } from '@/utils/format';
+import { exportOrPrintPdf } from '@/utils/pdf';
 import type { Employee } from '@/types';
 
 export interface GratuityCalculationResult {
@@ -108,6 +109,7 @@ export function generateGratuityStatementHtml(result: GratuityCalculationResult,
   <title>Gratuity Settlement Statement - ${result.employee_name} (${result.employee_code})</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     body { font-family: 'Plus Jakarta Sans', sans-serif; padding: 36px; color: #0F172A; background: #FFF; }
     .card { max-width: 800px; margin: 0 auto; border: 1.5px solid #0D7377; border-radius: 12px; padding: 36px; }
     .header { border-bottom: 2px solid #0D7377; padding-bottom: 16px; margin-bottom: 24px; }
@@ -163,4 +165,10 @@ export function generateGratuityStatementHtml(result: GratuityCalculationResult,
 </body>
 </html>
 `;
+}
+
+export async function exportGratuityStatementPdf(result: GratuityCalculationResult, unitName = 'Shanti Memorial Hospital & Chikitsa Unit'): Promise<string | null> {
+  const html = generateGratuityStatementHtml(result, unitName);
+  const fileName = `Gratuity_Statement_${result.employee_code}.pdf`;
+  return await exportOrPrintPdf(html, fileName);
 }

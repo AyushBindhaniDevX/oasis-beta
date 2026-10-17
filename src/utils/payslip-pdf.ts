@@ -1,5 +1,4 @@
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
+import { exportOrPrintPdf } from './pdf';
 import { Platform } from 'react-native';
 import { formatCurrency, formatDate } from '@/utils/format';
 import { MONTHS } from '@/constants/config';
@@ -461,32 +460,7 @@ export async function exportPayslipPdf(payslip: Payslip, employee?: Employee | n
   const html = generatePayslipHtml(payslip, employee, organization);
   const empCode = employee?.employee_code || payslip.employee?.employee_code || payslip.payslip_number || 'EMP';
   const fileName = `Salary_Slip_${empCode}_${payslip.period_month}_${payslip.period_year}.pdf`;
-
-  if (Platform.OS === 'web') {
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(html);
-      printWindow.document.close();
-      setTimeout(() => {
-        printWindow.print();
-      }, 500);
-      return 'printed';
-    }
-    return null;
-  }
-
-  try {
-    const { uri } = await Print.printToFileAsync({ html });
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(uri, {
-        UTI: '.pdf',
-        mimeType: 'application/pdf',
-        dialogTitle: fileName,
-      });
-    }
-    return uri;
-  } catch (err) {
-    console.error('Failed to export payslip PDF:', err);
-    return null;
-  }
+  return await exportOrPrintPdf(html, fileName);
 }
+
+export const downloadOrPrintPayslip = exportPayslipPdf;
