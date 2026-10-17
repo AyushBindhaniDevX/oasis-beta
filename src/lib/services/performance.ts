@@ -338,3 +338,149 @@ export async function sendKudos(data: {
 
   return kudos;
 }
+
+export interface HospitalAppraisalParameter {
+  id: string;
+  name: string;
+  category: string;
+  weightage_percent: number;
+  description: string;
+}
+
+export const DEFAULT_HOSPITAL_APPRAISAL_PARAMS: HospitalAppraisalParameter[] = [
+  {
+    id: 'param_clinical',
+    name: 'Clinical Competence & Patient Care Quality',
+    category: 'Core Clinical',
+    weightage_percent: 25,
+    description: 'Adherence to treatment protocols, diagnostic accuracy, bedside manner, and clinical outcomes.',
+  },
+  {
+    id: 'param_punctuality',
+    name: 'Punctuality, Shift Adherence & Attendance',
+    category: 'Operational',
+    weightage_percent: 20,
+    description: 'Adherence to assigned 8-hour duty roster, biometric compliance, and shift handover punctuality.',
+  },
+  {
+    id: 'param_nabh',
+    name: 'Patient Safety, NABH Protocols & Infection Control',
+    category: 'Compliance',
+    weightage_percent: 20,
+    description: 'Strict adherence to NABH guidelines, hygiene standards, sterile protocols, and incident reporting.',
+  },
+  {
+    id: 'param_teamwork',
+    name: 'Team Collaboration & Inter-Departmental Coordination',
+    category: 'Behavioral',
+    weightage_percent: 20,
+    description: 'Cross-functional teamwork between doctors, nursing, administration, billing, and support departments.',
+  },
+  {
+    id: 'param_documentation',
+    name: 'Medical Documentation & Administrative Integrity',
+    category: 'Administrative',
+    weightage_percent: 15,
+    description: 'Accurate and timely patient file documentation, discharge summary completion, and statutory record keeping.',
+  },
+];
+
+export async function getHospitalAppraisalParameters(orgId?: string): Promise<HospitalAppraisalParameter[]> {
+  try {
+    const docId = `appraisal_config_${orgId || DEFAULT_ORG_ID}`;
+    const snap = await getDoc(doc(db, 'hospital_appraisal_configs', docId));
+    if (snap.exists() && Array.isArray(snap.data()?.parameters)) {
+      return snap.data().parameters;
+    }
+  } catch (e) {
+    console.warn('Error reading hospital appraisal parameters:', e);
+  }
+  return DEFAULT_HOSPITAL_APPRAISAL_PARAMS;
+}
+
+export async function saveHospitalAppraisalParameters(
+  orgId: string,
+  parameters: HospitalAppraisalParameter[]
+): Promise<void> {
+  const docId = `appraisal_config_${orgId || DEFAULT_ORG_ID}`;
+  await setDoc(doc(db, 'hospital_appraisal_configs', docId), {
+    id: docId,
+    organization_id: orgId || DEFAULT_ORG_ID,
+    parameters,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export interface ConsolidatedAppraisalRow {
+  employee_id: string;
+  employee_code: string;
+  employee_name: string;
+  department: string;
+  designation: string;
+  cycle_name: string;
+  period: string;
+  self_rating: number;
+  manager_rating: number;
+  overall_score: number;
+  recommendation: string;
+  reviewer_name: string;
+  status: string;
+  submitted_at: string;
+}
+
+export async function getConsolidatedAppraisalReport(
+  orgId?: string,
+  cycle?: string
+): Promise<ConsolidatedAppraisalRow[]> {
+  const [appraisals, employeesSnap, profsSnap, deptsSnap] = await Promise.all([
+    getAppraisals({ organizationId: orgId, period: cycle }),
+    getDocs(collection(db, 'employees')),
+    getDocs(collection(db, 'profiles')),
+    getDocs(collection(db, 'departments')),
+  ]);
+
+  const profMap = new Map<string, Profile>();
+  profsSnap.forEach((d) => profMap.set(d.id, { id: d.id, ...d.data() } as Profile));
+
+  const deptMap = new Map<string, Department>();
+  deptsSnap.forEach((d) => deptMap.set(d.id, { id: d.id, ...d.data() } as Department));
+
+  const empMap = new Map<string, Employee>();
+  employeesSnap.forEach((d) => {
+    const emp = { id: d.id, ...d.data() } as Employee;
+    emp.profile = emp.profile_id ? profMap.get(emp.profile_id) : undefined;
+    emp.department = emp.department_id ? deptMap.get(emp.department_id) : undefined;
+    empMap.set(d.id, emp);
+  });
+
+  const appMap = new Map<string, AppraisalReview>();
+  appraisals.forEach((a) => {
+    appMap.set(a.employee_id, a);
+  });
+
+  const rows: ConsolidatedAppraisalRow[] = [];
+  empMap.forEach((emp) => {
+    if (orgId && emp.organization_id && emp.organization_id !== orgId) return;
+    const app = appMap.get(emp.id);
+
+    rows.push({
+      employee_id: emp.id,
+      employee_code: emp.employee_code || 'SMH-000',
+      employee_name: emp.profile?.full_name || 'Staff Member',
+      department: emp.department?.name || 'General',
+      designation: emp.designation || 'Staff',
+      cycle_name: app?.cycle_name || (cycle || 'Annual 2026'),
+      period: app?.period || (cycle || '2026'),
+      self_rating: app?.self_rating || 0,
+      manager_rating: app?.manager_rating || 0,
+      overall_score: app?.overall_score || (app?.manager_rating ? Math.round(app.manager_rating * 20) : 0),
+      recommendation: app?.recommendation ? app.recommendation.toUpperCase().replace(/_/g, ' ') : 'PENDING EVALUATION',
+      reviewer_name: app?.reviewer?.full_name || (app?.reviewer_id ? profMap.get(app.reviewer_id)?.full_name : null) || 'Immediate HOD',
+      status: app?.status ? app.status.toUpperCase().replace(/_/g, ' ') : 'NOT STARTED',
+      submitted_at: app?.manager_submitted_at || app?.self_submitted_at || app?.created_at || 'N/A',
+    });
+  });
+
+  rows.sort((a, b) => a.employee_code.localeCompare(b.employee_code));
+  return rows;
+}

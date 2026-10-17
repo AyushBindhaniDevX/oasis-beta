@@ -25,14 +25,13 @@ export default function DataManagementScreen() {
   const [selectedModule, setSelectedModule] = useState<string>('employees');
   
   const reports = [
-    { id: 'employee', name: 'Employee Directory', desc: 'Basic details of all employees' },
-    { id: 'onboarding', name: 'Onboarding Report', desc: 'Employee ID, Designation, DOJ, Onboarding status, etc.' },
-    { id: 'attendance', name: 'Attendance Report', desc: 'Monthly attendance summary' },
-    { id: 'late_attendance', name: 'Late Attendance Report', desc: 'Employees marked late' },
-    { id: 'leave', name: 'Leave Report', desc: 'Leave balances and history' },
-    { id: 'payroll', name: 'Payroll Report', desc: 'Monthly payroll processing details' },
-    { id: 'salary', name: 'Salary Register', desc: 'Salary breakdown for all employees' },
-    { id: 'pf', name: 'PF / EPF Report', desc: 'Provident fund contribution summary' },
+    { id: 'employee', name: 'Employee Master Directory', desc: 'Complete master details of all hospital employees' },
+    { id: 'pf_sheet', name: 'SMH PF Salary Sheet', desc: 'Hospital payroll muster for PF covered employees (Image 1 structure)' },
+    { id: 'non_pf_sheet', name: 'SMH Non-PF Salary Sheet', desc: 'Hospital payroll muster for Non-PF / Consultant staff (Image 2 structure)' },
+    { id: 'consolidated_appraisal', name: 'Consolidated Appraisal Report', desc: 'Master report viewing performance appraisal of all staff at one time' },
+    { id: 'late_attendance', name: 'Late Coming Master Report', desc: 'Individual and consolidated late arrival and punch penalty report' },
+    { id: 'leave', name: 'Leave Register (4-Tier Status)', desc: 'Leave requests, 4-tier approval progress, and locked status' },
+    { id: 'attendance', name: 'Daily Attendance Report', desc: 'Clock-in, clock-out and shift adherence logs' },
   ];
 
   const handleDownloadTemplate = async () => {
