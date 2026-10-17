@@ -58,6 +58,7 @@ import {
   Sparkles,
   MoveRight,
   Lock,
+  X,
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -347,6 +348,29 @@ export default function DepartmentsAndHierarchyScreen() {
     }
   };
 
+  // Helper to find all descendant IDs of an employee (to prevent cycles)
+  const getDescendantIds = useCallback((empId: string): Set<string> => {
+    const descendants = new Set<string>();
+    const queue = [empId];
+    const visited = new Set<string>();
+
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+      if (visited.has(currentId)) continue;
+      visited.add(currentId);
+
+      const emp = employees.find((x) => x.id === currentId || x.profile_id === currentId);
+      if (emp && emp.direct_reports) {
+        for (const child of emp.direct_reports) {
+          descendants.add(child.id);
+          if (child.profile_id) descendants.add(child.profile_id);
+          queue.push(child.id);
+        }
+      }
+    }
+    return descendants;
+  }, [employees]);
+
   const handleSaveReportingManager = async () => {
     if (!selectedEmpId) {
       setReportingError('Please select an employee');
@@ -356,18 +380,27 @@ export default function DepartmentsAndHierarchyScreen() {
       setReportingError('An employee cannot report to themselves');
       return;
     }
+    if (selectedMgrId && getDescendantIds(selectedEmpId).has(selectedMgrId)) {
+      setReportingError('Circular hierarchy not allowed: The selected supervisor already reports to this employee');
+      return;
+    }
 
     setSavingReporting(true);
     setReportingError('');
     try {
-      await updateReportingManager(selectedEmpId, selectedMgrId);
+      const resolvedMgrId = selectedMgrId && selectedMgrId.trim() !== '' && selectedMgrId !== 'none' ? selectedMgrId : null;
+      await updateReportingManager(selectedEmpId, resolvedMgrId);
       await createAuditLog('reporting_manager_updated', 'employee', selectedEmpId, {
-        manager_id: selectedMgrId,
+        manager_id: resolvedMgrId,
         updated_by: profile?.id,
       });
+
+      // Auto-expand the assigned manager's node so user sees the newly added report immediately!
+      if (resolvedMgrId) {
+        setCollapsedNodes((prev) => ({ ...prev, [resolvedMgrId]: false }));
+      }
+
       setAssignManagerModalOpen(false);
-      setSelectedEmpId(null);
-      setSelectedMgrId(null);
       await load();
     } catch (err: any) {
       setReportingError(err.message || 'Failed to update reporting manager');
@@ -380,6 +413,22 @@ export default function DepartmentsAndHierarchyScreen() {
     setCollapsedNodes((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
   };
 
+  const expandAllNodes = () => {
+    const newCollapsed: Record<string, boolean> = {};
+    for (const emp of employees) {
+      newCollapsed[emp.id] = false;
+    }
+    setCollapsedNodes(newCollapsed);
+  };
+
+  const collapseAllNodes = () => {
+    const newCollapsed: Record<string, boolean> = {};
+    for (const emp of employees) {
+      newCollapsed[emp.id] = true;
+    }
+    setCollapsedNodes(newCollapsed);
+  };
+
   // Filtered employees for search
   const filteredEmployees = useMemo(() => {
     if (!search.trim()) return employees;
@@ -388,33 +437,101 @@ export default function DepartmentsAndHierarchyScreen() {
       (e) =>
         e.profile?.full_name?.toLowerCase().includes(q) ||
         e.designation?.toLowerCase().includes(q) ||
-        e.employee_code?.toLowerCase().includes(q)
+        e.employee_code?.toLowerCase().includes(q) ||
+        e.department?.name?.toLowerCase().includes(q)
     );
   }, [employees, search]);
 
-  // Root employees for Org Chart
-  const rootEmployees = useMemo(() => {
-    return employees.filter((e) => !e.manager_id);
+  // Root employees and unassigned employees for Org Chart
+  const { rootEmployees, unassignedEmployees } = useMemo(() => {
+    const validEmpIds = new Set(employees.map((e) => e.id));
+    const roots: Employee[] = [];
+    const unassigned: Employee[] = [];
+
+    for (const emp of employees) {
+      const hasValidManager =
+        emp.manager_id &&
+        emp.manager_id.trim() !== '' &&
+        emp.manager_id !== 'none' &&
+        emp.manager_id !== 'null' &&
+        validEmpIds.has(emp.manager_id) &&
+        emp.manager_id !== emp.id;
+
+      if (!hasValidManager) {
+        // If they have direct reports, they are an Executive / Leadership Root
+        if (emp.direct_reports && emp.direct_reports.length > 0) {
+          roots.push(emp);
+        } else {
+          // If they have no manager AND no reports, they are standalone/unassigned
+          unassigned.push(emp);
+        }
+      }
+    }
+
+    // Safety fallback: If roots is empty (e.g. everyone is linked in a loop or tree root is missing)
+    if (roots.length === 0 && employees.length > 0) {
+      const sorted = [...employees].sort(
+        (a, b) => (b.direct_reports?.length || 0) - (a.direct_reports?.length || 0)
+      );
+      roots.push(...sorted.slice(0, Math.min(3, sorted.length)));
+    }
+
+    return { rootEmployees: roots, unassignedEmployees: unassigned };
   }, [employees]);
+
+  // Filtered roots when searching in org chart
+  const searchedRoots = useMemo(() => {
+    if (!search.trim()) return rootEmployees;
+    const q = search.toLowerCase();
+    const hasMatch = (emp: Employee): boolean => {
+      if (
+        emp.profile?.full_name?.toLowerCase().includes(q) ||
+        emp.designation?.toLowerCase().includes(q) ||
+        emp.employee_code?.toLowerCase().includes(q) ||
+        emp.department?.name?.toLowerCase().includes(q)
+      ) {
+        return true;
+      }
+      return !!emp.direct_reports?.some(hasMatch);
+    };
+    return rootEmployees.filter(hasMatch);
+  }, [rootEmployees, search]);
+
+  const searchedUnassigned = useMemo(() => {
+    if (!search.trim()) return unassignedEmployees;
+    const q = search.toLowerCase();
+    return unassignedEmployees.filter(
+      (e) =>
+        e.profile?.full_name?.toLowerCase().includes(q) ||
+        e.designation?.toLowerCase().includes(q) ||
+        e.employee_code?.toLowerCase().includes(q) ||
+        e.department?.name?.toLowerCase().includes(q)
+    );
+  }, [unassignedEmployees, search]);
 
   const employeeOptions = useMemo(() => {
     return employees.map((e) => ({
-      label: `${e.profile?.full_name || 'Staff'} (${e.designation || 'Employee'})`,
+      label: `${e.profile?.full_name || 'Staff'} (${e.designation || 'Employee'} · ${e.department?.name || 'Hospital'})`,
       value: e.id,
     }));
   }, [employees]);
 
   const managerOptions = useMemo(() => {
+    const forbiddenIds = selectedEmpId ? getDescendantIds(selectedEmpId) : new Set<string>();
+    if (selectedEmpId) {
+      forbiddenIds.add(selectedEmpId);
+    }
+
     return [
       { label: 'None (Top Level / Direct to Exec)', value: '' },
       ...employees
-        .filter((e) => e.id !== selectedEmpId)
+        .filter((e) => !forbiddenIds.has(e.id))
         .map((e) => ({
-          label: `${e.profile?.full_name || 'Staff'} (${e.designation || 'Manager'})`,
+          label: `${e.profile?.full_name || 'Staff'} (${e.designation || 'Manager'} · ${e.department?.name || 'Hospital'})`,
           value: e.id,
         })),
     ];
-  }, [employees, selectedEmpId]);
+  }, [employees, selectedEmpId, getDescendantIds]);
 
   if (loading) return <LoadingState />;
 
@@ -548,18 +665,21 @@ export default function DepartmentsAndHierarchyScreen() {
             </TouchableOpacity>
           </ScrollView>
 
-          {activeMode !== 'org-chart' && (
-            <View style={[styles.searchBox, { borderColor: '#e2e8f0' }]}>
-              <Search size={15} color={colors.textSecondary} />
-              <TextInput
-                placeholder="Filter employees..."
-                placeholderTextColor={colors.textSecondary}
-                value={search}
-                onChangeText={setSearch}
-                style={[styles.searchInput, { color: colors.text }]}
-              />
-            </View>
-          )}
+          <View style={[styles.searchBox, { borderColor: '#e2e8f0' }]}>
+            <Search size={15} color={colors.textSecondary} />
+            <TextInput
+              placeholder="Search employee, designation, or department..."
+              placeholderTextColor={colors.textSecondary}
+              value={search}
+              onChangeText={setSearch}
+              style={[styles.searchInput, { color: colors.text }]}
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch('')} style={{ padding: 4 }}>
+                <X size={14} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* ── MODE 1: DEPARTMENT GROUPING KANBAN ────────────────────────────── */}
@@ -731,39 +851,133 @@ export default function DepartmentsAndHierarchyScreen() {
         {/* ── MODE 4: HIERARCHY ORG TREE ───────────────────────────────────── */}
         {activeMode === 'org-chart' && (
           <View style={[styles.treeContainer, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-            <View style={[styles.treeHead, { borderBottomColor: '#f1f5f9' }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={[styles.treeHead, { borderBottomColor: '#f1f5f9', flexWrap: 'wrap', gap: 12 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 260 }}>
                 <View style={[styles.treeIconWrap, { backgroundColor: '#eeebff' }]}>
                   <Network size={20} color="#4f46e5" />
                 </View>
                 <View>
                   <Text style={[styles.treeTitle, { color: colors.text }]}>
-                    Executive Chains of Command & Direct Reports
+                    Executive Chains of Command & Reporting Lines
                   </Text>
                   <Text style={{ fontSize: 12, color: colors.textSecondary }}>
-                    Shows managerial supervisory relationships across the organization
+                    {searchedRoots.length} Leadership Root{searchedRoots.length !== 1 ? 's' : ''} · {employees.length} Total Staff · {unassignedEmployees.length} Unassigned
                   </Text>
                 </View>
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TouchableOpacity
+                  onPress={expandAllNodes}
+                  style={[treeStyles.editLineBtn, { borderColor: '#e2e8f0', backgroundColor: '#f8fafc' }]}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text }}>Expand All</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={collapseAllNodes}
+                  style={[treeStyles.editLineBtn, { borderColor: '#e2e8f0', backgroundColor: '#f8fafc' }]}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text }}>Collapse All</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    setSelectedEmpId(null);
+                    setSelectedMgrId(null);
+                    setReportingError('');
+                    setAssignManagerModalOpen(true);
+                  }}
+                  style={[treeStyles.editLineBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                >
+                  <GitFork size={13} color="#FFF" />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#FFF' }}>Set Reporting Line</Text>
+                </TouchableOpacity>
               </View>
             </View>
 
             <View style={styles.treeContent}>
-              {rootEmployees.map((rootEmp) => (
-                <TreeNode
-                  key={rootEmp.id}
-                  employee={rootEmp}
-                  collapsedNodes={collapsedNodes}
-                  onToggle={toggleNode}
-                  onReassignManager={(emp) => {
-                    setSelectedEmpId(emp.id);
-                    setSelectedMgrId(emp.manager_id || null);
-                    setReportingError('');
-                    setAssignManagerModalOpen(true);
-                  }}
-                  colors={colors}
-                  depth={0}
-                />
-              ))}
+              {searchedRoots.length > 0 ? (
+                searchedRoots.map((rootEmp) => (
+                  <TreeNode
+                    key={rootEmp.id}
+                    employee={rootEmp}
+                    collapsedNodes={collapsedNodes}
+                    onToggle={toggleNode}
+                    onReassignManager={(emp) => {
+                      setSelectedEmpId(emp.id);
+                      setSelectedMgrId(emp.manager_id || null);
+                      setReportingError('');
+                      setAssignManagerModalOpen(true);
+                    }}
+                    colors={colors}
+                    depth={0}
+                  />
+                ))
+              ) : (
+                <View style={{ padding: 24, alignItems: 'center', gap: 8 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>
+                    {search ? 'No matching hierarchy nodes found' : 'No leadership hierarchy established yet'}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                    {search ? 'Try clearing your search query' : 'Assign managers to staff members below to start structuring your organization chart.'}
+                  </Text>
+                </View>
+              )}
+
+              {/* Standalone / Unassigned Employees Section */}
+              {searchedUnassigned.length > 0 && (
+                <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#e2e8f0' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <View>
+                      <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        Unassigned Staff Without Supervisor ({searchedUnassigned.length})
+                      </Text>
+                      <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                        Staff currently without a direct reporting manager
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={{ gap: 8 }}>
+                    {searchedUnassigned.map((emp) => (
+                      <View
+                        key={emp.id}
+                        style={[
+                          treeStyles.nodeCard,
+                          { backgroundColor: colors.surface, borderColor: '#f1f5f9', borderLeftWidth: 3, borderLeftColor: '#d97706' },
+                        ]}
+                      >
+                        <Avatar name={emp.profile?.full_name || 'Staff Member'} url={emp.profile?.avatar_url} size={36} />
+                        <View style={{ flex: 1, gap: 2 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <Text style={[treeStyles.empName, { color: colors.text }]}>
+                              {emp.profile?.full_name || 'Staff Member'}
+                            </Text>
+                            <Badge label="NO MANAGER" variant="warning" />
+                            {emp.department?.name && (
+                              <Badge label={emp.department.name} variant="neutral" />
+                            )}
+                          </View>
+                          <Text style={[treeStyles.designation, { color: colors.textSecondary }]}>
+                            {emp.designation || 'Staff'} · {emp.employee_code || 'EMP'}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          style={[treeStyles.editLineBtn, { backgroundColor: '#f0fdfa', borderColor: '#99f6e4' }]}
+                          onPress={() => {
+                            setSelectedEmpId(emp.id);
+                            setSelectedMgrId(emp.manager_id || null);
+                            setReportingError('');
+                            setAssignManagerModalOpen(true);
+                          }}
+                        >
+                          <GitFork size={13} color="#0d7377" />
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#0d7377' }}>Assign Manager</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
             </View>
           </View>
         )}
@@ -881,6 +1095,34 @@ export default function DepartmentsAndHierarchyScreen() {
                 <Text style={{ color: colors.danger, fontSize: 13, flex: 1 }}>{reportingError}</Text>
               </View>
             ) : null}
+
+            {/* Selected Employee Summary Card */}
+            {selectedEmpId && (() => {
+              const currentEditingEmp = employees.find((e) => e.id === selectedEmpId);
+              const currentSupervisor = employees.find((e) => e.id === currentEditingEmp?.manager_id);
+              if (!currentEditingEmp) return null;
+              return (
+                <View style={{ padding: 12, backgroundColor: '#f8fafc', borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', gap: 6 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Avatar name={currentEditingEmp.profile?.full_name || 'Staff'} url={currentEditingEmp.profile?.avatar_url} size={34} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontWeight: '700', fontSize: 13, color: colors.text }}>
+                        {currentEditingEmp.profile?.full_name || 'Staff Member'}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                        {currentEditingEmp.designation || 'Staff'} · {currentEditingEmp.department?.name || 'Department'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{ marginTop: 4, paddingTop: 6, borderTopWidth: 1, borderTopColor: '#e2e8f0', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 11, color: '#64748b' }}>Current Supervisor:</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: currentSupervisor ? colors.primary : '#d97706' }}>
+                      {currentSupervisor?.profile?.full_name ? `${currentSupervisor.profile.full_name} (${currentSupervisor.designation || 'Lead'})` : 'None (Top Level / Direct to Exec)'}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })()}
 
             <Select
               label="Employee *"
@@ -1154,6 +1396,7 @@ function TreeNode({
   onReassignManager,
   colors,
   depth,
+  visitedIds,
 }: {
   employee: Employee;
   collapsedNodes: Record<string, boolean>;
@@ -1161,14 +1404,35 @@ function TreeNode({
   onReassignManager: (emp: Employee) => void;
   colors: any;
   depth: number;
+  visitedIds?: Set<string>;
 }) {
+  // Safeguard against infinite circular reference recursion
+  if (visitedIds && visitedIds.has(employee.id)) {
+    return null;
+  }
+
+  const nextVisited = new Set(visitedIds || []);
+  nextVisited.add(employee.id);
+
   const isCollapsed = collapsedNodes[employee.id];
-  const hasReports = employee.direct_reports && employee.direct_reports.length > 0;
+  const directReports = (employee.direct_reports || []).filter((child) => !nextVisited.has(child.id));
+  const hasReports = directReports.length > 0;
   const name = employee.profile?.full_name || 'Staff Member';
+  const managerName = employee.manager?.profile?.full_name;
 
   return (
     <View style={[treeStyles.nodeWrap, { marginLeft: depth > 0 ? 24 : 0 }]}>
-      <View style={[treeStyles.nodeCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+      <View
+        style={[
+          treeStyles.nodeCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: '#e2e8f0',
+            borderLeftWidth: depth === 0 ? 3 : 1,
+            borderLeftColor: depth === 0 ? colors.primary : '#e2e8f0',
+          },
+        ]}
+      >
         {hasReports && (
           <TouchableOpacity onPress={() => onToggle(employee.id)} style={treeStyles.collapseBtn}>
             {isCollapsed ? (
@@ -1184,9 +1448,20 @@ function TreeNode({
         <View style={{ flex: 1, gap: 2 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Text style={[treeStyles.empName, { color: colors.text }]}>{name}</Text>
-            {depth === 0 && <Badge label="LEADERSHIP" variant="accentLight" />}
+            {depth === 0 ? (
+              <Badge label="LEADERSHIP" variant="accentLight" />
+            ) : managerName ? (
+              <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: '#f1f5f9' }}>
+                <Text style={{ fontSize: 10, fontWeight: '600', color: '#475569' }}>
+                  Reports to: {managerName}
+                </Text>
+              </View>
+            ) : null}
             {employee.department?.name && (
               <Badge label={employee.department.name} variant="neutral" />
+            )}
+            {employee.workplace?.name && (
+              <Badge label={employee.workplace.name} variant="primaryLight" />
             )}
           </View>
           <Text style={[treeStyles.designation, { color: colors.textSecondary }]}>
@@ -1199,7 +1474,7 @@ function TreeNode({
             <View style={[treeStyles.reportsBadge, { backgroundColor: '#edf8f6' }]}>
               <Users size={12} color="#006a61" />
               <Text style={{ fontSize: 11, fontWeight: '700', color: '#006a61' }}>
-                {employee.direct_reports?.length} Direct Report{employee.direct_reports?.length !== 1 ? 's' : ''}
+                {directReports.length} Direct Report{directReports.length !== 1 ? 's' : ''}
               </Text>
             </View>
           )}
@@ -1217,7 +1492,7 @@ function TreeNode({
       {/* Children Direct Reports */}
       {hasReports && !isCollapsed && (
         <View style={treeStyles.childrenContainer}>
-          {employee.direct_reports?.map((child) => (
+          {directReports.map((child) => (
             <TreeNode
               key={child.id}
               employee={child}
@@ -1226,6 +1501,7 @@ function TreeNode({
               onReassignManager={onReassignManager}
               colors={colors}
               depth={depth + 1}
+              visitedIds={nextVisited}
             />
           ))}
         </View>

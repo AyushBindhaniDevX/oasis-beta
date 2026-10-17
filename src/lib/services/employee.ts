@@ -508,8 +508,9 @@ export async function deleteDepartment(id: string): Promise<void> {
 }
 
 export async function updateReportingManager(employeeId: string, managerId: string | null): Promise<void> {
+  const resolvedManagerId = managerId && managerId.trim() !== '' && managerId !== 'none' && managerId !== 'null' ? managerId : null;
   await updateDoc(doc(db, 'employees', employeeId), {
-    manager_id: managerId,
+    manager_id: resolvedManagerId,
     updated_at: new Date().toISOString(),
   });
 }
@@ -521,14 +522,34 @@ export async function getOrgHierarchy(organizationId?: string): Promise<Employee
   for (const e of allEmployees) {
     e.direct_reports = [];
     empMap.set(e.id, e);
+    if (e.profile_id) {
+      empMap.set(e.profile_id, e);
+    }
   }
 
+  // Helper to test if 'targetId' is already a descendant of 'candidate'
+  const isDescendant = (candidate: Employee, targetId: string, visited = new Set<string>()): boolean => {
+    if (!candidate || !candidate.direct_reports || visited.has(candidate.id)) return false;
+    visited.add(candidate.id);
+    for (const report of candidate.direct_reports) {
+      if (report.id === targetId || (report.profile_id && report.profile_id === targetId)) return true;
+      if (isDescendant(report, targetId, visited)) return true;
+    }
+    return false;
+  };
+
   for (const e of allEmployees) {
-    if (e.manager_id && empMap.has(e.manager_id)) {
-      const manager = empMap.get(e.manager_id);
-      if (manager) {
-        manager.direct_reports = manager.direct_reports || [];
-        manager.direct_reports.push(e);
+    if (e.manager_id && e.manager_id !== e.id && empMap.has(e.manager_id)) {
+      const manager = empMap.get(e.manager_id)!;
+      if (manager && manager.id !== e.id) {
+        e.manager = manager;
+        // Only attach if it does NOT create a circular hierarchy
+        if (!isDescendant(e, manager.id)) {
+          manager.direct_reports = manager.direct_reports || [];
+          if (!manager.direct_reports.some((r) => r.id === e.id)) {
+            manager.direct_reports.push(e);
+          }
+        }
       }
     }
   }
