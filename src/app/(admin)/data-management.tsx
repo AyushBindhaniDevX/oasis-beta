@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions, Alert } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions, Alert, TextInput } from 'react-native';
 import { ADMIN_NAV } from '@/constants/navigation';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { useTheme } from '@/hooks/use-theme';
 import { Button } from '@/components/ui/Button';
-import { Download, Upload, FileText, FileSpreadsheet, CheckCircle2, AlertCircle, Users } from 'lucide-react-native';
+import { Badge } from '@/components/ui/Badge';
+import { Download, Upload, FileText, FileSpreadsheet, CheckCircle2, AlertCircle, Users, Search, X } from 'lucide-react-native';
 import { Select } from '@/components/ui/Select';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,7 +22,9 @@ export default function DataManagementScreen() {
   const { profile } = useAuth();
   
   const [activeTab, setActiveTab] = useState<'export' | 'import'>('export');
+  const [searchQuery, setSearchQuery] = useState('');
   const [importing, setImporting] = useState(false);
+  const [exportingId, setExportingId] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<any>(null);
   const [selectedModule, setSelectedModule] = useState<string>('employees');
   const [seeding, setSeeding] = useState(false);
@@ -44,17 +47,28 @@ export default function DataManagementScreen() {
   };
   
   const reports = [
-    { id: 'employee', name: 'Employee Master Directory', desc: 'Complete master details of all hospital employees' },
-    { id: 'pf_sheet', name: 'SMH PF Salary Sheet', desc: 'Hospital payroll muster for PF covered employees (Image 1 structure)' },
-    { id: 'non_pf_sheet', name: 'SMH Non-PF Salary Sheet', desc: 'Hospital payroll muster for Non-PF / Consultant staff (Image 2 structure)' },
-    { id: 'epfo_ecr', name: 'EPFO ECR Text File (.txt)', desc: 'Official EPFO Electronic Challan cum Return file with #~# delimiter' },
-    { id: 'esic_challan', name: 'ESIC Monthly Return (.xlsx)', desc: 'Official ESIC contribution upload spreadsheet (0.75% EE + 3.25% ER)' },
-    { id: 'gratuity_statement', name: 'Gratuity Statutory Register', desc: 'Compliance audit register under Payment of Gratuity Act, 1972' },
-    { id: 'consolidated_appraisal', name: 'Consolidated Appraisal Report', desc: 'Master report viewing performance appraisal of all staff at one time' },
-    { id: 'late_attendance', name: 'Late Coming Master Report', desc: 'Individual and consolidated late arrival and punch penalty report' },
-    { id: 'leave', name: 'Leave Register (4-Tier Status)', desc: 'Leave requests, 4-tier approval progress, and locked status' },
-    { id: 'attendance', name: 'Daily Attendance Report', desc: 'Clock-in, clock-out and shift adherence logs' },
+    { id: 'employee', name: 'Employee Directory', desc: 'Basic details of all employees', badge: 'MASTER' },
+    { id: 'onboarding', name: 'Onboarding Report', desc: 'Employee ID, Designation, DOJ, Onboarding status, etc.', badge: 'HR' },
+    { id: 'attendance', name: 'Attendance Report', desc: 'Monthly attendance summary', badge: 'TIME' },
+    { id: 'late_attendance', name: 'Late Attendance Report', desc: 'Employees marked late', badge: 'TIME' },
+    { id: 'leave', name: 'Leave Report', desc: 'Leave balances and history', badge: 'LEAVE' },
+    { id: 'payroll', name: 'Payroll Report', desc: 'Monthly payroll processing details (PF & Non-PF 26-column tabs)', badge: 'PAYROLL' },
+    { id: 'salary', name: 'Salary Register', desc: 'Salary breakdown for all employees (Hospital 26-column format)', badge: '26-COL' },
+    { id: 'pf', name: 'PF / EPF Report', desc: 'Provident fund contribution summary (Hospital PF Salary Sheet in 26-column format)', badge: 'IMAGE 1' },
+    { id: 'non_pf', name: 'Non-PF Salary Sheet', desc: 'Hospital Non-PF / Consultant Staff Salary Sheet in 26-column format', badge: 'IMAGE 2' },
+    { id: 'epfo_ecr', name: 'EPFO ECR Text File (.txt)', desc: 'Official EPFO Electronic Challan cum Return file with #~# delimiter', badge: 'STATUTORY' },
+    { id: 'esic_challan', name: 'ESIC Monthly Return (.xlsx)', desc: 'Official ESIC contribution upload spreadsheet (0.75% EE + 3.25% ER)', badge: 'STATUTORY' },
+    { id: 'gratuity_statement', name: 'Gratuity Statutory Register', desc: 'Compliance audit register under Payment of Gratuity Act, 1972', badge: 'AUDIT' },
+    { id: 'consolidated_appraisal', name: 'Consolidated Appraisal Report', desc: 'Master report viewing performance appraisal of all staff at one time', badge: 'APPRAISAL' },
   ];
+
+  const filteredReports = useMemo(() => {
+    if (!searchQuery.trim()) return reports;
+    const q = searchQuery.toLowerCase();
+    return reports.filter(
+      (r) => r.name.toLowerCase().includes(q) || r.desc.toLowerCase().includes(q) || r.badge.toLowerCase().includes(q)
+    );
+  }, [reports, searchQuery]);
 
   const handleDownloadTemplate = async () => {
     try {
@@ -89,9 +103,12 @@ export default function DataManagementScreen() {
     try {
       const orgId = organization?.id || profile?.organization_id;
       if (!orgId) throw new Error('Organization not found');
+      setExportingId(reportId);
       await generateReport(orgId, reportId);
     } catch (e: any) {
       Alert.alert('Export Failed', e.message || 'Failed to generate report');
+    } finally {
+      setExportingId(null);
     }
   };
 
@@ -124,25 +141,48 @@ export default function DataManagementScreen() {
         </View>
 
         {activeTab === 'export' && (
-          <View style={styles.grid}>
-            {reports.map((report) => (
-              <View key={report.id} style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-                <View style={[styles.iconWrap, { backgroundColor: '#f0f9ff' }]}>
-                  <FileText size={20} color="#0284c7" />
+          <View style={{ gap: 16 }}>
+            {/* Search Bar */}
+            <View style={[styles.searchBar, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+              <Search size={16} color={colors.textSecondary} />
+              <TextInput
+                placeholder="Search employees, departments, reports..."
+                placeholderTextColor={colors.textSecondary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                style={[styles.searchInput, { color: colors.text }]}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}>
+                  <X size={14} color={colors.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.grid}>
+              {filteredReports.map((report) => (
+                <View key={report.id} style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <View style={[styles.iconWrap, { backgroundColor: '#f0f9ff' }]}>
+                      <FileText size={20} color="#0284c7" />
+                    </View>
+                    <Badge label={report.badge} variant={report.badge.includes('IMAGE') || report.badge === '26-COL' ? 'accentLight' : 'neutral'} />
+                  </View>
+                  <View style={{ marginTop: 12, flex: 1 }}>
+                    <Text style={[styles.cardTitle, { color: colors.text }]}>{report.name}</Text>
+                    <Text style={[styles.cardSub, { color: colors.textSecondary }]}>{report.desc}</Text>
+                  </View>
+                  <Button
+                    title={exportingId === report.id ? 'Generating...' : 'Export CSV'}
+                    icon={<Download size={14} color="#FFF" />}
+                    onPress={() => handleExport(report.id)}
+                    loading={exportingId === report.id}
+                    style={{ marginTop: 16, backgroundColor: colors.primary }}
+                    size="sm"
+                  />
                 </View>
-                <View style={{ marginTop: 12, flex: 1 }}>
-                  <Text style={[styles.cardTitle, { color: colors.text }]}>{report.name}</Text>
-                  <Text style={[styles.cardSub, { color: colors.textSecondary }]}>{report.desc}</Text>
-                </View>
-                <Button
-                  title="Export CSV"
-                  icon={<Download size={14} color="#FFF" />}
-                  onPress={() => handleExport(report.id)}
-                  style={{ marginTop: 16, backgroundColor: colors.primary }}
-                  size="sm"
-                />
-              </View>
-            ))}
+              ))}
+            </View>
           </View>
         )}
 
@@ -273,4 +313,18 @@ const styles = StyleSheet.create({
   iconWrap: { width: 42, height: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   cardTitle: { fontSize: 16, fontWeight: '700' },
   cardSub: { fontSize: 12, marginTop: 4, lineHeight: 18 },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    outlineStyle: 'none' as any,
+  },
 });

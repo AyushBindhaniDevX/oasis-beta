@@ -193,8 +193,60 @@ export async function generateReport(orgId: string, reportId: string, options?: 
 
       await exportExcel('SMH_Consolidated_Late_Coming_Master_Report', [{ name: 'Late Report', headers, rows }]);
     }
-  } else if (reportId === 'pf_sheet' || reportId === 'non_pf_sheet' || reportId === 'payroll' || reportId === 'salary') {
-    // Requirement 9: Hospital Payroll Registers matching Image 1 (PF Sheet) & Image 2 (Non-PF Sheet)
+  } else if (reportId === 'onboarding') {
+    // Onboarding Status Report
+    const qry = query(collection(db, 'employees'), where('organization_id', '==', orgId));
+    const snap = await getDocs(qry);
+    const profQ = query(collection(db, 'profiles'), where('organization_id', '==', orgId));
+    const profSnap = await getDocs(profQ);
+    const profMap = new Map();
+    profSnap.forEach((d) => profMap.set(d.id, d.data()));
+
+    const deptQ = query(collection(db, 'departments'), where('organization_id', '==', orgId));
+    const deptSnap = await getDocs(deptQ);
+    const deptMap = new Map();
+    deptSnap.forEach((d) => deptMap.set(d.id, d.data()));
+
+    const rows: any[][] = [];
+    let sl = 1;
+    snap.forEach((d) => {
+      const emp = d.data() as Employee;
+      const prof = profMap.get(emp.profile_id);
+      const dept = emp.department_id ? deptMap.get(emp.department_id) : null;
+
+      rows.push([
+        sl++,
+        emp.employee_code || 'SMH-000',
+        prof?.full_name || 'Staff Member',
+        dept?.name || 'General',
+        emp.designation || 'Staff',
+        emp.hospital_unit || 'Shanti Memorial Hospital',
+        emp.joining_date || '',
+        emp.employment_status || 'active',
+        prof?.email || '',
+        prof?.phone || '',
+        emp.is_pf_eligible !== false ? 'PF Covered' : 'Non-PF (Consultant)',
+        (emp as any).appointment_letter_url ? 'Generated' : 'Pending',
+        emp.created_at ? new Date(emp.created_at).toLocaleDateString() : ''
+      ]);
+    });
+
+    const headers = [
+      'SL.NO.', 'EMP.CODE', 'FULL NAME', 'DEPARTMENT', 'DESIGNATION', 'HOSPITAL UNIT',
+      'DATE OF JOINING', 'ONBOARDING STATUS', 'EMAIL', 'PHONE', 'PF CATEGORY',
+      'APPOINTMENT LETTER', 'CREATION DATE'
+    ];
+
+    await exportExcel('SMH_Onboarding_Master_Report', [{ name: 'Onboarding Records', headers, rows }]);
+  } else if (
+    reportId === 'pf' ||
+    reportId === 'pf_sheet' ||
+    reportId === 'non_pf' ||
+    reportId === 'non_pf_sheet' ||
+    reportId === 'payroll' ||
+    reportId === 'salary'
+  ) {
+    // Hospital Payroll Registers matching Image 1 (26-column standard) & Image 2 (PF Sheet + Non-PF Sheet)
     const [payrollSnap, empsSnap, profsSnap, deptsSnap] = await Promise.all([
       getDocs(collection(db, 'payroll')),
       getDocs(collection(db, 'employees')),
@@ -208,61 +260,143 @@ export async function generateReport(orgId: string, reportId: string, options?: 
     const deptMap = new Map<string, Department>();
     deptsSnap.forEach((d) => deptMap.set(d.id, { id: d.id, ...d.data() } as Department));
 
-    const empMap = new Map<string, Employee>();
-    empsSnap.forEach((d) => {
-      const emp = { id: d.id, ...d.data() } as Employee;
-      emp.profile = emp.profile_id ? profMap.get(emp.profile_id) : undefined;
-      emp.department = emp.department_id ? deptMap.get(emp.department_id) : undefined;
-      empMap.set(d.id, emp);
+    // Deduplicate payroll entries by employee_id, keeping the latest entry
+    const payrollByEmpId = new Map<string, Payroll>();
+    payrollSnap.forEach((d) => {
+      const p = { id: d.id, ...d.data() } as Payroll;
+      if (!p.employee_id) return;
+      const existing = payrollByEmpId.get(p.employee_id);
+      if (!existing || (p.created_at && (!existing.created_at || p.created_at > existing.created_at))) {
+        payrollByEmpId.set(p.employee_id, p);
+      }
     });
 
-    const isNonPfOnly = reportId === 'non_pf_sheet';
-    const isPfOnly = reportId === 'pf_sheet';
-
-    const rows: any[][] = [];
-    let sl = 1;
-
-    payrollSnap.forEach((d) => {
-      const p = d.data() as Payroll;
-      const emp = empMap.get(p.employee_id);
-      if (!emp) return;
+    // Collect all active organization employees
+    const allEmps: Employee[] = [];
+    empsSnap.forEach((d) => {
+      const emp = { id: d.id, ...d.data() } as Employee;
       if (orgId && emp.organization_id && emp.organization_id !== orgId) return;
+      emp.profile = emp.profile_id ? profMap.get(emp.profile_id) : undefined;
+      emp.department = emp.department_id ? deptMap.get(emp.department_id) : undefined;
+      allEmps.push(emp);
+    });
 
-      const isPf = (p as any).is_pf_eligible ?? (emp.is_pf_eligible !== false);
-      if (isPfOnly && !isPf) return;
-      if (isNonPfOnly && isPf) return;
+    // Sort cleanly by employee code
+    allEmps.sort((a, b) => (a.employee_code || '').localeCompare(b.employee_code || ''));
 
-      const salaryDetails = (p as any).salary_details || emp.basic_salary || 25000;
-      const payableDays = (p as any).payable_days || 30;
-      const presentDays = (p as any).present_days || 26;
-      const offDays = (p as any).off_days || 4;
-      const leaveDays = (p as any).leave_days || 0;
-      const holidayDays = (p as any).holiday_days || 0;
-      const paidDays = (p as any).paid_days || (presentDays + offDays + leaveDays + holidayDays);
+    // Image 1 exact 26 column headers
+    const headers = [
+      'SL.NO.',
+      'EMP.CODE',
+      'NAME',
+      'DEPARTMENT',
+      'SALARY DETAILS',
+      'Payble days',
+      'PRESEN',
+      'OFF',
+      'LEAVE (PL+CL+SL)',
+      'HOLIDA',
+      'PAID DAYS',
+      'BASIC',
+      'HRA',
+      'CONV',
+      'WASH.',
+      'SP. ALLOW',
+      'G. SALARY',
+      'PT/TDS',
+      'ESI',
+      'PF',
+      'OT. DED',
+      'G. DEDUCTION',
+      'OT',
+      'OT AMOUNT',
+      'OTHER ALLOWANCES',
+      'NET SALAR',
+    ];
 
-      const basic = (p as any).basic || Math.round(salaryDetails * 0.5);
-      const hra = (p as any).hra || Math.round(salaryDetails * 0.2);
-      const conv = (p as any).conveyance || 1200;
-      const wash = (p as any).washing || 500;
-      const spAllow = (p as any).special_allowance || Math.max(0, salaryDetails - (basic + hra + conv + wash));
-      const gSalary = (p as any).gross_salary || (basic + hra + conv + wash + spAllow);
+    const buildRow = (sl: number, emp: Employee, isPfRow: boolean): any[] => {
+      const p = payrollByEmpId.get(emp.id);
+      const salaryDetails = Number((p as any)?.salary_details || p?.gross_salary || emp.basic_salary || 25000);
+      const payableDays = Number((p as any)?.payable_days || 30);
+      const lopDays = Number(p?.lop_days || 0);
+      const presentDays = Number((p as any)?.present_days ?? Math.max(0, 26 - lopDays));
+      const offDays = Number((p as any)?.off_days ?? 4);
+      const leaveDays = Number((p as any)?.leave_days ?? 0);
+      const holidayDays = Number((p as any)?.holiday_days ?? 0);
+      const paidDays = Number(
+        (p as any)?.paid_days ?? Math.min(payableDays, presentDays + offDays + leaveDays + holidayDays)
+      );
 
-      const ptTds = (p as any).pt_tds || 0;
-      const esi = (p as any).esi || (salaryDetails <= 21000 ? Math.round(gSalary * 0.0075) : 0);
-      const pf = (p as any).pf || (isPf ? Math.min(1800, Math.round(basic * 0.12)) : 0);
-      const otDed = (p as any).ot_ded || 0;
-      const gDeduction = (p as any).gross_deductions || (pf + esi + ptTds + otDed);
+      const basic = Number(
+        p?.basic_salary || (p as any)?.basic || Math.round(salaryDetails * 0.5)
+      );
+      const hra = Number(
+        p?.allowances?.['HRA'] || p?.allowances?.hra || (p as any)?.hra || Math.round(salaryDetails * 0.2)
+      );
+      const conv = Number(
+        p?.allowances?.['Conveyance'] ||
+          p?.allowances?.conveyance ||
+          (p as any)?.conveyance ||
+          (salaryDetails >= 30000 ? 2000 : salaryDetails >= 20000 ? 1200 : salaryDetails >= 15000 ? 800 : 350)
+      );
+      const wash = Number(
+        p?.allowances?.['Washing'] ||
+          p?.allowances?.washing ||
+          (p as any)?.washing ||
+          (salaryDetails >= 30000 ? 1000 : 500)
+      );
+      const spAllow = Number(
+        p?.allowances?.['Special Allowance'] ??
+          (p as any)?.special_allowance ??
+          Math.max(0, salaryDetails - (basic + hra + conv + wash))
+      );
+      const gSalary = Number(
+        p?.gross_salary || (p as any)?.gross_salary || (basic + hra + conv + wash + spAllow)
+      );
 
-      const ot = (p as any).ot_hours_or_days || 0;
-      const otAmount = (p as any).ot_amount || 0;
-      const otherAllowances = (p as any).other_allowances || 0;
-      const netSalary = (p as any).net_salary || (gSalary - gDeduction + otAmount + otherAllowances);
+      const ptTds = Number(
+        p?.deductions?.['TDS'] ||
+          p?.deductions?.tax ||
+          p?.deductions?.['PT'] ||
+          (p as any)?.pt_tds ||
+          (salaryDetails >= 30000 ? 200 : salaryDetails >= 15000 ? 124 : 0)
+      );
+      const esi = Number(
+        p?.deductions?.['ESI'] ?? (salaryDetails <= 21000 ? Math.round(gSalary * 0.0075) : 0)
+      );
 
-      rows.push([
-        sl++,
-        emp.employee_code || 'SMH-000',
-        emp.profile?.full_name || 'Staff Member',
-        emp.department?.name || 'General',
+      // For PF Sheet: 12% of basic up to statutory 1800. For Non-PF: 0!
+      const pf = isPfRow
+        ? Number(
+            p?.deductions?.['EPF'] ||
+              p?.deductions?.pf ||
+              (p as any)?.pf ||
+              Math.min(1800, Math.round(basic * 0.12))
+          )
+        : 0;
+
+      const otDed = Number(p?.deductions?.['Other'] || (p as any)?.ot_ded || 0);
+      const gDeduction = Number(
+        (p as any)?.total_deductions || (p as any)?.gross_deductions || (ptTds + esi + pf + otDed)
+      );
+
+      const ot = Number((p as any)?.ot_hours_or_days ?? (p as any)?.ot ?? (emp.is_overtime_eligible ? 2 : 0));
+      const otAmount = Number(
+        (p as any)?.ot_amount ?? (ot > 0 ? Math.round((gSalary / payableDays) * ot) : 0)
+      );
+      const otherAllowances = Number((p as any)?.other_allowances ?? 0);
+      const netSalary = Number(
+        p?.net_salary || (p as any)?.net_salary || (gSalary - gDeduction + otAmount + otherAllowances)
+      );
+
+      const empName = (emp.profile?.full_name || 'Staff Member').toUpperCase();
+      const deptName = (emp.department?.name || 'General').toUpperCase();
+
+      return [
+        sl,
+        emp.employee_code || `SMH-${String(sl).padStart(3, '0')}`,
+        empName,
+        deptName,
         salaryDetails,
         payableDays,
         presentDays,
@@ -284,25 +418,31 @@ export async function generateReport(orgId: string, reportId: string, options?: 
         ot,
         otAmount,
         otherAllowances,
-        netSalary
+        netSalary,
+      ];
+    };
+
+    const pfEmployees = allEmps.filter((e) => e.is_pf_eligible !== false);
+    const nonPfEmployees = allEmps.filter((e) => e.is_pf_eligible === false);
+
+    let pfSl = 1;
+    const pfRows = pfEmployees.map((emp) => buildRow(pfSl++, emp, true));
+
+    let nonPfSl = 1;
+    const nonPfRows = nonPfEmployees.map((emp) => buildRow(nonPfSl++, emp, false));
+
+    if (reportId === 'pf' || reportId === 'pf_sheet') {
+      await exportExcel('SMH_PF_Salary_Sheet', [{ name: 'PF SHEET', headers, rows: pfRows }]);
+    } else if (reportId === 'non_pf' || reportId === 'non_pf_sheet') {
+      await exportExcel('SMH_Non_PF_Salary_Sheet', [{ name: 'NON-PF SHEET', headers, rows: nonPfRows }]);
+    } else {
+      // 'salary', 'payroll': Consolidated multi-tab workbook with both PF and Non-PF sheets matching Image 2
+      const filename = reportId === 'payroll' ? 'SMH_Payroll_Processing_Report' : 'SMH_Salary_Register';
+      await exportExcel(filename, [
+        { name: 'PF SHEET', headers, rows: pfRows },
+        { name: 'NON-PF SHEET', headers, rows: nonPfRows },
       ]);
-    });
-
-    const headers = [
-      'SL. NO.', 'EMP. CODE', 'NAME', 'DEPARTMENT', 'SALARY DETAILS',
-      'Payable days', 'PRESENT', 'OFF', 'LEAVE (PL+CL+SL)', 'HOLIDAY', 'PAID DAYS',
-      'BASIC', 'HRA', 'CONV', 'WASH.', 'SP. ALLOW', 'G. SALARY',
-      'PT/TDS', 'ESI', 'PF', 'OT. DED', 'G. DEDUCTION',
-      'OT', 'OT AMOUNT', 'OTHER ALLOWANCES', 'NET SALAR'
-    ];
-
-    const sheetTitle = isNonPfOnly
-      ? 'SMH_Non_PF_Salary_Sheet'
-      : isPfOnly
-      ? 'SMH_PF_Salary_Sheet'
-      : 'SMH_Master_Payroll_Register';
-
-    await exportExcel(sheetTitle, [{ name: isNonPfOnly ? 'NON-PF SHEET' : 'PF SHEET', headers, rows }]);
+    }
   } else if (reportId === 'attendance') {
     const qry = query(collection(db, 'attendance'));
     const snap = await getDocs(qry);
