@@ -17,8 +17,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
 import { LoadingState } from '@/components/ui/States';
 import { getShifts, createShift, updateShift, getRoster, assignEmployeeShift } from '@/lib/services/shifts';
-import { getEmployees } from '@/lib/services/employee';
-import { WorkShift, EmployeeShift, Employee } from '@/types';
+import { getEmployees, getDepartments } from '@/lib/services/employee';
+import { WorkShift, EmployeeShift, Employee, Department } from '@/types';
 import { formatCurrency } from '@/utils/format';
 import {
   Clock,
@@ -34,6 +34,9 @@ import {
   CheckCircle2,
   X,
   Download,
+  Building2,
+  ShieldCheck,
+  UserCheck,
 } from 'lucide-react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -48,6 +51,8 @@ export default function ShiftsScreen() {
 
   const [shifts, setShifts] = useState<WorkShift[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [selectedDeptId, setSelectedDeptId] = useState<string>('all');
   const [rosterMap, setRosterMap] = useState<Record<string, string>>({}); // key: `${empId}_${date}` -> shiftId / 'OFF'
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -99,20 +104,21 @@ export default function ShiftsScreen() {
       const startDate = weekDates[0].dateStr;
       const endDate = weekDates[weekDates.length - 1].dateStr;
 
-      let [shiftData, empData, rosterData] = await Promise.all([
+      let [shiftData, empData, rosterData, deptData] = await Promise.all([
         getShifts(orgId),
         getEmployees({ organization_id: orgId }),
         getRoster(startDate, endDate, orgId),
+        getDepartments(orgId),
       ]);
 
       // If no shifts exist, seed default standard shifts
       if (!shiftData || shiftData.length === 0) {
         try {
           const defaultShifts = [
-            { name: 'General Day Shift', start_time: '09:00', end_time: '17:00', color: '#0D7377', allowance_per_day: 0, is_night_shift: false, organization_id: orgId },
-            { name: 'Morning Shift', start_time: '07:00', end_time: '15:00', color: '#0284C7', allowance_per_day: 100, is_night_shift: false, organization_id: orgId },
-            { name: 'Evening Shift', start_time: '14:00', end_time: '22:00', color: '#D97706', allowance_per_day: 150, is_night_shift: false, organization_id: orgId },
-            { name: 'Night Shift (ICU)', start_time: '21:00', end_time: '07:00', color: '#7C3AED', allowance_per_day: 300, is_night_shift: true, organization_id: orgId },
+            { name: 'General Day Shift (8h)', start_time: '09:00', end_time: '17:00', color: '#0D7377', allowance_per_day: 0, is_night_shift: false, organization_id: orgId },
+            { name: 'Morning Shift (8h)', start_time: '07:00', end_time: '15:00', color: '#0284C7', allowance_per_day: 100, is_night_shift: false, organization_id: orgId },
+            { name: 'Evening Shift (8h)', start_time: '14:00', end_time: '22:00', color: '#D97706', allowance_per_day: 150, is_night_shift: false, organization_id: orgId },
+            { name: 'Night Shift ICU (8h)', start_time: '21:00', end_time: '07:00', color: '#7C3AED', allowance_per_day: 300, is_night_shift: true, organization_id: orgId },
           ];
           for (const s of defaultShifts) {
             await createShift(s);
@@ -123,6 +129,15 @@ export default function ShiftsScreen() {
 
       setShifts(shiftData || []);
       setEmployees(empData || []);
+      setDepartments(deptData || []);
+
+      // If logged in as HOD/Manager, restrict to their department
+      if (profile?.role === 'manager') {
+        const myEmp = (empData || []).find((e) => e.profile_id === profile.id);
+        if (myEmp?.department_id) {
+          setSelectedDeptId(myEmp.department_id);
+        }
+      }
 
       const rMap: Record<string, string> = {};
       rosterData.forEach((r) => {
@@ -331,6 +346,71 @@ export default function ShiftsScreen() {
         >
           {selectedView === 'roster' ? (
             <View style={{ gap: 16 }}>
+              {/* HOD Roster Assignment Notice & Department Selector */}
+              <View style={{ backgroundColor: '#F0FDFA', borderColor: '#99F6E4', borderWidth: 1, borderRadius: 12, padding: 14, gap: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <ShieldCheck size={18} color="#0D7377" />
+                    <View>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F766E' }}>
+                        HOD Duty Roster Assignment
+                      </Text>
+                      <Text style={{ fontSize: 11, color: '#115E59' }}>
+                        Hospital Policy: Duty rosters must be assigned by respective immediate HODs for scheduled 8-hour shifts.
+                      </Text>
+                    </View>
+                  </View>
+                  {profile?.role === 'manager' && (
+                    <View style={{ backgroundColor: '#CCFBF1', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#0F766E' }}>
+                        HOD Mode: {departments.find(d => d.id === selectedDeptId)?.name || 'My Department'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Department Filter Pills */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => setSelectedDeptId('all')}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 20,
+                      backgroundColor: selectedDeptId === 'all' ? '#0D7377' : '#FFFFFF',
+                      borderWidth: 1,
+                      borderColor: selectedDeptId === 'all' ? '#0D7377' : '#CCFBF1',
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: selectedDeptId === 'all' ? '#FFFFFF' : '#0F766E' }}>
+                      All Departments ({employees.length})
+                    </Text>
+                  </TouchableOpacity>
+                  {departments.map((dept) => {
+                    const count = employees.filter((e) => e.department_id === dept.id).length;
+                    const active = selectedDeptId === dept.id;
+                    return (
+                      <TouchableOpacity
+                        key={dept.id}
+                        onPress={() => setSelectedDeptId(dept.id)}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          borderRadius: 20,
+                          backgroundColor: active ? '#0D7377' : '#FFFFFF',
+                          borderWidth: 1,
+                          borderColor: active ? '#0D7377' : '#CCFBF1',
+                        }}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: active ? '#FFFFFF' : '#0F766E' }}>
+                          {dept.name} ({count})
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
               {/* Week Selector Bar */}
               <View style={styles.weekControlBar}>
                 <TouchableOpacity
@@ -378,12 +458,12 @@ export default function ShiftsScreen() {
                     </View>
 
                     {/* Employee Rows */}
-                    {employees.length === 0 ? (
+                    {employees.filter(e => selectedDeptId === 'all' || e.department_id === selectedDeptId).length === 0 ? (
                       <View style={{ padding: 32, alignItems: 'center' }}>
-                        <Text style={{ color: colors.textSecondary }}>No employees in this organization yet.</Text>
+                        <Text style={{ color: colors.textSecondary }}>No employees found for this department filter.</Text>
                       </View>
                     ) : (
-                      employees.map((emp) => (
+                      employees.filter(e => selectedDeptId === 'all' || e.department_id === selectedDeptId).map((emp) => (
                         <View key={emp.id} style={styles.tableRow}>
                           <View style={{ width: 220, paddingRight: 12 }}>
                             <Text style={styles.empName}>{emp.profile?.full_name || 'Staff'}</Text>
