@@ -215,43 +215,6 @@ export default function SettingsScreen() {
           </View>
         ) : null}
 
-        {/* 0. Live Realtime System Status */}
-        <View style={[styles.card, { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' }]}>
-          <View style={styles.cardHeader}>
-            <View style={[styles.iconWrap, { backgroundColor: '#E6F4F4' }]}>
-              <Server size={18} color="#0D7377" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.cardTitle, { color: '#0F172A' }]}>Live System & Integration Status</Text>
-              <Text style={[styles.cardSub, { color: '#059669', fontWeight: '600' }]}>
-                ● All Cloud Services Connected & Operational
-              </Text>
-            </View>
-          </View>
-          <View style={{ gap: 10, paddingHorizontal: 4 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '600' }}>Authentication Engine</Text>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Firebase Auth (Active)</Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '600' }}>Database & Realtime</Text>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Cloud Firestore (Realtime)</Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '600' }}>Biometrics & Security</Text>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D7377' }}>
-                {biometricEnabled ? 'iOS Face ID Vault Active' : 'Face ID Hardware Supported'}
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ fontSize: 13, color: '#64748B', fontWeight: '600' }}>Tenant Organization</Text>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#334155' }}>
-                {org?.name || tenantOrg?.name || 'Subedge'} ({org?.slug || tenantOrg?.slug || 'subedge'})
-              </Text>
-            </View>
-          </View>
-        </View>
-
         {/* 1. Company Profile */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
           <View style={styles.cardHeader}>

@@ -39,7 +39,6 @@ import {
   ArrowRight,
   Activity,
   MapPin,
-  Server,
   Award,
   Workflow,
   CheckCircle2,
@@ -70,13 +69,10 @@ export default function AdminDashboard() {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const currentOrgId = organization?.id || tenantOrg?.id || profile?.organization_id;
   const [showWizard, setShowWizard] = useState(false);
-  const [latencyMs, setLatencyMs] = useState<number>(24);
-  const [lastLivePing, setLastLivePing] = useState<Date>(new Date());
 
   const load = useCallback(async () => {
     if (!profile) return;
     try {
-      const startTime = Date.now();
       const today = new Date().toISOString().split('T')[0];
       const orgId = tenantOrg?.id || profile.organization_id;
 
@@ -87,9 +83,6 @@ export default function AdminDashboard() {
         orgId ? getOrganization(orgId) : Promise.resolve(null),
         getAuditLogs(5, orgId),
       ]);
-      const elapsed = Date.now() - startTime;
-      setLatencyMs(Math.max(12, Math.min(elapsed, 120)));
-      setLastLivePing(new Date());
 
       setEmpCount(count);
       setAttendanceStats(attStats);
@@ -126,15 +119,9 @@ export default function AdminDashboard() {
       load();
     }, (err) => console.warn('Realtime attendance listener error:', err));
 
-    // Heartbeat ping interval
-    const timer = setInterval(() => {
-      setLastLivePing(new Date());
-    }, 10000);
-
     return () => {
       unsubAudit();
       unsubAttendance();
-      clearInterval(timer);
     };
   }, [profile, tenantOrg, load]);
 
@@ -177,10 +164,10 @@ export default function AdminDashboard() {
       border: '#e2e8f0',
     },
     {
-      label: 'System Status',
-      value: '100% OK',
-      sub: 'All services online',
-      icon: <Server size={20} color={colors.textSecondary} />,
+      label: 'Hospital Facilities',
+      value: '2 Units',
+      sub: 'Main Hospital & Chikitsa Unit',
+      icon: <Building2 size={20} color={colors.textSecondary} />,
       bg: colors.surface,
       border: '#e2e8f0',
     },
@@ -208,7 +195,7 @@ export default function AdminDashboard() {
     { label: 'Present', value: `${attendanceStats.present}`, color: '#059669', bg: '#D1FAE5', icon: Calendar },
     { label: 'Late', value: `${attendanceStats.late}`, color: '#D97706', bg: '#FEF3C7', icon: AlertTriangle },
     { label: 'Admins', value: `${adminCount}`, color: '#7C3AED', bg: '#EDE9FE', icon: ShieldCheck },
-    { label: 'System', value: 'OK', color: '#0369A1', bg: '#E0F2FE', icon: Server },
+    { label: 'Units', value: '2', color: '#0369A1', bg: '#E0F2FE', icon: Building2 },
   ];
 
   const mobileAdminActions = [
@@ -315,45 +302,6 @@ export default function AdminDashboard() {
         </View>
       </Animated.View>
 
-      {/* ── System Status Card ────────────────────────────────────────────── */}
-      <Animated.View entering={FadeInDown.delay(180).duration(350).springify()}>
-        <View style={mStyles.card}>
-          <View style={mStyles.cardHead}>
-            <View style={[mStyles.cardIconWrap, { backgroundColor: '#E6F4F4' }]}>
-              <Server size={16} color="#0D7377" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={mStyles.cardTitle}>Live System Infrastructure</Text>
-              <Text style={{ fontSize: 10, color: '#059669', fontWeight: '700' }}>
-                ● Realtime Connected ({latencyMs}ms latency)
-              </Text>
-            </View>
-            <Badge label="REALTIME" variant="successLight" />
-          </View>
-          <View style={{ paddingHorizontal: 16, paddingBottom: 14, gap: 10 }}>
-            <View style={mStyles.infraRow}>
-              <Text style={mStyles.infraLabel}>Database Engine</Text>
-              <Text style={[mStyles.infraValue, { color: '#059669' }]}>Cloud Firestore Realtime</Text>
-            </View>
-            <View style={mStyles.infraRow}>
-              <Text style={mStyles.infraLabel}>Identity & Auth</Text>
-              <Text style={[mStyles.infraValue, { color: '#059669' }]}>Firebase Auth Multi-Tenant</Text>
-            </View>
-            <View style={mStyles.infraRow}>
-              <Text style={mStyles.infraLabel}>Biometric Vault</Text>
-              <Text style={[mStyles.infraValue, { color: '#0D7377' }]}>
-                {biometricEnabled ? `iOS Face ID Active` : `Hardware Supported (Face ID)`}
-              </Text>
-            </View>
-            <View style={mStyles.infraRow}>
-              <Text style={mStyles.infraLabel}>Tenant Organization</Text>
-              <Text style={mStyles.infraValue} numberOfLines={1}>
-                {organization?.name || tenantOrg?.name || 'Default Organization'} ({organization?.slug || tenantOrg?.slug || 'subedge'})
-              </Text>
-            </View>
-          </View>
-        </View>
-      </Animated.View>
 
       {/* ── Recent Audit Events ────────────────────────────────────────────── */}
       <Animated.View entering={FadeInDown.delay(240).duration(350).springify()}>
@@ -493,41 +441,6 @@ export default function AdminDashboard() {
             </View>
           </Animated.View>
 
-          {/* System Overview Card */}
-          <Animated.View entering={FadeInDown.delay(240).duration(350).springify()}>
-            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-              <View style={styles.cardHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <View style={[styles.cardIconWrap, { backgroundColor: '#edf8f6' }]}>
-                    <Server size={18} color="#006a61" />
-                  </View>
-                  <View>
-                    <Text style={[styles.cardTitle, { color: colors.text }]}>Live System Infrastructure</Text>
-                    <Text style={{ fontSize: 11, color: '#059669', fontWeight: '600' }}>
-                      ● Realtime Subscribed · Latency: {latencyMs}ms
-                    </Text>
-                  </View>
-                </View>
-                <Badge label="REALTIME" variant="successLight" />
-              </View>
-              <View style={styles.infraGrid}>
-                <View style={styles.infraItem}>
-                  <Text style={styles.infraLabel}>Database</Text>
-                  <Text style={[styles.infraVal, { color: '#006a61' }]}>Cloud Firestore (Connected)</Text>
-                </View>
-                <View style={styles.infraItem}>
-                  <Text style={styles.infraLabel}>Auth Service</Text>
-                  <Text style={[styles.infraVal, { color: '#006a61' }]}>Firebase Auth</Text>
-                </View>
-                <View style={styles.infraItem}>
-                  <Text style={styles.infraLabel}>Org ID</Text>
-                  <Text style={[styles.infraVal, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {tenantOrg?.id || profile?.organization_id || 'Active Org'}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </Animated.View>
         </View>
 
         {/* Right Column: Recent Audit Activity */}
