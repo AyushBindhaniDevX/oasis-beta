@@ -225,7 +225,8 @@ export async function calculateStatutoryForEmployee(
   emp: Employee,
   month: number,
   year: number,
-  customLopDays?: number
+  customLopDays?: number,
+  customOtUnits?: number
 ): Promise<{
   basic_salary: number;
   allowances: Record<string, number>;
@@ -234,75 +235,194 @@ export async function calculateStatutoryForEmployee(
   lop_amount: number;
   gross_salary: number;
   net_salary: number;
+  // Shanti Memorial Hospital & Chikitsa Unit structured payroll fields
+  salary_details: number;
+  payable_days: number;
+  present_days: number;
+  off_days: number;
+  leave_days: number;
+  holiday_days: number;
+  paid_days: number;
+  basic: number;
+  hra: number;
+  conveyance: number;
+  washing: number;
+  special_allowance: number;
+  pt_tds: number;
+  esi: number;
+  pf: number;
+  ot_ded: number;
+  gross_deductions: number;
+  ot_hours_or_days: number;
+  ot_amount: number;
+  other_allowances: number;
+  is_pf_eligible: boolean;
+  hospital_unit: string;
 }> {
-  const basic = emp.basic_salary || 0;
   const taxConfig = (emp as any).tax_config || {};
+  const isPfEligible = emp.is_pf_eligible !== false && !taxConfig.epf_exempt;
+  const isOvertimeEligible = emp.is_overtime_eligible === true || taxConfig.is_overtime_eligible === true;
+  const hospitalUnit = emp.hospital_unit || 'Shanti Memorial Hospital & Chikitsa Unit';
 
-  let epfRate = 0.12;
-  if (taxConfig.epf_exempt) {
-    epfRate = 0;
-  } else if (taxConfig.epf_percentage != null && !isNaN(Number(taxConfig.epf_percentage))) {
-    epfRate = Number(taxConfig.epf_percentage) / 100;
+  // Base monthly salary scale (SALARY DETAILS in Hospital Sheet)
+  const baseSalary = emp.basic_salary && emp.basic_salary > 0 ? emp.basic_salary : 25000;
+  const payableDays = 30;
+
+  // Compute actual attendance breakdown for the month
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+  const endMonth = month === 12 ? 1 : month + 1;
+  const endYear = month === 12 ? year + 1 : year;
+  const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
+
+  let presentDays = 26;
+  let offDays = 4;
+  let leaveDays = 0;
+  let holidayDays = 0;
+
+  try {
+    const holidays = await getHolidaysForDateRange(startDate, endDate);
+    holidayDays = holidays.filter((h) => h.type !== 'optional').length;
+
+    const attQ = query(
+      collection(db, 'attendance'),
+      where('employee_id', '==', emp.id)
+    );
+    const attSnap = await getDocs(attQ);
+    let matchedAttCount = 0;
+    attSnap.forEach((d) => {
+      const data = d.data();
+      if (data.date >= startDate && data.date < endDate) {
+        if (data.status === 'present' || data.status === 'late') {
+          matchedAttCount++;
+        }
+      }
+    });
+    if (matchedAttCount > 0) {
+      presentDays = matchedAttCount;
+    }
+  } catch {}
+
+  const paidDays = Math.min(payableDays, Math.max(0, presentDays + offDays + leaveDays + holidayDays));
+  const lopDays = customLopDays !== undefined ? customLopDays : Math.max(0, payableDays - paidDays);
+  const paidRatio = paidDays / payableDays;
+
+  // Gross Earnings Formula: Basic Salary + HRA + Conveyance Allowance + Washing Allowance + Special Allowance
+  const fullBasic = Math.round(baseSalary * 0.50); // 50% Basic
+  const fullHra = Math.round(baseSalary * 0.20); // 20% HRA
+  const fullConveyance = emp.conveyance_allowance ?? (baseSalary >= 25000 ? 1200 : baseSalary >= 18000 ? 800 : 350);
+  const fullWashing = emp.washing_allowance ?? (baseSalary >= 25000 ? 500 : 300);
+  const fullSpecialAllowance = Math.max(0, baseSalary - (fullBasic + fullHra + fullConveyance + fullWashing));
+
+  const basic = Math.round(fullBasic * paidRatio);
+  const hra = Math.round(fullHra * paidRatio);
+  const conveyance = Math.round(fullConveyance * paidRatio);
+  const washing = Math.round(fullWashing * paidRatio);
+  const specialAllowance = Math.round(fullSpecialAllowance * paidRatio);
+
+  const grossEarnings = basic + hra + conveyance + washing + specialAllowance;
+
+  // Gross Deductions Formula: PF + ESIC + TDS/PT + Miscellaneous Deductions (OT. DED)
+  let pf = 0;
+  if (isPfEligible) {
+    // 12% of Basic, statutory ceiling capped at ₹1,800 or actual
+    const calculatedPf = Math.round(basic * 0.12);
+    pf = basic > 15000 ? Math.min(1800, calculatedPf) : calculatedPf;
   }
-  const epf = Math.round(basic * epfRate);
 
-  let pt = basic > 15000 ? 200 : 0;
+  // ESIC: 0.75% of Gross if Gross <= ₹21,000, 0 otherwise
+  let esi = 0;
+  if (baseSalary <= 21000) {
+    esi = Math.round(grossEarnings * 0.0075);
+  }
+
+  // Professional Tax / TDS
+  let pt = 0;
   if (taxConfig.pt_amount != null && !isNaN(Number(taxConfig.pt_amount))) {
     pt = Number(taxConfig.pt_amount);
+  } else if (baseSalary > 20000) {
+    pt = 0; // TDS handles higher slabs or state-specific
+  } else if (baseSalary >= 18000) {
+    pt = 146;
+  } else if (baseSalary >= 15000) {
+    pt = 124;
+  } else if (baseSalary >= 10000) {
+    pt = 90;
   }
 
   const tds = calculateTds(basic, taxConfig);
-  const lopDays = customLopDays !== undefined ? customLopDays : await countLopDays(emp.id, month, year);
-  const lopAmount = lopDays > 0 ? Math.round((basic / 26) * lopDays) : 0;
+  const ptTds = pt + tds;
 
-  let hraRate = taxConfig.hra_type === 'metro' ? 0.5 : 0.4;
-  if (taxConfig.hra_percentage != null && !isNaN(Number(taxConfig.hra_percentage))) {
-    hraRate = Number(taxConfig.hra_percentage) / 100;
+  // Miscellaneous Deductions (OT. DED in Hospital Sheet)
+  const otDed = emp.ot_deduction ?? Number(taxConfig.ot_deduction ?? 0);
+  const grossDeductions = pf + esi + ptTds + otDed;
+
+  // Overtime Calculation (Requirement 5: designated employees only, after scheduled 8-hour shift)
+  const otUnits = customOtUnits !== undefined ? customOtUnits : Number((emp as any).ot_hours_or_days ?? 0);
+  let otAmount = 0;
+  if (isOvertimeEligible && otUnits > 0) {
+    // (Gross Salary / Payable Days) * OT units
+    otAmount = Math.round((baseSalary / payableDays) * otUnits);
   }
-  const hra = Math.round(basic * hraRate);
-  const specialAllowance = Math.max(0, Math.round(basic * 0.1));
+
+  // Other Allowances
+  const otherAllowances = Number((emp as any).other_allowances ?? 0);
+
+  // Net Pay Calculation: Gross Earnings - Gross Deductions + Overtime Pay + Other Allowances
+  const netSalary = Math.max(0, grossEarnings - grossDeductions + otAmount + otherAllowances);
 
   const allowances: Record<string, number> = {
+    'Basic': basic,
     'HRA': hra,
+    'Conveyance Allowance': conveyance,
+    'Washing Allowance': washing,
     'Special Allowance': specialAllowance,
   };
-
-  if (taxConfig.transport_allowance && Number(taxConfig.transport_allowance) > 0) {
-    allowances['Transport Allowance'] = Math.round(Number(taxConfig.transport_allowance));
+  if (otAmount > 0) {
+    allowances['Overtime Pay'] = otAmount;
+  }
+  if (otherAllowances > 0) {
+    allowances['Other Allowances'] = otherAllowances;
   }
 
   const deductions: Record<string, number> = {
-    'EPF': epf,
-    'Professional Tax': pt,
-    'TDS': tds,
+    'PF': pf,
+    'ESIC': esi,
+    'PT/TDS': ptTds,
   };
-
-  const customItems: any[] = Array.isArray(taxConfig.custom_items) ? taxConfig.custom_items : [];
-  customItems.forEach((item) => {
-    if (!item.name || !item.value) return;
-    const isPercentage = item.amount_type === 'percentage';
-    const computedVal = isPercentage ? Math.round((basic * Number(item.value)) / 100) : Math.round(Number(item.value));
-
-    if (item.type === 'deduction') {
-      deductions[item.name] = computedVal;
-    } else {
-      allowances[item.name] = computedVal;
-    }
-  });
-
-  const totalAllowances = Object.values(allowances).reduce((sum, v) => sum + v, 0);
-  const gross = basic + totalAllowances - lopAmount;
-  const totalDeductions = Object.values(deductions).reduce((sum, v) => sum + v, 0);
-  const netSalary = Math.max(0, gross - totalDeductions);
+  if (otDed > 0) {
+    deductions['Miscellaneous Deductions'] = otDed;
+  }
 
   return {
     basic_salary: basic,
     allowances,
     deductions,
     lop_days: lopDays,
-    lop_amount: lopAmount,
-    gross_salary: gross,
+    lop_amount: Math.round((baseSalary / payableDays) * lopDays),
+    gross_salary: grossEarnings,
     net_salary: netSalary,
+    salary_details: baseSalary,
+    payable_days: payableDays,
+    present_days: presentDays,
+    off_days: offDays,
+    leave_days: leaveDays,
+    holiday_days: holidayDays,
+    paid_days: paidDays,
+    basic,
+    hra,
+    conveyance,
+    washing,
+    special_allowance: specialAllowance,
+    pt_tds: ptTds,
+    esi,
+    pf,
+    ot_ded: otDed,
+    gross_deductions: grossDeductions,
+    ot_hours_or_days: otUnits,
+    ot_amount: otAmount,
+    other_allowances: otherAllowances,
+    is_pf_eligible: isPfEligible,
+    hospital_unit: hospitalUnit,
   };
 }
 
@@ -358,6 +478,28 @@ export async function createPayrollPeriod(month: number, year: number, orgId: st
       lop_amount: breakdown.lop_amount,
       gross_salary: breakdown.gross_salary,
       net_salary: breakdown.net_salary,
+      salary_details: breakdown.salary_details,
+      payable_days: breakdown.payable_days,
+      present_days: breakdown.present_days,
+      off_days: breakdown.off_days,
+      leave_days: breakdown.leave_days,
+      holiday_days: breakdown.holiday_days,
+      paid_days: breakdown.paid_days,
+      basic: breakdown.basic,
+      hra: breakdown.hra,
+      conveyance: breakdown.conveyance,
+      washing: breakdown.washing,
+      special_allowance: breakdown.special_allowance,
+      pt_tds: breakdown.pt_tds,
+      esi: breakdown.esi,
+      pf: breakdown.pf,
+      ot_ded: breakdown.ot_ded,
+      gross_deductions: breakdown.gross_deductions,
+      ot_hours_or_days: breakdown.ot_hours_or_days,
+      ot_amount: breakdown.ot_amount,
+      other_allowances: breakdown.other_allowances,
+      is_pf_eligible: breakdown.is_pf_eligible,
+      hospital_unit: breakdown.hospital_unit,
       status: 'draft',
       created_at: now,
       updated_at: now,
@@ -382,7 +524,7 @@ export async function recalculatePeriodEntries(periodId: string): Promise<void> 
     const empSnap = await getDoc(doc(db, 'employees', entry.employee_id));
     if (empSnap.exists()) {
       const emp = { id: empSnap.id, ...empSnap.data() } as Employee;
-      const breakdown = await calculateStatutoryForEmployee(emp, period.month, period.year, entry.lop_days);
+      const breakdown = await calculateStatutoryForEmployee(emp, period.month, period.year, entry.lop_days, entry.ot_hours_or_days);
       await updateDoc(doc(db, 'payroll', d.id), {
         basic_salary: breakdown.basic_salary,
         allowances: breakdown.allowances,
@@ -390,6 +532,28 @@ export async function recalculatePeriodEntries(periodId: string): Promise<void> 
         lop_amount: breakdown.lop_amount,
         gross_salary: breakdown.gross_salary,
         net_salary: breakdown.net_salary,
+        salary_details: breakdown.salary_details,
+        payable_days: breakdown.payable_days,
+        present_days: breakdown.present_days,
+        off_days: breakdown.off_days,
+        leave_days: breakdown.leave_days,
+        holiday_days: breakdown.holiday_days,
+        paid_days: breakdown.paid_days,
+        basic: breakdown.basic,
+        hra: breakdown.hra,
+        conveyance: breakdown.conveyance,
+        washing: breakdown.washing,
+        special_allowance: breakdown.special_allowance,
+        pt_tds: breakdown.pt_tds,
+        esi: breakdown.esi,
+        pf: breakdown.pf,
+        ot_ded: breakdown.ot_ded,
+        gross_deductions: breakdown.gross_deductions,
+        ot_hours_or_days: breakdown.ot_hours_or_days,
+        ot_amount: breakdown.ot_amount,
+        other_allowances: breakdown.other_allowances,
+        is_pf_eligible: breakdown.is_pf_eligible,
+        hospital_unit: breakdown.hospital_unit,
         updated_at: now,
       });
     }
