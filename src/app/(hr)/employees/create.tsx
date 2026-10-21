@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/Button';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { getDepartments, createEmployee, getEmployees, getWorkplaces } from '@/lib/services/employee';
 import { getShifts } from '@/lib/services/shifts';
-import type { Department, Employee, WorkShift, Workplace } from '@/types';
+import { CustomPayrollItemsManager } from '@/components/payroll/CustomPayrollItemsManager';
+import type { Department, Employee, WorkShift, Workplace, CustomPayrollItem } from '@/types';
 import { RefreshCw, ShieldCheck, ChevronDown, ChevronUp, Sliders, Eye, EyeOff, KeyRound, HeartPulse } from 'lucide-react-native';
 
 export default function CreateEmployeeScreen() {
@@ -57,6 +58,10 @@ export default function CreateEmployeeScreen() {
   const [esopValue, setEsopValue] = useState('');
   const [hraType, setHraType] = useState<string>('non-metro');
   const [epfExempt, setEpfExempt] = useState<string>('no');
+  const [conveyanceAllowance, setConveyanceAllowance] = useState('1200');
+  const [washingAllowance, setWashingAllowance] = useState('500');
+  const [specialAllowance, setSpecialAllowance] = useState('');
+  const [customItems, setCustomItems] = useState<CustomPayrollItem[]>([]);
 
   const tenantDomain = (tenantOrg?.settings as any)?.domain || (typeof window !== 'undefined' && window.location.hostname.includes('shanti') ? 'shantimemorialhospital.com' : 'subedge.com');
 
@@ -187,6 +192,9 @@ export default function CreateEmployeeScreen() {
         designation: designation.trim() || undefined,
         is_hhc_enabled: isHhcEnabled,
         basic_salary: parseFloat(basicSalary) || 0,
+        conveyance_allowance: parseFloat(conveyanceAllowance) || 1200,
+        washing_allowance: parseFloat(washingAllowance) || 500,
+        special_allowance: specialAllowance.trim() ? parseFloat(specialAllowance) : undefined,
         tax_config: {
           pf_number: pfNumber.trim() || null,
           tax_regime: taxRegime as any,
@@ -198,6 +206,10 @@ export default function CreateEmployeeScreen() {
           esop_value: parseFloat(esopValue) || null,
           hra_type: hraType as any,
           epf_exempt: epfExempt === 'yes',
+          conveyance_allowance: parseFloat(conveyanceAllowance) || 1200,
+          washing_allowance: parseFloat(washingAllowance) || 500,
+          special_allowance: specialAllowance.trim() ? parseFloat(specialAllowance) : undefined,
+          custom_items: customItems,
         },
       });
       router.replace('/(hr)/employees' as never);
@@ -218,8 +230,20 @@ export default function CreateEmployeeScreen() {
   const hraPct = parseFloat(hraPercentage) || 0;
   const hra = Math.round((basic * hraPct) / 100);
   const esop = parseFloat(esopValue) ? Math.round(parseFloat(esopValue) / 12) : 0;
-  const totalDeductions = epf + tds + pt;
-  const netEstimate = basic + hra - totalDeductions;
+  const conveyanceVal = parseFloat(conveyanceAllowance) || 0;
+  const washingVal = parseFloat(washingAllowance) || 0;
+  const customEarnings = customItems
+    .filter((ci) => ci.type !== 'deduction')
+    .reduce((sum, ci) => sum + (ci.amount_type === 'percentage' ? Math.round((basic * Number(ci.value)) / 100) : Number(ci.value)), 0);
+  const customDeductions = customItems
+    .filter((ci) => ci.type === 'deduction')
+    .reduce((sum, ci) => sum + (ci.amount_type === 'percentage' ? Math.round((basic * Number(ci.value)) / 100) : Number(ci.value)), 0);
+  const specialVal = specialAllowance.trim()
+    ? parseFloat(specialAllowance) || 0
+    : Math.max(0, (basic > 20000 ? basic : basic * 2) - (basic + hra + conveyanceVal + washingVal + customEarnings));
+  const totalEarnings = basic + hra + conveyanceVal + washingVal + specialVal + customEarnings + esop;
+  const totalDeductions = epf + tds + pt + customDeductions;
+  const netEstimate = totalEarnings - totalDeductions;
 
   return (
     <SidebarLayout>
@@ -306,6 +330,41 @@ export default function CreateEmployeeScreen() {
           </View>
           <Input label="Designation / Position" placeholder="e.g. Chief Medical Officer" value={designation} onChangeText={setDesignation} />
           <Input label="Monthly Base Salary (INR) *" value={basicSalary} onChangeText={setBasicSalary} keyboardType="numeric" placeholder="50000" />
+
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Input
+                label="Conveyance Allowance (₹)"
+                placeholder="1200"
+                value={conveyanceAllowance}
+                onChangeText={setConveyanceAllowance}
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Input
+                label="Washing Allowance (₹)"
+                placeholder="500"
+                value={washingAllowance}
+                onChangeText={setWashingAllowance}
+                keyboardType="numeric"
+              />
+            </View>
+          </View>
+
+          <Input
+            label="Special Allowance (₹) (Optional - auto balances if left blank)"
+            placeholder="e.g. 13300"
+            value={specialAllowance}
+            onChangeText={setSpecialAllowance}
+            keyboardType="numeric"
+          />
+
+          <CustomPayrollItemsManager
+            items={customItems}
+            onChange={setCustomItems}
+            basicSalary={parseFloat(basicSalary) || 0}
+          />
 
           {/* ─── Org Structure ──────────────────────────────────────────── */}
           <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginTop: 8 }]}>ORGANISATION</Text>
@@ -560,7 +619,7 @@ export default function CreateEmployeeScreen() {
               />
 
               {/* Live payroll estimate */}
-              {basic > 0 && (
+              {Boolean(basic > 0) ? (
                 <View style={[styles.estimateBox, { backgroundColor: '#edf8f6', borderColor: '#c4ece7' }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <Text style={styles.estimateTitle}>Live Payroll Calculation</Text>
@@ -579,12 +638,36 @@ export default function CreateEmployeeScreen() {
                     <Text style={[styles.estimateVal, { color: '#006a61' }]}>+₹{hra.toLocaleString('en-IN')}</Text>
                   </View>
 
-                  {esop > 0 && (
+                  <View style={styles.estimateRow}>
+                    <Text style={styles.estimateLabel}>Conveyance Allowance</Text>
+                    <Text style={[styles.estimateVal, { color: '#006a61' }]}>+₹{conveyanceVal.toLocaleString('en-IN')}</Text>
+                  </View>
+
+                  <View style={styles.estimateRow}>
+                    <Text style={styles.estimateLabel}>Washing Allowance</Text>
+                    <Text style={[styles.estimateVal, { color: '#006a61' }]}>+₹{washingVal.toLocaleString('en-IN')}</Text>
+                  </View>
+
+                  {specialVal > 0 ? (
+                    <View style={styles.estimateRow}>
+                      <Text style={styles.estimateLabel}>Special Allowance</Text>
+                      <Text style={[styles.estimateVal, { color: '#006a61' }]}>+₹{specialVal.toLocaleString('en-IN')}</Text>
+                    </View>
+                  ) : null}
+
+                  {customEarnings > 0 ? (
+                    <View style={styles.estimateRow}>
+                      <Text style={styles.estimateLabel}>Custom Earnings / Bonuses</Text>
+                      <Text style={[styles.estimateVal, { color: '#006a61' }]}>+₹{customEarnings.toLocaleString('en-IN')}</Text>
+                    </View>
+                  ) : null}
+
+                  {esop > 0 ? (
                     <View style={styles.estimateRow}>
                       <Text style={styles.estimateLabel}>ESOP (Monthly Spread)</Text>
                       <Text style={[styles.estimateVal, { color: '#006a61' }]}>+₹{esop.toLocaleString('en-IN')}</Text>
                     </View>
-                  )}
+                  ) : null}
 
                   <View style={[styles.estimateDivider]} />
 
@@ -603,6 +686,13 @@ export default function CreateEmployeeScreen() {
                     <Text style={[styles.estimateVal, { color: '#dc2626' }]}>-₹{pt.toLocaleString('en-IN')}</Text>
                   </View>
 
+                  {customDeductions > 0 ? (
+                    <View style={styles.estimateRow}>
+                      <Text style={styles.estimateLabel}>Custom Deductions</Text>
+                      <Text style={[styles.estimateVal, { color: '#dc2626' }]}>-₹{customDeductions.toLocaleString('en-IN')}</Text>
+                    </View>
+                  ) : null}
+
                   <View style={[styles.estimateDivider]} />
 
                   <View style={styles.estimateRow}>
@@ -612,7 +702,7 @@ export default function CreateEmployeeScreen() {
                     </Text>
                   </View>
                 </View>
-              )}
+              ) : null}
             </View>
           )}
 

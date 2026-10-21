@@ -126,6 +126,9 @@ export default function UserManagementScreen() {
   const [newTaxRegime, setNewTaxRegime] = useState('custom');
   const [newHraPercentage, setNewHraPercentage] = useState('40');
   const [newTransportAllowance, setNewTransportAllowance] = useState('0');
+  const [newConveyanceAllowance, setNewConveyanceAllowance] = useState('1200');
+  const [newWashingAllowance, setNewWashingAllowance] = useState('500');
+  const [newSpecialAllowance, setNewSpecialAllowance] = useState('');
   const [newCustomItems, setNewCustomItems] = useState<CustomPayrollItem[]>([]);
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState(false);
@@ -154,6 +157,9 @@ export default function UserManagementScreen() {
   const [editTaxRegime, setEditTaxRegime] = useState('custom');
   const [editHraPercentage, setEditHraPercentage] = useState('40');
   const [editTransportAllowance, setEditTransportAllowance] = useState('0');
+  const [editConveyanceAllowance, setEditConveyanceAllowance] = useState('1200');
+  const [editWashingAllowance, setEditWashingAllowance] = useState('500');
+  const [editSpecialAllowance, setEditSpecialAllowance] = useState('');
   const [editCustomItems, setEditCustomItems] = useState<CustomPayrollItem[]>([]);
   const [editStatus, setEditStatus] = useState('active');
   const [editIsHhcEnabled, setEditIsHhcEnabled] = useState(false);
@@ -331,6 +337,9 @@ export default function UserManagementScreen() {
         tax_regime: newTaxRegime,
         hra_percentage: parseFloat(newHraPercentage) || 0,
         transport_allowance: parseFloat(newTransportAllowance) || 0,
+        conveyance_allowance: parseFloat(newConveyanceAllowance) || 1200,
+        washing_allowance: parseFloat(newWashingAllowance) || 500,
+        special_allowance: newSpecialAllowance.trim() ? parseFloat(newSpecialAllowance) : undefined,
         custom_items: newCustomItems,
       });
 
@@ -437,6 +446,9 @@ export default function UserManagementScreen() {
         setEditTaxRegime(tc.tax_regime || 'custom');
         setEditHraPercentage(tc.hra_percentage != null ? String(tc.hra_percentage) : '40');
         setEditTransportAllowance(tc.transport_allowance != null ? String(tc.transport_allowance) : '0');
+        setEditConveyanceAllowance(empData.conveyance_allowance != null ? String(empData.conveyance_allowance) : '1200');
+        setEditWashingAllowance(empData.washing_allowance != null ? String(empData.washing_allowance) : '500');
+        setEditSpecialAllowance(empData.special_allowance != null ? String(empData.special_allowance) : '');
         setEditCustomItems(Array.isArray(tc.custom_items) ? tc.custom_items : []);
         setEditStatus(empData.employment_status || 'active');
           setEditIsHhcEnabled(!!empData?.is_hhc_enabled || !!u.is_hhc_enabled);
@@ -471,6 +483,9 @@ export default function UserManagementScreen() {
         setEditTaxPercentage('5');
         setEditHraPercentage('40');
         setEditTransportAllowance('0');
+        setEditConveyanceAllowance('1200');
+        setEditWashingAllowance('500');
+        setEditSpecialAllowance('');
         setEditCustomItems([]);
         setEditStatus('active');
         setEditIsHhcEnabled(!!u.is_hhc_enabled);
@@ -538,6 +553,9 @@ export default function UserManagementScreen() {
           manager_id: editManagerId || null,
           date_of_birth: editDob.trim() || null,
           basic_salary: parseFloat(editSalary) || 0,
+          conveyance_allowance: parseFloat(editConveyanceAllowance) || 1200,
+          washing_allowance: parseFloat(editWashingAllowance) || 500,
+          special_allowance: editSpecialAllowance.trim() ? parseFloat(editSpecialAllowance) : undefined,
           employment_type: editEmploymentType as any,
           tax_config: updatedTaxConfig,
           employment_status: editStatus as any,
@@ -558,6 +576,9 @@ export default function UserManagementScreen() {
           default_shift_id: editShiftId || null,
           date_of_birth: editDob.trim() || null,
           basic_salary: parseFloat(editSalary) || 0,
+          conveyance_allowance: parseFloat(editConveyanceAllowance) || 1200,
+          washing_allowance: parseFloat(editWashingAllowance) || 500,
+          special_allowance: editSpecialAllowance.trim() ? parseFloat(editSpecialAllowance) : undefined,
           tax_config: updatedTaxConfig,
           employment_status: editStatus as any,
           onboarding_completed: true,
@@ -1343,11 +1364,32 @@ export default function UserManagementScreen() {
                         </View>
                       </View>
 
+                      <View style={{ flexDirection: 'row', gap: 10 }}>
+                        <View style={{ flex: 1 }}>
+                          <Input
+                            label="Conveyance Allowance (₹)"
+                            placeholder="1200"
+                            value={newConveyanceAllowance}
+                            onChangeText={setNewConveyanceAllowance}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Input
+                            label="Washing Allowance (₹)"
+                            placeholder="500"
+                            value={newWashingAllowance}
+                            onChangeText={setNewWashingAllowance}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                      </View>
+
                       <Input
-                        label="Transport Allowance (₹/$)"
-                        placeholder="0"
-                        value={newTransportAllowance}
-                        onChangeText={setNewTransportAllowance}
+                        label="Special Allowance (₹) (Optional - auto balances if left blank)"
+                        placeholder="e.g. 13300"
+                        value={newSpecialAllowance}
+                        onChangeText={setNewSpecialAllowance}
                         keyboardType="numeric"
                       />
 
@@ -1596,11 +1638,32 @@ export default function UserManagementScreen() {
                     </View>
                   </View>
 
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Input
+                        label="Conveyance Allowance (₹)"
+                        placeholder="1200"
+                        value={editConveyanceAllowance}
+                        onChangeText={setEditConveyanceAllowance}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Input
+                        label="Washing Allowance (₹)"
+                        placeholder="500"
+                        value={editWashingAllowance}
+                        onChangeText={setEditWashingAllowance}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+
                   <Input
-                    label="Transport Allowance (₹/$)"
-                    placeholder="0"
-                    value={editTransportAllowance}
-                    onChangeText={setEditTransportAllowance}
+                    label="Special Allowance (₹) (Optional - auto balances if left blank)"
+                    placeholder="e.g. 13300"
+                    value={editSpecialAllowance}
+                    onChangeText={setEditSpecialAllowance}
                     keyboardType="numeric"
                   />
 

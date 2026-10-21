@@ -1351,6 +1351,8 @@ export interface AppointmentLetterEmailExtra {
   basicSalary?: number | null;
   conveyanceAllowance?: number | null;
   washingAllowance?: number | null;
+  specialAllowance?: number | null;
+  customItems?: Array<{ name: string; value: number }> | null;
   isPfEligible?: boolean | null;
   probationMonths?: number | null;
   signatoryName?: string | null;
@@ -1402,9 +1404,12 @@ export async function sendAppointmentLetterEmail(
   const hra = Math.round(grossMonthly * 0.20);
   const conveyance = extra?.conveyanceAllowance ?? 1200;
   const washing = extra?.washingAllowance ?? 500;
-  const specialAllowance = Math.max(0, grossMonthly - (basic + hra + conveyance + washing));
+  const customItems = extra?.customItems || [];
+  const customEarningsTotal = customItems.reduce((acc, ci) => acc + ci.value, 0);
+  const specialAllowance = extra?.specialAllowance ?? Math.max(0, grossMonthly - (basic + hra + conveyance + washing + customEarningsTotal));
+  const effectiveGross = basic + hra + conveyance + washing + specialAllowance + customEarningsTotal;
   const isPf = extra?.isPfEligible !== false;
-  const isEsic = grossMonthly <= 21000;
+  const isEsic = effectiveGross <= 21000;
 
   const htmlContent = `
     <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px;">
@@ -1482,10 +1487,17 @@ export async function sendAppointmentLetterEmail(
           <td style="padding: 8px 12px; border: 1px solid #CBD5E1; text-align: right; font-weight: 600;">₹${specialAllowance.toLocaleString('en-IN')}</td>
           <td style="padding: 8px 12px; border: 1px solid #CBD5E1; text-align: right;">₹${(specialAllowance * 12).toLocaleString('en-IN')}</td>
         </tr>
+        ${customItems.map((ci) => `
+        <tr>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1;">${ci.name}</td>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1; text-align: right; font-weight: 600;">₹${ci.value.toLocaleString('en-IN')}</td>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1; text-align: right;">₹${(ci.value * 12).toLocaleString('en-IN')}</td>
+        </tr>
+        `).join('')}
         <tr style="background: #F8FAFC; font-weight: 800; color: #0D7377;">
           <td style="padding: 9px 12px; border: 1px solid #CBD5E1;">Total Gross Earnings</td>
-          <td style="padding: 9px 12px; border: 1px solid #CBD5E1; text-align: right;">₹${grossMonthly.toLocaleString('en-IN')}</td>
-          <td style="padding: 9px 12px; border: 1px solid #CBD5E1; text-align: right;">₹${(grossMonthly * 12).toLocaleString('en-IN')}</td>
+          <td style="padding: 9px 12px; border: 1px solid #CBD5E1; text-align: right;">₹${effectiveGross.toLocaleString('en-IN')}</td>
+          <td style="padding: 9px 12px; border: 1px solid #CBD5E1; text-align: right;">₹${(effectiveGross * 12).toLocaleString('en-IN')}</td>
         </tr>
       </tbody>
     </table>

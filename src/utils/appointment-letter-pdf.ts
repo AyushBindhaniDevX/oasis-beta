@@ -33,16 +33,27 @@ export function generateAppointmentLetterHtml(data: AppointmentLetterData): stri
   const signatoryName = data.signatoryName || 'Dr. Authorized Signatory';
   const signatoryTitle = data.signatoryTitle || 'Medical Superintendent / HR Director';
 
-  // Calculate Salary Components as per Hospital Formula
+  // Calculate Salary Components as per Hospital / Enterprise Formula
   const grossMonthly = emp.basic_salary ? (emp.basic_salary > 20000 ? emp.basic_salary : emp.basic_salary * 2) : 25000;
   const basic = Math.round(grossMonthly * 0.50);
   const hra = Math.round(grossMonthly * 0.20);
   const conveyance = emp.conveyance_allowance ?? 1200;
   const washing = emp.washing_allowance ?? 500;
-  const specialAllowance = Math.max(0, grossMonthly - (basic + hra + conveyance + washing));
+
+  // Custom enrolled components from tax_config / payroll items
+  const customItems: Array<{ name: string; value: number }> = ((emp.tax_config as any)?.custom_items || [])
+    .filter((ci: any) => ci.type === 'earning')
+    .map((ci: any) => ({
+      name: ci.name,
+      value: ci.amount_type === 'percentage' ? Math.round((basic * Number(ci.value)) / 100) : Number(ci.value),
+    }));
+  const customEarningsTotal = customItems.reduce((acc, ci) => acc + ci.value, 0);
+
+  const specialAllowance = emp.special_allowance ?? Math.max(0, grossMonthly - (basic + hra + conveyance + washing + customEarningsTotal));
+  const effectiveGross = basic + hra + conveyance + washing + specialAllowance + customEarningsTotal;
 
   const isPf = emp.is_pf_eligible !== false;
-  const isEsic = grossMonthly <= 21000;
+  const isEsic = effectiveGross <= 21000;
 
   return `
 <!DOCTYPE html>
@@ -267,10 +278,17 @@ export function generateAppointmentLetterHtml(data: AppointmentLetterData): stri
           <td style="text-align: right; font-weight: 600;">${formatCurrency(specialAllowance)}</td>
           <td style="text-align: right;">${formatCurrency(specialAllowance * 12)}</td>
         </tr>
+        ${customItems.map((ci) => `
+        <tr>
+          <td>${ci.name}</td>
+          <td style="text-align: right; font-weight: 600;">${formatCurrency(ci.value)}</td>
+          <td style="text-align: right;">${formatCurrency(ci.value * 12)}</td>
+        </tr>
+        `).join('')}
         <tr class="total-row">
           <td>Total Gross Earnings</td>
-          <td style="text-align: right;">${formatCurrency(grossMonthly)}</td>
-          <td style="text-align: right;">${formatCurrency(grossMonthly * 12)}</td>
+          <td style="text-align: right;">${formatCurrency(effectiveGross)}</td>
+          <td style="text-align: right;">${formatCurrency(effectiveGross * 12)}</td>
         </tr>
       </tbody>
     </table>

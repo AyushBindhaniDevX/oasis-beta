@@ -98,9 +98,17 @@ export function AppointmentLetterModal({
   const hra = Math.round(grossMonthly * 0.20);
   const conveyance = employee?.conveyance_allowance ?? 1200;
   const washing = employee?.washing_allowance ?? 500;
-  const specialAllowance = Math.max(0, grossMonthly - (basic + hra + conveyance + washing));
+  const customItems: Array<{ name: string; value: number }> = ((employee?.tax_config as any)?.custom_items || [])
+    .filter((ci: any) => ci.type === 'earning')
+    .map((ci: any) => ({
+      name: ci.name,
+      value: ci.amount_type === 'percentage' ? Math.round((basic * Number(ci.value)) / 100) : Number(ci.value),
+    }));
+  const customEarningsTotal = customItems.reduce((acc, ci) => acc + ci.value, 0);
+  const specialAllowance = employee?.special_allowance ?? Math.max(0, grossMonthly - (basic + hra + conveyance + washing + customEarningsTotal));
+  const effectiveGross = basic + hra + conveyance + washing + specialAllowance + customEarningsTotal;
   const isPf = employee?.is_pf_eligible !== false;
-  const isEsic = grossMonthly <= 21000;
+  const isEsic = effectiveGross <= 21000;
 
   // Synthesize full employee object if only profile was provided
   const effectiveEmployee: Employee = employee || ({
@@ -218,7 +226,7 @@ export function AppointmentLetterModal({
             <View style={styles.metaItem}>
               <Text style={styles.metaLabel}>GROSS MONTHLY</Text>
               <Text style={[styles.metaValue, { color: '#0D7377', fontWeight: '800' }]}>
-                {formatCurrency(grossMonthly)}
+                {formatCurrency(effectiveGross)}
               </Text>
             </View>
           </View>
@@ -375,7 +383,7 @@ export function AppointmentLetterModal({
             </Text>
           </TouchableOpacity>
 
-          {showPreview && (
+          {showPreview ? (
             <View style={[styles.previewBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
               {/* Hospital Header */}
               <View style={styles.previewHeader}>
@@ -438,6 +446,13 @@ export function AppointmentLetterModal({
                   <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]}>{formatCurrency(washing)}</Text>
                   <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]}>{formatCurrency(washing * 12)}</Text>
                 </View>
+                {customItems.map((ci, idx) => (
+                  <View key={`ci-${idx}`} style={styles.tableRow}>
+                    <Text style={[styles.tableCell, { flex: 2 }]}>{ci.name}</Text>
+                    <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]}>{formatCurrency(ci.value)}</Text>
+                    <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]}>{formatCurrency(ci.value * 12)}</Text>
+                  </View>
+                ))}
                 <View style={styles.tableRow}>
                   <Text style={[styles.tableCell, { flex: 2 }]}>Special Allowance</Text>
                   <Text style={[styles.tableCell, { flex: 1, textAlign: 'right' }]}>{formatCurrency(specialAllowance)}</Text>
@@ -446,10 +461,10 @@ export function AppointmentLetterModal({
                 <View style={[styles.tableRow, { backgroundColor: '#F8FAFC' }]}>
                   <Text style={[styles.tableCell, { flex: 2, fontWeight: '800', color: '#0D7377' }]}>Gross Total</Text>
                   <Text style={[styles.tableCell, { flex: 1, textAlign: 'right', fontWeight: '800', color: '#0D7377' }]}>
-                    {formatCurrency(grossMonthly)}
+                    {formatCurrency(effectiveGross)}
                   </Text>
                   <Text style={[styles.tableCell, { flex: 1, textAlign: 'right', fontWeight: '800', color: '#0D7377' }]}>
-                    {formatCurrency(grossMonthly * 12)}
+                    {formatCurrency(effectiveGross * 12)}
                   </Text>
                 </View>
               </View>
@@ -458,7 +473,7 @@ export function AppointmentLetterModal({
                 Statutory Coverage: {isPf ? 'EPF Enrolled.' : 'Non-PF category.'} {isEsic ? 'Covered under ESIC.' : 'ESIC exempt.'}
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         {/* Footer Actions */}

@@ -180,6 +180,9 @@ export async function createSystemUser(params: {
   tax_regime?: string;
   hra_percentage?: number | string;
   transport_allowance?: number;
+  conveyance_allowance?: number | string;
+  washing_allowance?: number | string;
+  special_allowance?: number | string;
   custom_items?: any[];
   tax_config?: Record<string, any>;
   is_hhc_enabled?: boolean;
@@ -240,6 +243,8 @@ export async function createSystemUser(params: {
 
   await setDoc(doc(db, 'profiles', uid), profPayload);
 
+  let empPayload: Employee | null = null;
+
   // Create employee record if requested
   if (params.create_employee_record) {
     const empId = `emp-${Date.now()}`;
@@ -255,7 +260,7 @@ export async function createSystemUser(params: {
       custom_items: params.custom_items || params.tax_config?.custom_items || [],
     };
 
-    const empPayload: Employee = {
+    empPayload = {
       id: empId,
       profile_id: uid,
       organization_id: orgId,
@@ -269,6 +274,9 @@ export async function createSystemUser(params: {
       is_hhc_enabled: params.is_hhc_enabled ?? false,
       date_of_birth: params.date_of_birth || null,
       basic_salary: params.basic_salary || 0,
+      conveyance_allowance: (params as any).conveyance_allowance !== undefined ? Number((params as any).conveyance_allowance) : 1200,
+      washing_allowance: (params as any).washing_allowance !== undefined ? Number((params as any).washing_allowance) : 500,
+      special_allowance: (params as any).special_allowance !== undefined ? Number((params as any).special_allowance) : undefined,
       employment_status: 'active',
       onboarding_completed: true,
       tax_config: {
@@ -359,24 +367,12 @@ export async function createSystemUser(params: {
   }
 
   // Automated Appointment Letter Generation & Email Dispatch for Provisioned Employee
-  if (params.create_employee_record) {
+  if (params.create_employee_record && empPayload) {
     try {
       const { createAndStoreAppointmentLetter } = await import('./appointmentLetters');
       await createAndStoreAppointmentLetter(
         {
-          id: `emp-${Date.now()}`,
-          profile_id: uid,
-          organization_id: orgId,
-          employee_code: params.employee_code || `EMP-${uid.slice(0, 6).toUpperCase()}`,
-          department_id: params.department_id || null,
-          workplace_id: params.workplace_id || null,
-          designation: params.designation || (params.role === 'admin' ? 'Administrator' : params.role === 'hr' ? 'HR Manager' : 'Staff'),
-          joining_date: params.joining_date || now.split('T')[0],
-          basic_salary: params.basic_salary || 0,
-          employment_status: 'active',
-          onboarding_completed: true,
-          created_at: now,
-          updated_at: now,
+          ...empPayload,
           profile: profPayload,
           department: params.department_id ? ({ id: params.department_id, name: deptName } as any) : undefined,
         },

@@ -106,7 +106,7 @@ export function CustomPayrollItemsManager({
             Enrolled custom allowances, performance bonuses, loans & statutory deductions
           </Text>
         </View>
-        {!readOnly && (
+        {!readOnly ? (
           <TouchableOpacity
             style={styles.addBtn}
             onPress={handleOpenAdd}
@@ -115,11 +115,11 @@ export function CustomPayrollItemsManager({
             <Plus size={15} color="#FFFFFF" />
             <Text style={styles.addBtnText}>Add Component</Text>
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
 
       {/* Summary Badges if items exist */}
-      {items.length > 0 && basicSalary > 0 && (
+      {Boolean(items.length > 0 && basicSalary > 0) ? (
         <View style={styles.metricsStrip}>
           <View style={[styles.metricBox, { borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }]}>
             <Text style={[styles.metricLabel, { color: '#065F46' }]}>+ Custom Earnings</Text>
@@ -134,7 +134,7 @@ export function CustomPayrollItemsManager({
             </Text>
           </View>
         </View>
-      )}
+      ) : null}
 
       {/* Items List */}
       {items.length === 0 ? (
@@ -144,7 +144,7 @@ export function CustomPayrollItemsManager({
           <Text style={styles.emptySub}>
             Admin can add custom allowances, retention bonuses, PF extra, health insurance or deductions here.
           </Text>
-          {!readOnly && (
+          {!readOnly ? (
             <TouchableOpacity
               style={styles.emptyAddBtn}
               onPress={handleOpenAdd}
@@ -153,7 +153,7 @@ export function CustomPayrollItemsManager({
               <Plus size={14} color="#006a61" />
               <Text style={styles.emptyAddBtnText}>Add First Component</Text>
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
       ) : (
         <View style={styles.itemsGrid}>
@@ -195,7 +195,7 @@ export function CustomPayrollItemsManager({
                     {isDeduction ? '-' : '+'}
                     {formatCurrency(computedVal)}
                   </Text>
-                  {!readOnly && (
+                  {!readOnly ? (
                     <TouchableOpacity
                       onPress={() => handleRemoveItem(item.id)}
                       style={styles.deleteBtn}
@@ -203,7 +203,7 @@ export function CustomPayrollItemsManager({
                     >
                       <Trash2 size={16} color="#EF4444" />
                     </TouchableOpacity>
-                  )}
+                  ) : null}
                 </View>
               </View>
             );
@@ -326,7 +326,7 @@ export function CustomPayrollItemsManager({
               placeholder={amountType === 'percentage' ? 'e.g. 10 for 10% of basic' : 'e.g. 5000'}
               placeholderTextColor="#94A3B8"
             />
-            {basicSalary > 0 && value && !isNaN(Number(value)) && (
+            {Boolean(basicSalary > 0 && Boolean(value.trim()) && !isNaN(Number(value))) ? (
               <Text style={styles.previewCalcText}>
                 Preview calculated value: {formatCurrency(
                   amountType === 'percentage'
@@ -334,7 +334,7 @@ export function CustomPayrollItemsManager({
                     : Number(value)
                 )} per month
               </Text>
-            )}
+            ) : null}
           </View>
 
           {/* Icon & Color Selector */}

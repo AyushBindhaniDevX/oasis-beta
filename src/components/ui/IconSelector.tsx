@@ -248,7 +248,7 @@ export function IconSelector({
 
   return (
     <View style={styles.container}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {Boolean(label) ? <Text style={styles.label}>{label}</Text> : null}
 
       {/* Selected Preview Bar / Accordion Toggle */}
       <TouchableOpacity
@@ -289,7 +289,7 @@ export function IconSelector({
       </TouchableOpacity>
 
       {/* Expandable In-Place Picker */}
-      {expanded && !disabled && (
+      {expanded && !disabled ? (
         <View style={styles.pickerBody}>
           {/* Color Palette Selector */}
           <Text style={styles.sectionHeading}>Color Theme</Text>
@@ -307,7 +307,7 @@ export function IconSelector({
                     isSelected && styles.colorCircleActive,
                   ]}
                 >
-                  {isSelected && <Check size={14} color="#FFF" />}
+                  {isSelected ? <Check size={14} color="#FFF" /> : null}
                 </TouchableOpacity>
               );
             })}
@@ -400,7 +400,7 @@ export function IconSelector({
             })}
           </View>
         </View>
-      )}
+      ) : null}
     </View>
   );
 }

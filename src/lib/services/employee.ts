@@ -279,6 +279,9 @@ export async function createEmployee(params: {
   l4_manager_id?: string;
   designation?: string;
   basic_salary?: number;
+  conveyance_allowance?: number;
+  washing_allowance?: number;
+  special_allowance?: number;
   workplace_id?: string;
   default_shift_id?: string;
   date_of_birth?: string;
@@ -362,6 +365,9 @@ export async function createEmployee(params: {
     date_of_birth: params.date_of_birth || null,
     designation: params.designation || null,
     basic_salary: params.basic_salary || 0,
+    conveyance_allowance: params.conveyance_allowance !== undefined ? params.conveyance_allowance : 1200,
+    washing_allowance: params.washing_allowance !== undefined ? params.washing_allowance : 500,
+    special_allowance: params.special_allowance !== undefined ? params.special_allowance : undefined,
     tax_config: params.tax_config || null,
     onboarding_completed: false,
     is_hhc_enabled: params.is_hhc_enabled ?? false,
