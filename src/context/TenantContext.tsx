@@ -291,6 +291,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       plan,
       package_type: plan,
       features: planDefaults,
+      max_employees: plan === 'enterprise' ? 1000 : 500,
       updated_at: new Date().toISOString(),
     });
     await fetchAllOrganizations();
@@ -343,7 +344,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       plan: selectedPlan,
       package_type: selectedPlan,
       features: PLAN_FEATURE_DEFAULTS[selectedPlan],
-      max_employees: selectedPlan === 'enterprise' ? 1000 : selectedPlan === 'growth' ? 250 : 50,
+      max_employees: selectedPlan === 'enterprise' ? 1000 : 500,
       settings: {
         industry: 'General Enterprise',
         address: data.address || 'Corporate Headquarters',

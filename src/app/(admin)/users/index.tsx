@@ -757,7 +757,7 @@ export default function UserManagementScreen() {
   };
 
   const pkg = tenantOrg?.package_type?.toLowerCase() || 'basic';
-  const limit = pkg === 'gold' ? 250 : pkg === 'silver' ? 100 : 50;
+  const limit = Math.max(500, tenantOrg?.max_employees || 500);
   const isLimitReached = activeCount >= limit;
 
   if (loading) return <LoadingState />;
