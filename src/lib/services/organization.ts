@@ -1,4 +1,4 @@
-import { db, auth, secondaryAuth } from '@/lib/firebase';
+import { db, auth, secondaryAuth, sanitizeFirestoreData } from '@/lib/firebase';
 import {
   doc,
   getDoc,
@@ -108,10 +108,10 @@ export async function updateUserProfileData(
   userId: string,
   data: { full_name?: string; phone?: string | null; role?: string; is_hhc_enabled?: boolean }
 ): Promise<void> {
-  await updateDoc(doc(db, 'profiles', userId), {
+  await updateDoc(doc(db, 'profiles', userId), sanitizeFirestoreData({
     ...data,
     updated_at: new Date().toISOString(),
-  });
+  }));
 
   try {
     const { createAuditLog } = await import('./audit');
@@ -182,7 +182,7 @@ export async function createSystemUser(params: {
   transport_allowance?: number;
   conveyance_allowance?: number | string;
   washing_allowance?: number | string;
-  special_allowance?: number | string;
+  special_allowance?: number | string | null;
   custom_items?: any[];
   tax_config?: Record<string, any>;
   is_hhc_enabled?: boolean;
@@ -276,7 +276,7 @@ export async function createSystemUser(params: {
       basic_salary: params.basic_salary || 0,
       conveyance_allowance: (params as any).conveyance_allowance !== undefined ? Number((params as any).conveyance_allowance) : 1200,
       washing_allowance: (params as any).washing_allowance !== undefined ? Number((params as any).washing_allowance) : 500,
-      special_allowance: (params as any).special_allowance !== undefined ? Number((params as any).special_allowance) : undefined,
+      special_allowance: (params as any).special_allowance != null && (params as any).special_allowance !== '' ? Number((params as any).special_allowance) : null,
       employment_status: 'active',
       onboarding_completed: true,
       tax_config: {
@@ -289,7 +289,7 @@ export async function createSystemUser(params: {
       updated_at: now,
     };
 
-    await setDoc(doc(db, 'employees', empId), empPayload);
+    await setDoc(doc(db, 'employees', empId), sanitizeFirestoreData(empPayload));
 
     if (params.default_shift_id) {
       const today = now.split('T')[0];

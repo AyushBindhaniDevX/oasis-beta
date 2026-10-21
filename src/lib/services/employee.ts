@@ -1,4 +1,4 @@
-import { db, auth, secondaryAuth } from '@/lib/firebase';
+import { db, auth, secondaryAuth, sanitizeFirestoreData } from '@/lib/firebase';
 import {
   doc,
   getDoc,
@@ -281,7 +281,7 @@ export async function createEmployee(params: {
   basic_salary?: number;
   conveyance_allowance?: number;
   washing_allowance?: number;
-  special_allowance?: number;
+  special_allowance?: number | null;
   workplace_id?: string;
   default_shift_id?: string;
   date_of_birth?: string;
@@ -367,7 +367,7 @@ export async function createEmployee(params: {
     basic_salary: params.basic_salary || 0,
     conveyance_allowance: params.conveyance_allowance !== undefined ? params.conveyance_allowance : 1200,
     washing_allowance: params.washing_allowance !== undefined ? params.washing_allowance : 500,
-    special_allowance: params.special_allowance !== undefined ? params.special_allowance : undefined,
+    special_allowance: params.special_allowance != null && (params as any).special_allowance !== '' ? Number(params.special_allowance) : null,
     tax_config: params.tax_config || null,
     onboarding_completed: false,
     is_hhc_enabled: params.is_hhc_enabled ?? false,
@@ -375,7 +375,7 @@ export async function createEmployee(params: {
     updated_at: now,
   };
 
-  await setDoc(doc(db, 'employees', empId), empPayload);
+  await setDoc(doc(db, 'employees', empId), sanitizeFirestoreData(empPayload));
 
   // Link initial shift to employee_shifts roster
   if (params.default_shift_id) {
@@ -474,7 +474,8 @@ export async function updateEmployee(id: string, updates: Record<string, any>): 
     payload.l4_manager_id = cleanMgr(updates.l4_manager_id);
   }
 
-  await updateDoc(doc(db, 'employees', id), payload);
+  const cleanPayload = sanitizeFirestoreData(payload);
+  await updateDoc(doc(db, 'employees', id), cleanPayload);
   if (updates.is_hhc_enabled !== undefined) {
     try {
       const empSnap = await getDoc(doc(db, 'employees', id));
@@ -519,11 +520,11 @@ export async function completeOnboarding(
   avatarUrl?: string
 ) {
   const now = new Date().toISOString();
-  await updateDoc(doc(db, 'employees', employeeId), {
+  await updateDoc(doc(db, 'employees', employeeId), sanitizeFirestoreData({
     ...data,
     onboarding_completed: true,
     updated_at: now,
-  });
+  }));
 
   if (avatarUrl) {
     await updateDoc(doc(db, 'profiles', profileId), {

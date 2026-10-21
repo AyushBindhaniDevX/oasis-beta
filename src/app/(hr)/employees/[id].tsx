@@ -303,7 +303,7 @@ export default function EmployeeDetailScreen() {
         l4_manager_id: l4ManagerId || null,
         basic_salary: parseFloat(basicSalary) || 0,
         employment_status: status as any,
-        joining_date: joiningDate || undefined,
+        joining_date: joiningDate || null,
         is_hhc_enabled: isHhcEnabled,
         tax_config: {
           pf_number: pfNumber.trim() || null,

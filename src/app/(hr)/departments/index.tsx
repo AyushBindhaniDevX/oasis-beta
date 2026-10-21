@@ -194,7 +194,7 @@ export default function DepartmentsAndHierarchyScreen() {
       if (activeMode === 'departments') {
         const targetDeptId = targetColId === 'unassigned' ? null : targetColId;
         if (emp.department_id !== targetDeptId) {
-          await updateEmployee(emp.id, { department_id: targetDeptId || undefined });
+          await updateEmployee(emp.id, { department_id: targetDeptId });
           await createAuditLog('employee_department_reassigned', 'employee', emp.id, {
             department_id: targetDeptId,
             reassigned_by: profile?.id,
@@ -203,7 +203,7 @@ export default function DepartmentsAndHierarchyScreen() {
       } else if (activeMode === 'workplaces') {
         const targetWpId = targetColId === 'unassigned' ? null : targetColId;
         if (emp.workplace_id !== targetWpId) {
-          await updateEmployee(emp.id, { workplace_id: targetWpId || undefined });
+          await updateEmployee(emp.id, { workplace_id: targetWpId });
           await createAuditLog('employee_workplace_reassigned', 'employee', emp.id, {
             workplace_id: targetWpId,
             reassigned_by: profile?.id,
@@ -236,10 +236,10 @@ export default function DepartmentsAndHierarchyScreen() {
     try {
       if (activeMode === 'departments') {
         const deptId = targetId === 'unassigned' ? null : targetId;
-        await updateEmployee(quickMoveModalEmp.id, { department_id: deptId || undefined });
+        await updateEmployee(quickMoveModalEmp.id, { department_id: deptId });
       } else if (activeMode === 'workplaces') {
         const wpId = targetId === 'unassigned' ? null : targetId;
-        await updateEmployee(quickMoveModalEmp.id, { workplace_id: wpId || undefined });
+        await updateEmployee(quickMoveModalEmp.id, { workplace_id: wpId });
       } else if (activeMode === 'roles') {
         if (quickMoveModalEmp.profile?.id) {
           await updateUserRole(quickMoveModalEmp.profile.id, targetId);

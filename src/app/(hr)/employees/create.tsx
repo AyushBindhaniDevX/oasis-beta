@@ -194,7 +194,7 @@ export default function CreateEmployeeScreen() {
         basic_salary: parseFloat(basicSalary) || 0,
         conveyance_allowance: parseFloat(conveyanceAllowance) || 1200,
         washing_allowance: parseFloat(washingAllowance) || 500,
-        special_allowance: specialAllowance.trim() ? parseFloat(specialAllowance) : undefined,
+        special_allowance: specialAllowance.trim() ? parseFloat(specialAllowance) : null,
         tax_config: {
           pf_number: pfNumber.trim() || null,
           tax_regime: taxRegime as any,
@@ -208,7 +208,7 @@ export default function CreateEmployeeScreen() {
           epf_exempt: epfExempt === 'yes',
           conveyance_allowance: parseFloat(conveyanceAllowance) || 1200,
           washing_allowance: parseFloat(washingAllowance) || 500,
-          special_allowance: specialAllowance.trim() ? parseFloat(specialAllowance) : undefined,
+          special_allowance: specialAllowance.trim() ? parseFloat(specialAllowance) : null,
           custom_items: customItems,
         },
       });

@@ -158,7 +158,7 @@ export interface Employee {
   hospital_unit?: 'Shanti Memorial Hospital' | 'Chikitsa Unit' | string;
   conveyance_allowance?: number;
   washing_allowance?: number;
-  special_allowance?: number;
+  special_allowance?: number | null;
   ot_deduction?: number; // miscellaneous deductions
   home_address?: string | null;
   bank_details?: {

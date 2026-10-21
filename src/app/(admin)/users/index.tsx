@@ -339,7 +339,7 @@ export default function UserManagementScreen() {
         transport_allowance: parseFloat(newTransportAllowance) || 0,
         conveyance_allowance: parseFloat(newConveyanceAllowance) || 1200,
         washing_allowance: parseFloat(newWashingAllowance) || 500,
-        special_allowance: newSpecialAllowance.trim() ? parseFloat(newSpecialAllowance) : undefined,
+        special_allowance: newSpecialAllowance.trim() ? parseFloat(newSpecialAllowance) : null,
         custom_items: newCustomItems,
       });
 
@@ -545,7 +545,7 @@ export default function UserManagementScreen() {
       let currentEmpId = editEmpId;
       if (currentEmpId) {
         await updateEmployee(currentEmpId, {
-          employee_code: editEmpCode.trim() || undefined,
+          employee_code: editEmpCode.trim() || null,
           designation: editDesignation.trim() || null,
           department_id: editDeptId || null,
           workplace_id: editWorkplaceId || null,
@@ -555,7 +555,7 @@ export default function UserManagementScreen() {
           basic_salary: parseFloat(editSalary) || 0,
           conveyance_allowance: parseFloat(editConveyanceAllowance) || 1200,
           washing_allowance: parseFloat(editWashingAllowance) || 500,
-          special_allowance: editSpecialAllowance.trim() ? parseFloat(editSpecialAllowance) : undefined,
+          special_allowance: editSpecialAllowance.trim() ? parseFloat(editSpecialAllowance) : null,
           employment_type: editEmploymentType as any,
           tax_config: updatedTaxConfig,
           employment_status: editStatus as any,
@@ -578,7 +578,7 @@ export default function UserManagementScreen() {
           basic_salary: parseFloat(editSalary) || 0,
           conveyance_allowance: parseFloat(editConveyanceAllowance) || 1200,
           washing_allowance: parseFloat(editWashingAllowance) || 500,
-          special_allowance: editSpecialAllowance.trim() ? parseFloat(editSpecialAllowance) : undefined,
+          special_allowance: editSpecialAllowance.trim() ? parseFloat(editSpecialAllowance) : null,
           tax_config: updatedTaxConfig,
           employment_status: editStatus as any,
           onboarding_completed: true,
