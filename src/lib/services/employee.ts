@@ -385,11 +385,12 @@ export async function createEmployee(params: {
     });
   }
 
+  let deptName = '';
+  let wpName = '';
+
   // Send Welcome Email
   try {
     const { sendWelcomeEmail } = await import('./resend');
-    let deptName = '';
-    let wpName = '';
     if (params.department_id) {
       try {
         const dSnap = await getDoc(doc(db, 'departments', params.department_id));
@@ -420,15 +421,18 @@ export async function createEmployee(params: {
     console.warn('Resend welcome notification dispatch warning:', mailErr);
   }
 
-  // Automated Appointment Letter Generation for New Joiners (Requirement 3)
+  // Automated Appointment Letter Generation & Email Dispatch for New Joiners
   try {
     const { createAndStoreAppointmentLetter } = await import('./appointmentLetters');
     await createAndStoreAppointmentLetter(
       {
         ...empPayload,
         profile: profPayload,
+        department: params.department_id ? ({ id: params.department_id, name: deptName } as any) : undefined,
       },
-      resolvedOrgId
+      resolvedOrgId,
+      undefined,
+      true
     );
   } catch (aptErr) {
     console.warn('Auto appointment letter generation notice:', aptErr);

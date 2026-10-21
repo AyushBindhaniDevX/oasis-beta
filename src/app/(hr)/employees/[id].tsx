@@ -26,8 +26,10 @@ import { getShifts, assignEmployeeShift } from '@/lib/services/shifts';
 import { updateUserProfileData } from '@/lib/services/organization';
 import { getLeaveBalances, getLeaveTypes, updateLeaveBalance } from '@/lib/services/leave';
 import { formatDate, formatCurrency } from '@/utils/format';
+import { AppointmentLetterModal } from '@/components/AppointmentLetterModal';
+import { resendAppointmentLetterEmail, downloadAppointmentLetterPdf } from '@/lib/services/appointmentLetters';
 import type { Employee, Department, Workplace, WorkShift, LeaveBalance, LeaveType } from '@/types';
-import { Edit3, AlertCircle, Umbrella, CheckCircle2, HeartPulse } from 'lucide-react-native';
+import { Edit3, AlertCircle, Umbrella, CheckCircle2, HeartPulse, FileText, Mail, Download } from 'lucide-react-native';
 
 const statusVariant = (s: string): 'success' | 'danger' | 'warning' | 'neutral' => {
   if (s === 'active') return 'success';
@@ -59,6 +61,61 @@ export default function EmployeeDetailScreen() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+
+  // Appointment Letter State
+  const [appointmentModalOpen, setAppointmentModalOpen] = useState(false);
+  const [sendingApptEmail, setSendingApptEmail] = useState(false);
+  const [downloadingApptPdf, setDownloadingApptPdf] = useState(false);
+  const [apptFeedback, setApptFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const handleQuickSendApptEmail = async () => {
+    if (!emp) return;
+    setSendingApptEmail(true);
+    setApptFeedback(null);
+    try {
+      const email = emp.profile?.email || (emp as any).email;
+      await resendAppointmentLetterEmail({
+        employee: emp,
+        organization: tenantOrg,
+      });
+      setApptFeedback({
+        type: 'success',
+        message: `Appointment Letter sent to ${email} successfully!`,
+      });
+      setTimeout(() => setApptFeedback(null), 5000);
+    } catch (err: any) {
+      setApptFeedback({
+        type: 'error',
+        message: err.message || 'Failed to send appointment letter email.',
+      });
+    } finally {
+      setSendingApptEmail(false);
+    }
+  };
+
+  const handleQuickDownloadApptPdf = async () => {
+    if (!emp) return;
+    setDownloadingApptPdf(true);
+    setApptFeedback(null);
+    try {
+      await downloadAppointmentLetterPdf({
+        employee: emp,
+        organization: tenantOrg,
+      });
+      setApptFeedback({
+        type: 'success',
+        message: 'Appointment letter PDF generated and ready for print/download.',
+      });
+      setTimeout(() => setApptFeedback(null), 5000);
+    } catch (err: any) {
+      setApptFeedback({
+        type: 'error',
+        message: err.message || 'Failed to download appointment letter PDF.',
+      });
+    } finally {
+      setDownloadingApptPdf(false);
+    }
+  };
 
   // Dropdown lists
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -413,6 +470,80 @@ export default function EmployeeDetailScreen() {
                   </View>
                 ))
               )}
+            </View>
+          </Card>
+
+          {/* Official Letter of Appointment Card */}
+          <Card style={{ marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <FileText size={18} color="#0D7377" />
+                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
+                  Letter of Appointment
+                </Text>
+              </View>
+              <Badge label="Official Document" variant="success" />
+            </View>
+
+            <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12, lineHeight: 18 }}>
+              Ref No: <Text style={{ fontWeight: '700', color: colors.text }}>{`SMH/HR/APT/${new Date().getFullYear()}/${emp.employee_code || 'SMH-000'}`}</Text>
+              {'\n'}Issued to: <Text style={{ fontWeight: '600', color: colors.text }}>{emp.profile?.email || 'Registered Email'}</Text>
+            </Text>
+
+            {apptFeedback && (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  backgroundColor: apptFeedback.type === 'success' ? '#D1FAE5' : '#FEE2E2',
+                  padding: 10,
+                  borderRadius: 8,
+                  marginBottom: 12,
+                }}
+              >
+                {apptFeedback.type === 'success' ? (
+                  <CheckCircle2 size={16} color="#059669" />
+                ) : (
+                  <AlertCircle size={16} color="#DC2626" />
+                )}
+                <Text
+                  style={{
+                    fontSize: 12.5,
+                    fontWeight: '600',
+                    color: apptFeedback.type === 'success' ? '#065F46' : '#991B1B',
+                    flex: 1,
+                  }}
+                >
+                  {apptFeedback.message}
+                </Text>
+              </View>
+            )}
+
+            <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+              <Button
+                title={sendingApptEmail ? 'Sending Email...' : 'Resend Email'}
+                onPress={handleQuickSendApptEmail}
+                disabled={sendingApptEmail}
+                size="sm"
+                variant="outline"
+                style={{ flex: 1, minWidth: 130, borderColor: '#4F46E5', borderRadius: 8 }}
+              />
+              <Button
+                title={downloadingApptPdf ? 'Generating PDF...' : 'Download PDF'}
+                onPress={handleQuickDownloadApptPdf}
+                disabled={downloadingApptPdf}
+                size="sm"
+                variant="outline"
+                style={{ flex: 1, minWidth: 130, borderColor: '#0D7377', borderRadius: 8 }}
+              />
+              <Button
+                title="Manage / Preview"
+                onPress={() => setAppointmentModalOpen(true)}
+                size="sm"
+                variant="primary"
+                style={{ flex: 1, minWidth: 130, borderRadius: 8 }}
+              />
             </View>
           </Card>
 
@@ -785,7 +916,18 @@ export default function EmployeeDetailScreen() {
           onConfirm={handleDeactivate}
           onCancel={() => setShowDeactivate(false)}
           loading={deactivating}
-          variant={emp.employment_status === 'active' ? 'danger' : 'primary'}
+        />
+
+        <AppointmentLetterModal
+          visible={appointmentModalOpen}
+          onClose={() => setAppointmentModalOpen(false)}
+          employee={emp}
+          profile={emp.profile}
+          organization={tenantOrg}
+          onSuccess={(msg) => {
+            setApptFeedback({ type: 'success', message: msg });
+            setTimeout(() => setApptFeedback(null), 5000);
+          }}
         />
       </View>
     </SidebarLayout>

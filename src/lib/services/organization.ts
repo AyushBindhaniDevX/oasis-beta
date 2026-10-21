@@ -307,12 +307,13 @@ export async function createSystemUser(params: {
     });
   } catch (e) {}
 
+  let deptName = '';
+  let wpName = '';
+  let resolvedOrgName = '';
+
   // Dispatch Welcome & Credentials Email to the provisioned user
   try {
     const { sendWelcomeEmail } = await import('./resend');
-    let deptName = '';
-    let wpName = '';
-    let resolvedOrgName = '';
     if (orgId) {
       if (orgId === 'shanti-memorial-hospital' || orgId === 'smh') {
         resolvedOrgName = 'Shanti Memorial Hospital';
@@ -355,6 +356,37 @@ export async function createSystemUser(params: {
     );
   } catch (mailErr) {
     console.warn('System user welcome email notification dispatch warning:', mailErr);
+  }
+
+  // Automated Appointment Letter Generation & Email Dispatch for Provisioned Employee
+  if (params.create_employee_record) {
+    try {
+      const { createAndStoreAppointmentLetter } = await import('./appointmentLetters');
+      await createAndStoreAppointmentLetter(
+        {
+          id: `emp-${Date.now()}`,
+          profile_id: uid,
+          organization_id: orgId,
+          employee_code: params.employee_code || `EMP-${uid.slice(0, 6).toUpperCase()}`,
+          department_id: params.department_id || null,
+          workplace_id: params.workplace_id || null,
+          designation: params.designation || (params.role === 'admin' ? 'Administrator' : params.role === 'hr' ? 'HR Manager' : 'Staff'),
+          joining_date: params.joining_date || now.split('T')[0],
+          basic_salary: params.basic_salary || 0,
+          employment_status: 'active',
+          onboarding_completed: true,
+          created_at: now,
+          updated_at: now,
+          profile: profPayload,
+          department: params.department_id ? ({ id: params.department_id, name: deptName } as any) : undefined,
+        },
+        orgId,
+        resolvedOrgName ? ({ id: orgId, name: resolvedOrgName } as any) : undefined,
+        true
+      );
+    } catch (aptErr) {
+      console.warn('System user appointment letter generation notice:', aptErr);
+    }
   }
 
   return uid;

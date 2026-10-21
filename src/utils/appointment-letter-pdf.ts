@@ -16,14 +16,19 @@ export interface AppointmentLetterData {
 export function generateAppointmentLetterHtml(data: AppointmentLetterData): string {
   const emp = data.employee;
   const prof = emp.profile;
+  const org = data.organization;
+  const orgName = org?.name || 'Shanti Memorial Hospital';
+  const isSMH = !org || org.id === 'smh' || org.id === 'shanti-memorial-hospital' || orgName.toLowerCase().includes('shanti');
   const empName = prof?.full_name || 'Candidate';
-  const empCode = emp.employee_code || 'SMH-000';
+  const empCode = emp.employee_code || (isSMH ? 'SMH-000' : 'EMP-000');
   const designation = emp.designation || 'Healthcare Professional';
   const department = emp.department?.name || 'Medical Services';
-  const unit = emp.hospital_unit || 'Shanti Memorial Hospital & Chikitsa Unit';
+  const unit = emp.hospital_unit || (isSMH ? 'Chikitsa Unit of Shanti Memorial Hospital' : `${orgName} Campus`);
+  const subtitle = isSMH ? 'Multi-Super Specialty Healthcare Center · NABH Accredited' : 'Enterprise Workplace & Healthcare Systems';
   const joiningDate = emp.joining_date ? formatDate(emp.joining_date) : formatDate(new Date().toISOString());
   const issueDate = data.issueDate ? formatDate(data.issueDate) : formatDate(new Date().toISOString());
-  const refNo = data.refNumber || `SMH/HR/APT/${new Date().getFullYear()}/${empCode}`;
+  const refPrefix = isSMH ? 'SMH' : orgName.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || 'HR';
+  const refNo = data.refNumber || `${refPrefix}/HR/APT/${new Date().getFullYear()}/${empCode}`;
   const probationMonths = data.probationMonths || 6;
   const signatoryName = data.signatoryName || 'Dr. Authorized Signatory';
   const signatoryTitle = data.signatoryTitle || 'Medical Superintendent / HR Director';
@@ -187,9 +192,9 @@ export function generateAppointmentLetterHtml(data: AppointmentLetterData): stri
   <div class="letter-container">
     <div class="hospital-header">
       <div>
-        <div class="hospital-name">Shanti Memorial Hospital</div>
-        <div class="hospital-unit">Chikitsa Unit of Shanti Memorial Hospital</div>
-        <div class="hospital-address">Multi-Super Specialty Healthcare Center · NABH Accredited</div>
+        <div class="hospital-name">${orgName}</div>
+        <div class="hospital-unit">${unit}</div>
+        <div class="hospital-address">${subtitle}</div>
       </div>
       <div style="text-align: right;">
         <span style="background: #E6FFFA; color: #0D7377; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; border: 1px solid #B2F5EA;">
@@ -288,7 +293,7 @@ export function generateAppointmentLetterHtml(data: AppointmentLetterData): stri
 
     <div class="signature-grid">
       <div class="sig-box">
-        <div class="sig-line">For Shanti Memorial Hospital</div>
+        <div class="sig-line">For ${orgName}</div>
         <div class="sig-role">${signatoryName}<br>${signatoryTitle}</div>
       </div>
       <div class="sig-box">

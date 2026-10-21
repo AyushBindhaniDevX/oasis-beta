@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, useWindowDimensions, Platform, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, useWindowDimensions, Platform, StatusBar, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
@@ -14,7 +14,8 @@ import { getEmployeeByProfileId } from '@/lib/services/employee';
 import { formatDate } from '@/utils/format';
 import type { Employee } from '@/types';
 import { updateUserProfileData } from '@/lib/services/organization';
-import { Edit2, Mail, Phone, MapPin, Building, User, FileText, Upload, CheckCircle2 } from 'lucide-react-native';
+import { downloadAppointmentLetterPdf } from '@/lib/services/appointmentLetters';
+import { Edit2, Mail, Phone, MapPin, Building, User, FileText, Upload, CheckCircle2, Download } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 export default function ProfileScreen() {
@@ -37,6 +38,29 @@ export default function ProfileScreen() {
   // Edit form state
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
+
+  // Appointment Letter Download State
+  const [downloadingLetter, setDownloadingLetter] = useState(false);
+  const [downloadFeedback, setDownloadFeedback] = useState<string | null>(null);
+
+  const handleDownloadAppointmentLetter = async () => {
+    if (!employee) return;
+    setDownloadingLetter(true);
+    setDownloadFeedback(null);
+    try {
+      await downloadAppointmentLetterPdf({
+        employee,
+        organization,
+      });
+      setDownloadFeedback('Letter of appointment PDF generated!');
+      setTimeout(() => setDownloadFeedback(null), 4000);
+    } catch (e: any) {
+      setDownloadFeedback(e.message || 'Failed to download appointment letter PDF.');
+      setTimeout(() => setDownloadFeedback(null), 4000);
+    } finally {
+      setDownloadingLetter(false);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -228,6 +252,34 @@ export default function ProfileScreen() {
                   <Text style={mProfStyles.infoValue}>{joinDate}</Text>
                 </View>
               </View>
+
+              <View style={[mProfStyles.infoRow, { borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 12, marginTop: 4 }]}>
+                <View style={[mProfStyles.infoIconWrap, { backgroundColor: '#F0F9F8' }]}>
+                  <Download size={16} color="#0D7377" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={mProfStyles.infoLabel}>APPOINTMENT LETTER</Text>
+                  <TouchableOpacity
+                    onPress={handleDownloadAppointmentLetter}
+                    disabled={downloadingLetter}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}
+                    activeOpacity={0.7}
+                  >
+                    {downloadingLetter ? (
+                      <ActivityIndicator size="small" color="#0D7377" />
+                    ) : (
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D7377' }}>
+                        Download Official PDF →
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                  {downloadFeedback && (
+                    <Text style={{ fontSize: 11, color: '#0D7377', fontWeight: '600', marginTop: 4 }}>
+                      {downloadFeedback}
+                    </Text>
+                  )}
+                </View>
+              </View>
             </View>
           </View>
 
@@ -386,6 +438,49 @@ export default function ProfileScreen() {
                 <Badge label={employee?.employment_status || 'Active'} variant="successLight" />
               </View>
             </View>
+          </View>
+
+          {/* Letter of Appointment Card */}
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: '#F0F9F8', alignItems: 'center', justifyContent: 'center' }}>
+                  <FileText size={20} color="#0D7377" />
+                </View>
+                <View>
+                  <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 2 }]}>Letter of Appointment</Text>
+                  <Text style={{ fontSize: 13, color: colors.textSecondary }}>Official appointment terms & compensation document</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                onPress={handleDownloadAppointmentLetter}
+                disabled={downloadingLetter}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  backgroundColor: '#0D7377',
+                  borderRadius: 8,
+                }}
+                activeOpacity={0.8}
+              >
+                {downloadingLetter ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Download size={15} color="#FFFFFF" />
+                    <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>Download PDF</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {downloadFeedback && (
+              <Text style={{ fontSize: 12, color: '#0D7377', fontWeight: '600' }}>{downloadFeedback}</Text>
+            )}
           </View>
 
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>

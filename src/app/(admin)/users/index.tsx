@@ -40,6 +40,7 @@ import { createAuditLog } from '@/lib/services/audit';
 import { getLeaveBalances, getLeaveTypes, updateLeaveBalance } from '@/lib/services/leave';
 import { formatDate } from '@/utils/format';
 import { CustomPayrollItemsManager } from '@/components/payroll/CustomPayrollItemsManager';
+import { AppointmentLetterModal } from '@/components/AppointmentLetterModal';
 import type { Profile, Department, Workplace, WorkShift, Employee, LeaveBalance, LeaveType, CustomPayrollItem } from '@/types';
 import {
   Search,
@@ -67,6 +68,7 @@ import {
   MoreVertical,
   ChevronRight,
   HeartPulse,
+  FileText,
 } from 'lucide-react-native';
 
 export default function UserManagementScreen() {
@@ -96,6 +98,7 @@ export default function UserManagementScreen() {
   const [toggleUser, setToggleUser] = useState<Profile | null>(null);
   const [deleteUser, setDeleteUser] = useState<Profile | null>(null);
   const [actionSheetUser, setActionSheetUser] = useState<Profile | null>(null);
+  const [appointmentLetterUser, setAppointmentLetterUser] = useState<Profile | null>(null);
   const [infoBanner, setInfoBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Add User Form State
@@ -1001,6 +1004,14 @@ export default function UserManagementScreen() {
                       </TouchableOpacity>
 
                       <TouchableOpacity
+                        onPress={() => setAppointmentLetterUser(u)}
+                        style={[styles.actionBtn, { borderColor: '#0284c740', borderWidth: 1, backgroundColor: '#f0f9ff' }]}
+                      >
+                        <FileText size={14} color="#0284c7" />
+                        <Text style={[styles.actionBtnText, { color: '#0284c7' }]}>Letter</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
                         onPress={() => openEditModal(u)}
                         style={[styles.actionBtn, { borderColor: '#e2e8f0', borderWidth: 1 }]}
                       >
@@ -1840,6 +1851,28 @@ export default function UserManagementScreen() {
                   <ChevronRight size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
 
+                {/* 2b. Letter of Appointment (PDF & Email) */}
+                <TouchableOpacity
+                  style={styles.operationRow}
+                  onPress={() => {
+                    const u = actionSheetUser;
+                    setActionSheetUser(null);
+                    setAppointmentLetterUser(u);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.opIconWrap, { backgroundColor: '#F0F9FF' }]}>
+                    <FileText size={18} color="#0284C7" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.opTitle, { color: colors.text }]}>Letter of Appointment</Text>
+                    <Text style={[styles.opSubtitle, { color: colors.textSecondary }]}>
+                      Resend appointment letter in email or download PDF
+                    </Text>
+                  </View>
+                  <ChevronRight size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+
                 {/* 3. Edit User Details & Role */}
                 <TouchableOpacity
                   style={styles.operationRow}
@@ -1978,6 +2011,27 @@ export default function UserManagementScreen() {
             </View>
           )}
         </Modal>
+
+        {/* Letter of Appointment Modal (PDF & Email Format) */}
+        <AppointmentLetterModal
+          visible={!!appointmentLetterUser}
+          onClose={() => setAppointmentLetterUser(null)}
+          profile={appointmentLetterUser}
+          employee={
+            appointmentLetterUser
+              ? managers.find(
+                  (m) =>
+                    m.profile_id === appointmentLetterUser.id ||
+                    (m.profile as any)?.id === appointmentLetterUser.id
+                ) || null
+              : null
+          }
+          organization={tenantOrg}
+          onSuccess={(msg) => {
+            setInfoBanner({ type: 'success', message: msg });
+            setTimeout(() => setInfoBanner(null), 5000);
+          }}
+        />
       </ScrollView>
     </SidebarLayout>
   );

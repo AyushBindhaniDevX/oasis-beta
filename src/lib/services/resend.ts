@@ -24,6 +24,11 @@ export interface ResendEmailPayload {
   organizationId?: string | null;
   orgContext?: OrgEmailContext;
   from?: string;
+  attachments?: Array<{
+    filename: string;
+    content?: string;
+    path?: string;
+  }>;
 }
 
 export interface EmailLog {
@@ -285,18 +290,23 @@ export async function sendResendEmail(payload: ResendEmailPayload): Promise<{ su
   try {
     let sentViaApi = false;
 
+    const emailBody: Record<string, any> = {
+      from: fromAddress,
+      to: recipients,
+      subject: payload.subject,
+      html,
+    };
+    if (payload.attachments && payload.attachments.length > 0) {
+      emailBody.attachments = payload.attachments;
+    }
+
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       // 1. Try Next.js / Serverless proxy route first
       try {
         const proxyRes = await fetch('/api/send-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from: fromAddress,
-            to: recipients,
-            subject: payload.subject,
-            html,
-          }),
+          body: JSON.stringify(emailBody),
         });
 
         if (proxyRes.ok) {
@@ -318,12 +328,7 @@ export async function sendResendEmail(payload: ResendEmailPayload): Promise<{ su
             'Authorization': `Bearer ${RESEND_API_KEY}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            from: fromAddress,
-            to: recipients,
-            subject: payload.subject,
-            html,
-          }),
+          body: JSON.stringify(emailBody),
         });
 
         if (response.ok) {
@@ -1334,3 +1339,215 @@ export async function sendRejectionEmail(
     organizationId: orgCtx.organizationId,
   });
 }
+
+export interface AppointmentLetterEmailExtra {
+  organizationId?: string | null;
+  organizationName?: string | null;
+  department?: string | null;
+  unit?: string | null;
+  designation?: string | null;
+  joiningDate?: string | null;
+  refNumber?: string | null;
+  basicSalary?: number | null;
+  conveyanceAllowance?: number | null;
+  washingAllowance?: number | null;
+  isPfEligible?: boolean | null;
+  probationMonths?: number | null;
+  signatoryName?: string | null;
+  signatoryTitle?: string | null;
+  pdfBase64?: string | null;
+  pdfFileName?: string | null;
+  portalUrl?: string | null;
+}
+
+/**
+ * 11. Official Letter of Appointment Dispatch
+ */
+export async function sendAppointmentLetterEmail(
+  to: string,
+  candidateName: string,
+  employeeCode: string,
+  designation: string,
+  extra?: AppointmentLetterEmailExtra
+) {
+  const orgCtx = await resolveOrgContext(
+    extra?.organizationId || extra?.organizationName
+      ? {
+          organizationId: extra?.organizationId || undefined,
+          organizationName: extra?.organizationName || undefined,
+          portalUrl: extra?.portalUrl || undefined,
+        }
+      : undefined
+  );
+
+  const orgName = orgCtx.organizationName || 'Shanti Memorial Hospital';
+  const isSMH = !extra?.organizationName || extra?.organizationId === 'smh' || extra?.organizationId === 'shanti-memorial-hospital' || orgName.toLowerCase().includes('shanti');
+  const unit = extra?.unit || (isSMH ? 'Chikitsa Unit of Shanti Memorial Hospital' : `${orgName} Campus`);
+  const subtitle = isSMH ? 'Multi-Super Specialty Healthcare Center · NABH Accredited' : 'Enterprise Workplace & Healthcare Systems';
+  const department = extra?.department || 'Medical & Healthcare Services';
+  const joiningDate = extra?.joiningDate || new Date().toISOString().split('T')[0];
+  const probationMonths = extra?.probationMonths || 6;
+  const signatoryName = extra?.signatoryName || 'Dr. Authorized Signatory';
+  const signatoryTitle = extra?.signatoryTitle || 'Medical Superintendent / HR Director';
+  const currentYear = new Date().getFullYear();
+  const refPrefix = isSMH ? 'SMH' : orgName.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || 'HR';
+  const refNo = extra?.refNumber || `${refPrefix}/HR/APT/${currentYear}/${employeeCode}`;
+  const portalUrl = orgCtx.portalUrl || 'https://hrms-ayushbindhanidevxs-projects.vercel.app';
+
+  // Calculate Hospital / Standard Salary Components
+  const grossMonthly = extra?.basicSalary
+    ? (extra.basicSalary > 20000 ? extra.basicSalary : extra.basicSalary * 2)
+    : 25000;
+  const basic = Math.round(grossMonthly * 0.50);
+  const hra = Math.round(grossMonthly * 0.20);
+  const conveyance = extra?.conveyanceAllowance ?? 1200;
+  const washing = extra?.washingAllowance ?? 500;
+  const specialAllowance = Math.max(0, grossMonthly - (basic + hra + conveyance + washing));
+  const isPf = extra?.isPfEligible !== false;
+  const isEsic = grossMonthly <= 21000;
+
+  const htmlContent = `
+    <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px;">
+      <div style="font-size: 12px; font-weight: 800; color: #166534; letter-spacing: 0.5px; text-transform: uppercase;">
+        OFFICIAL APPOINTMENT LETTER
+      </div>
+      <div style="font-size: 11px; font-weight: 600; color: #15803D; margin-top: 3px;">
+        ${subtitle}
+      </div>
+    </div>
+
+    <div style="border-bottom: 1px dashed #CBD5E1; padding-bottom: 10px; margin-bottom: 18px; font-size: 12.5px; color: #475569;">
+      <div><strong>Ref No:</strong> ${refNo}</div>
+      <div style="margin-top: 4px;"><strong>Date of Issue:</strong> ${new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+    </div>
+
+    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 16px; margin-bottom: 20px; font-size: 13px; line-height: 1.6;">
+      <div style="font-weight: 700; color: #0F172A; font-size: 14px; margin-bottom: 4px;">To,</div>
+      <div style="font-size: 15px; font-weight: 800; color: #0D7377;">${candidateName}</div>
+      <div><strong>Employee Code:</strong> ${employeeCode}</div>
+      <div><strong>Designation:</strong> ${designation}</div>
+      <div><strong>Department:</strong> ${department}</div>
+      <div><strong>Deployment Unit:</strong> ${unit}</div>
+    </div>
+
+    <div style="text-align: center; margin: 16px 0 20px 0;">
+      <h2 style="font-size: 18px; font-weight: 800; color: #0F172A; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; text-decoration: underline;">
+        Formal Letter of Appointment
+      </h2>
+    </div>
+
+    <p style="font-size: 13.5px; line-height: 1.7; color: #334155;">
+      Dear <strong>${candidateName}</strong>,
+    </p>
+
+    <p style="font-size: 13.5px; line-height: 1.7; color: #334155;">
+      With reference to your application, technical evaluations, and master HR onboarding, <strong>${orgName}</strong> is pleased to confirm your appointment as <strong>${designation}</strong> in the <strong>${department}</strong> department at <strong>${unit}</strong>, effective from your date of joining <strong>${joiningDate}</strong>.
+    </p>
+
+    <div style="font-weight: 700; font-size: 13.5px; margin: 20px 0 10px 0; color: #0D7377;">
+      Annexure A: Monthly Compensation Structure
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 16px;">
+      <thead>
+        <tr style="background: #F1F5F9;">
+          <th style="padding: 9px 12px; border: 1px solid #CBD5E1; text-align: left; font-weight: 700; color: #0F172A;">Salary Component</th>
+          <th style="padding: 9px 12px; border: 1px solid #CBD5E1; text-align: right; font-weight: 700; color: #0F172A;">Monthly (INR)</th>
+          <th style="padding: 9px 12px; border: 1px solid #CBD5E1; text-align: right; font-weight: 700; color: #0F172A;">Annual (INR)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1;">Basic Salary (50% of Gross)</td>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1; text-align: right; font-weight: 600;">₹${basic.toLocaleString('en-IN')}</td>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1; text-align: right;">₹${(basic * 12).toLocaleString('en-IN')}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1;">House Rent Allowance (HRA - 20%)</td>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1; text-align: right; font-weight: 600;">₹${hra.toLocaleString('en-IN')}</td>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1; text-align: right;">₹${(hra * 12).toLocaleString('en-IN')}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1;">Conveyance Allowance</td>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1; text-align: right; font-weight: 600;">₹${conveyance.toLocaleString('en-IN')}</td>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1; text-align: right;">₹${(conveyance * 12).toLocaleString('en-IN')}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1;">Washing Allowance</td>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1; text-align: right; font-weight: 600;">₹${washing.toLocaleString('en-IN')}</td>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1; text-align: right;">₹${(washing * 12).toLocaleString('en-IN')}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1;">Special Allowance</td>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1; text-align: right; font-weight: 600;">₹${specialAllowance.toLocaleString('en-IN')}</td>
+          <td style="padding: 8px 12px; border: 1px solid #CBD5E1; text-align: right;">₹${(specialAllowance * 12).toLocaleString('en-IN')}</td>
+        </tr>
+        <tr style="background: #F8FAFC; font-weight: 800; color: #0D7377;">
+          <td style="padding: 9px 12px; border: 1px solid #CBD5E1;">Total Gross Earnings</td>
+          <td style="padding: 9px 12px; border: 1px solid #CBD5E1; text-align: right;">₹${grossMonthly.toLocaleString('en-IN')}</td>
+          <td style="padding: 9px 12px; border: 1px solid #CBD5E1; text-align: right;">₹${(grossMonthly * 12).toLocaleString('en-IN')}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px 14px; margin-bottom: 18px; font-size: 12px; color: #475569;">
+      <strong>Statutory Coverage:</strong> ${isPf ? 'Enrolled under Employees’ Provident Fund (EPF) Act.' : 'Non-PF Staff Category.'} ${isEsic ? 'Covered under ESIC (Gross <= ₹21,000).' : 'Statutory ESIC exempt (Gross > ₹21,000).'}
+    </div>
+
+    <div style="font-weight: 700; font-size: 13.5px; margin: 18px 0 8px 0; color: #0D7377;">
+      Key Terms & Conditions of Employment:
+    </div>
+
+    <ol style="font-size: 12.5px; color: #334155; line-height: 1.8; margin: 0 0 20px 0; padding-left: 20px;">
+      <li><strong>Probation Period:</strong> You will be on probation for a period of ${probationMonths} months from joining date. Services will be confirmed in writing upon satisfactory review.</li>
+      <li><strong>Duty Roster & Shifts:</strong> Working shift schedules are assigned by the respective HOD. The standard scheduled shift is 8 hours. Overtime applies only upon shift completion as per hospital policy.</li>
+      <li><strong>Attendance & Missed Punches:</strong> Attendance punches must be marked via biometric / mobile app. Missed punch regularizations are limited to a maximum of 5 times per calendar month.</li>
+      <li><strong>Confidentiality & Ethics:</strong> You shall strictly uphold NABH protocol, patient clinical privacy, and complete hospital operational confidentiality.</li>
+      <li><strong>Termination & Notice:</strong> During probation, 15 days notice or salary in lieu applies. Post-confirmation notice period is 30 days.</li>
+    </ol>
+
+    <div style="border-top: 1px solid #E2E8F0; padding-top: 20px; margin-top: 24px;">
+      <div style="margin-bottom: 16px;">
+        <div style="font-size: 12px; font-weight: 700; color: #0F172A; border-top: 1px solid #94A3B8; padding-top: 6px;">
+          For ${orgName}
+        </div>
+        <div style="font-size: 11px; color: #64748B;">${signatoryName}<br>${signatoryTitle}</div>
+      </div>
+      <div>
+        <div style="font-size: 12px; font-weight: 700; color: #0F172A; border-top: 1px solid #94A3B8; padding-top: 6px;">
+          Employee Acceptance
+        </div>
+        <div style="font-size: 11px; color: #64748B;">Accepted on the above terms: <strong>${candidateName}</strong></div>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin: 30px 0 10px 0;">
+      <a href="${portalUrl}" style="display: inline-block; background: ${orgCtx.brandColor || '#0D7377'}; color: #FFFFFF !important; padding: 13px 32px; border-radius: 9px; font-weight: 700; font-size: 13.5px; text-decoration: none; box-shadow: 0 4px 12px rgba(0,0,0,0.12);">
+        Sign In to ${orgName} Portal →
+      </a>
+    </div>
+
+    <p style="font-size: 11.5px; color: #64748B; text-align: center; margin-top: 14px;">
+      📄 An official printable PDF copy of this appointment letter has been registered in your employee profile and is downloadable anytime.
+    </p>
+  `;
+
+  const attachments: Array<{ filename: string; content?: string; path?: string }> = [];
+  if (extra?.pdfBase64) {
+    attachments.push({
+      filename: extra.pdfFileName || `Appointment_Letter_${employeeCode}.pdf`,
+      content: extra.pdfBase64,
+    });
+  }
+
+  return sendResendEmail({
+    to,
+    subject: `Official Letter of Appointment — ${candidateName} (${employeeCode}) · ${orgName}`,
+    category: 'onboarding',
+    htmlContent,
+    orgContext: orgCtx,
+    organizationId: orgCtx.organizationId,
+    attachments: attachments.length > 0 ? attachments : undefined,
+  });
+}
+
