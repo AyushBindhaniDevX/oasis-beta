@@ -224,11 +224,11 @@ export default function AdminDashboard() {
   }, [filteredEmployees]);
 
   const filteredPayrollEst = useMemo(() => {
-    return filteredEmployees.reduce((sum, e) => sum + (e.basic_salary || 25000), 0);
+    return filteredEmployees.reduce((sum, e) => sum + (e.basic_salary || 0), 0);
   }, [filteredEmployees]);
 
   const totalMonthlyPayrollEst = useMemo(() => {
-    return employees.reduce((sum, e) => sum + (e.basic_salary || 25000), 0);
+    return employees.reduce((sum, e) => sum + (e.basic_salary || 0), 0);
   }, [employees]);
 
   const deptBreakdownWithPayroll = useMemo(() => {
@@ -237,7 +237,7 @@ export default function AdminDashboard() {
       const d = e.department?.name || 'General Operations';
       if (!map[d]) map[d] = { count: 0, salary: 0 };
       map[d].count += 1;
-      map[d].salary += (e.basic_salary || 25000);
+      map[d].salary += (e.basic_salary || 0);
     });
     const totalCount = Math.max(1, employees.length);
     const totalSalary = Math.max(1, totalMonthlyPayrollEst);
@@ -282,8 +282,8 @@ export default function AdminDashboard() {
     },
     {
       label: 'Hospital Units',
-      value: '3 Brands',
-      sub: 'SMH, Gopal Trust, Chikitsa',
+      value: `${HOSPITAL_UNITS.length} Units`,
+      sub: HOSPITAL_UNITS.join(', '),
       icon: <Building2 size={20} color={colors.textSecondary} />,
       bg: colors.surface,
       border: '#e2e8f0',
@@ -311,7 +311,7 @@ export default function AdminDashboard() {
     { label: 'Present', value: `${attendanceStats.present}`, color: '#059669', bg: '#D1FAE5', icon: Calendar },
     { label: 'Late', value: `${attendanceStats.late}`, color: '#D97706', bg: '#FEF3C7', icon: AlertTriangle },
     { label: 'Admins', value: `${adminCount}`, color: '#7C3AED', bg: '#EDE9FE', icon: ShieldCheck },
-    { label: 'Units', value: '3', color: '#0369A1', bg: '#E0F2FE', icon: Building2 },
+    { label: 'Units', value: `${HOSPITAL_UNITS.length}`, color: '#0369A1', bg: '#E0F2FE', icon: Building2 },
   ];
 
   const mobileAdminActions = [

@@ -28,13 +28,12 @@ import {
   AlertCircle, ArrowRight, Award, Banknote, Bell, Briefcase, CalendarClock,
   CalendarDays, CheckCircle2,
   Clock, LogIn, LogOut as LogOutIcon,
-  Mic, Navigation, Receipt,
+  Mic, Receipt,
   Users, Globe, Lock, Building2, Cake, Heart, PartyPopper, Sparkles
 } from 'lucide-react-native';
 
 // Components & Context
 import { FaceVerificationModal } from '@/components/attendance/FaceVerificationModal';
-import { GeofenceMap } from '@/components/Map/GeofenceMap';
 import { LoadingState } from '@/components/ui/States';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Card } from '@/components/ui/Card';
@@ -680,32 +679,6 @@ export default function EmployeeDashboard() {
                 })}
               </View>
             </Animated.View>
-
-            {/* Workplace Map */}
-            {employee?.workplace?.latitude && employee?.workplace?.longitude && (
-              <Animated.View entering={FadeInDown.delay(400).springify()}>
-                <Card variant="default" padding={0} radius={22} style={{ overflow: 'hidden' }}>
-                  <View style={styles.mapHeader}>
-                    <View style={[styles.mapIcon, { backgroundColor: colors.primaryLight }]}>
-                      <Navigation size={18} color={primaryColor} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.cardHeading, { color: colors.text }]}>Workplace Geofence</Text>
-                      <Text style={[styles.cardSub, { color: colors.textSecondary }]}>{employee.workplace.name || 'Office'} ({geofenceRadius}m radius)</Text>
-                    </View>
-                  </View>
-                  <View style={[styles.mapBox, { borderColor: colors.border }]}>
-                    <GeofenceMap
-                      latitude={employee.workplace.latitude}
-                      longitude={employee.workplace.longitude}
-                      radius={employee.workplace.radius_meters}
-                      name={employee.workplace.name}
-                      outOfBounds={!!isOutsideGeofence}
-                    />
-                  </View>
-                </Card>
-              </Animated.View>
-            )}
           </View>
 
           {/* Side column */}
@@ -945,9 +918,7 @@ const styles = StyleSheet.create({
   qaIcon: { width: 50, height: 50, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   qaLabel: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
 
-  mapHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
   mapIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  mapBox: { marginHorizontal: 16, marginBottom: 16, borderRadius: 16, overflow: 'hidden', borderWidth: 1, height: 180 },
   cardHeading: { fontSize: 15, fontWeight: '700' },
   cardSub: { fontSize: 12, fontWeight: '500', marginTop: 1 },
 
