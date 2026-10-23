@@ -480,7 +480,8 @@ export default function RecruitmentWorkspaceScreen() {
               activeOpacity={0.8}
             >
               <Globe size={14} color="#0D7377" />
-              <Text style={styles.careerPageBtnText}>Public Career Portal ↗</Text>
+              <Text style={styles.careerPageBtnText}>Public Career Portal</Text>
+              <ExternalLink size={12} color="#0D7377" />
             </TouchableOpacity>
 
             <Button

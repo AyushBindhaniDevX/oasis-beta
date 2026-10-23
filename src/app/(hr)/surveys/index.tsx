@@ -19,6 +19,7 @@ import {
   TrendingUp,
   Users,
   CheckCircle,
+  Star,
 } from 'lucide-react-native';
 
 export default function SurveysScreen() {
@@ -97,9 +98,10 @@ export default function SurveysScreen() {
                         <TouchableOpacity
                           key={n}
                           onPress={() => handleVote(survey.id, n)}
-                          style={styles.voteBtn}
+                          style={[styles.voteBtn, { flexDirection: 'row', alignItems: 'center', gap: 3 }]}
                         >
-                          <Text style={styles.voteBtnText}>{n}★</Text>
+                          <Text style={styles.voteBtnText}>{n}</Text>
+                          <Star size={12} color="#0D7377" fill="#0D7377" />
                         </TouchableOpacity>
                       ))}
                     </View>

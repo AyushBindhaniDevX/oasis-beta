@@ -39,6 +39,7 @@ import { getShifts, assignEmployeeShift } from '@/lib/services/shifts';
 import { createAuditLog } from '@/lib/services/audit';
 import { getLeaveBalances, getLeaveTypes, updateLeaveBalance } from '@/lib/services/leave';
 import { formatDate } from '@/utils/format';
+import { HOSPITAL_UNITS, normalizeHospitalUnit, normalizeEmploymentType } from '@/constants/config';
 import { CustomPayrollItemsManager } from '@/components/payroll/CustomPayrollItemsManager';
 import { AppointmentLetterModal } from '@/components/AppointmentLetterModal';
 import type { Profile, Department, Workplace, WorkShift, Employee, LeaveBalance, LeaveType, CustomPayrollItem } from '@/types';
@@ -91,6 +92,8 @@ export default function UserManagementScreen() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'hr' | 'employee'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [unitFilter, setUnitFilter] = useState<string>('all');
+  const [empTypeFilter, setEmpTypeFilter] = useState<string>('all');
 
   // Modals state
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -103,11 +106,13 @@ export default function UserManagementScreen() {
 
   // Add User Form State
   const [newOrgId, setNewOrgId] = useState<string>('');
+  const [newHospitalUnit, setNewHospitalUnit] = useState<string>('Shanti Memorial Hospital');
   const [newFullName, setNewFullName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newRole, setNewRole] = useState<'admin' | 'hr' | 'employee'>('employee');
-  const [newEmploymentType, setNewEmploymentType] = useState('full_time');
+  const [newEmploymentType, setNewEmploymentType] = useState('Regular');
+  const [newGrade, setNewGrade] = useState('M1');
   const [createEmpRecord, setCreateEmpRecord] = useState(true);
   const [newEmpCode, setNewEmpCode] = useState('');
   const [newDeptId, setNewDeptId] = useState<string | null>(null);
@@ -138,7 +143,9 @@ export default function UserManagementScreen() {
   const [editFullName, setEditFullName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editRole, setEditRole] = useState<'admin' | 'hr' | 'employee'>('employee');
-  const [editEmploymentType, setEditEmploymentType] = useState('full_time');
+  const [editEmploymentType, setEditEmploymentType] = useState('Regular');
+  const [editHospitalUnit, setEditHospitalUnit] = useState('Shanti Memorial Hospital');
+  const [editGrade, setEditGrade] = useState('M1');
   const [editEmpId, setEditEmpId] = useState<string | null>(null);
   const [editEmpCode, setEditEmpCode] = useState('');
   const [editDesignation, setEditDesignation] = useState('');
@@ -223,10 +230,13 @@ export default function UserManagementScreen() {
   const openAddModal = () => {
     const defaultOrgId = tenantOrg?.id || currentAdmin?.organization_id || 'shanti-memorial-hospital';
     setNewOrgId(defaultOrgId);
+    setNewHospitalUnit('Shanti Memorial Hospital');
     setNewFullName('');
     setNewEmail('');
     setNewPhone('');
     setNewRole('employee');
+    setNewEmploymentType('Regular');
+    setNewGrade('M1');
     setCreateEmpRecord(true);
     setNewEmpCode(generateRandomCode(defaultOrgId));
     setNewDeptId(departments.length > 0 ? departments[0].id : null);
@@ -308,7 +318,8 @@ export default function UserManagementScreen() {
     setFormError('');
     setSavingUser(true);
     try {
-      const orgId = newOrgId || tenantOrg?.id || currentAdmin?.organization_id || 'shanti-memorial-hospital';
+      // Strictly scope to current tenant organization to prevent cross-organization employee creation
+      const orgId = tenantOrg?.id || currentAdmin?.organization_id || 'shanti-memorial-hospital';
       const fullEmail = newEmail.trim().toLowerCase();
 
       const uid = await createSystemUser({
@@ -331,6 +342,8 @@ export default function UserManagementScreen() {
         esi_exempt: newEsiExempt,
         basic_salary: parseFloat(newSalary) || 0,
         employment_type: newEmploymentType,
+        hospital_unit: newHospitalUnit,
+        grade: newGrade.trim() || undefined,
         epf_percentage: parseFloat(newEpfPercentage) || 0,
         socso_percentage: parseFloat(newSocsoPercentage) || 0,
         tax_percentage: parseFloat(newTaxPercentage) || 0,
@@ -435,7 +448,9 @@ export default function UserManagementScreen() {
         setEditManagerId(empData.manager_id || null);
         setEditSalary(empData.basic_salary ? String(empData.basic_salary) : '0');
         setEditDob(empData.date_of_birth || '');
-        setEditEmploymentType((empData as any).employment_type || 'full_time');
+        setEditEmploymentType(normalizeEmploymentType((empData as any).employment_type));
+        setEditHospitalUnit(normalizeHospitalUnit(empData.hospital_unit));
+        setEditGrade((empData as any).grade || '');
         const tc = (empData as any).tax_config || {};
         setEditUan(tc.uan_number || '');
         setEditEsi(tc.esi_number || '');
@@ -477,7 +492,9 @@ export default function UserManagementScreen() {
         setEditUan('');
         setEditEsi('');
         setEditEsiExempt(false);
-        setEditEmploymentType('full_time');
+        setEditEmploymentType('Regular');
+        setEditHospitalUnit('Shanti Memorial Hospital');
+        setEditGrade('M1');
         setEditEpfPercentage('12');
         setEditSocsoPercentage('0.5');
         setEditTaxPercentage('5');
@@ -557,6 +574,8 @@ export default function UserManagementScreen() {
           washing_allowance: parseFloat(editWashingAllowance) || 500,
           special_allowance: editSpecialAllowance.trim() ? parseFloat(editSpecialAllowance) : null,
           employment_type: editEmploymentType as any,
+          hospital_unit: editHospitalUnit,
+          grade: editGrade.trim() || null,
           tax_config: updatedTaxConfig,
           employment_status: editStatus as any,
           is_hhc_enabled: editIsHhcEnabled,
@@ -571,7 +590,9 @@ export default function UserManagementScreen() {
           department_id: editDeptId || null,
           workplace_id: editWorkplaceId || null,
           designation: editDesignation.trim() || 'Staff',
-          employment_type: editEmploymentType || 'full_time',
+          employment_type: editEmploymentType || 'Regular',
+          hospital_unit: editHospitalUnit || 'Shanti Memorial Hospital',
+          grade: editGrade.trim() || null,
           manager_id: editManagerId || null,
           default_shift_id: editShiftId || null,
           date_of_birth: editDob.trim() || null,
@@ -732,6 +753,18 @@ export default function UserManagementScreen() {
       // Status filter
       if (statusFilter === 'active' && !u.is_active) return false;
       if (statusFilter === 'inactive' && u.is_active) return false;
+      // Unit filter
+      if (unitFilter !== 'all') {
+        const emp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
+        const empUnit = normalizeHospitalUnit(emp?.hospital_unit);
+        if (empUnit.toLowerCase() !== unitFilter.toLowerCase()) return false;
+      }
+      // Employment Category filter
+      if (empTypeFilter !== 'all') {
+        const emp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
+        const empType = normalizeEmploymentType(emp?.employment_type);
+        if (empType !== empTypeFilter) return false;
+      }
       // Search
       if (search.trim()) {
         const query = search.toLowerCase();
@@ -742,7 +775,7 @@ export default function UserManagementScreen() {
       }
       return true;
     });
-  }, [users, roleFilter, statusFilter, search]);
+  }, [users, roleFilter, statusFilter, unitFilter, empTypeFilter, search, managers]);
 
   // Statistics
   const adminCount = users.filter((u) => u.role === 'admin').length;
@@ -920,6 +953,64 @@ export default function UserManagementScreen() {
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* Unit / Sub-Brand Filter Chips */}
+          <View style={{ marginTop: 2 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
+              {(['all', 'Shanti Memorial Hospital', 'Gopal Trust', 'Chikitsa'] as const).map((u) => (
+                <TouchableOpacity
+                  key={u}
+                  onPress={() => setUnitFilter(u)}
+                  style={[
+                    styles.filterChip,
+                    { flexDirection: 'row', alignItems: 'center', gap: 6 },
+                    unitFilter === u
+                      ? { backgroundColor: '#0D7377' }
+                      : { backgroundColor: '#f1f5f9' },
+                  ]}
+                >
+                  {u === 'all' ? (
+                    <Building size={14} color={unitFilter === u ? '#FFF' : colors.textSecondary} />
+                  ) : (
+                    <HeartPulse size={14} color={unitFilter === u ? '#FFF' : colors.textSecondary} />
+                  )}
+                  <Text
+                    style={[
+                      styles.chipText,
+                      { color: unitFilter === u ? '#FFF' : colors.text, fontWeight: '700' },
+                    ]}
+                  >
+                    {u === 'all' ? 'All Units' : u === 'Shanti Memorial Hospital' ? 'SMH Main' : u}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* Employment Category Filter Chips */}
+          <View style={styles.chipRow}>
+            {(['all', 'Regular', 'Contractual'] as const).map((c) => (
+              <TouchableOpacity
+                key={c}
+                onPress={() => setEmpTypeFilter(c)}
+                style={[
+                  styles.filterChip,
+                  empTypeFilter === c
+                    ? { backgroundColor: '#4F46E5' }
+                    : { backgroundColor: '#f1f5f9' },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.chipText,
+                    { color: empTypeFilter === c ? '#FFF' : colors.text },
+                  ]}
+                >
+                  {c === 'all' ? 'All Types' : c}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
         {/* Users Table / Grid */}
@@ -961,7 +1052,7 @@ export default function UserManagementScreen() {
                   <Avatar name={u.full_name} url={u.avatar_url} size={44} />
 
                   <View style={{ flex: 1, gap: 2, paddingHorizontal: 12 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       <Text style={[styles.userName, { color: colors.text }]}>{u.full_name}</Text>
                       <Badge
                         label={String(u.role || 'employee').toUpperCase()}
@@ -971,6 +1062,24 @@ export default function UserManagementScreen() {
                         label={u.is_active ? 'ACTIVE' : 'INACTIVE'}
                         variant={u.is_active ? 'successLight' : 'dangerLight'}
                       />
+                      {(() => {
+                        const linkedEmp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
+                        if (!linkedEmp) return null;
+                        const unit = normalizeHospitalUnit(linkedEmp.hospital_unit);
+                        const empType = normalizeEmploymentType(linkedEmp.employment_type);
+                        return (
+                          <>
+                            <Badge
+                              label={unit === 'Shanti Memorial Hospital' ? 'SMH' : unit}
+                              variant="neutral"
+                            />
+                            <Badge
+                              label={empType.toUpperCase()}
+                              variant={empType === 'Regular' ? 'successLight' : 'warningLight'}
+                            />
+                          </>
+                        );
+                      })()}
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 2 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -1113,27 +1222,44 @@ export default function UserManagementScreen() {
                   </View>
                 ) : null}
 
-                {/* Organization / Entity Selector */}
-                {(() => {
-                  const orgOptions =
-                    allOrganizations && allOrganizations.length > 0
-                      ? allOrganizations.map((o) => ({
-                          label: o.name || o.id,
-                          value: o.id,
-                        }))
-                      : [
-                          { label: 'Shanti Memorial Hospital', value: 'shanti-memorial-hospital' },
-                          { label: 'Subedge Technology Pvt Ltd', value: '00000000-0000-0000-0000-000000000001' },
-                        ];
-                  return (
-                    <Select
-                      label="Organization / Entity *"
-                      options={orgOptions}
-                      value={newOrgId || orgOptions[0]?.value}
-                      onValueChange={handleOrgChange}
-                    />
-                  );
-                })()}
+                {/* Organization Info Banner (Fixed to Active Org to prevent cross-org employee creation) */}
+                <View style={{ backgroundColor: '#f8fafc', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: colors.textSecondary, letterSpacing: 0.5 }}>ACTIVE ORGANIZATION</Text>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text, marginTop: 2 }}>
+                      {tenantOrg?.name || 'Shanti Memorial Hospital'}
+                    </Text>
+                  </View>
+                  <View style={{ backgroundColor: '#E2E8F0', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#475569' }}>LOCKED</Text>
+                  </View>
+                </View>
+
+                {/* Unit / Sub-Brand Selector */}
+                <Select
+                  label="Hospital Unit / Sub-Brand *"
+                  options={HOSPITAL_UNITS.map((u) => ({ label: u, value: u }))}
+                  value={newHospitalUnit}
+                  onValueChange={(val) => setNewHospitalUnit(val || 'Shanti Memorial Hospital')}
+                />
+
+                {/* Employment Category */}
+                <Select
+                  label="Employment Category *"
+                  options={[
+                    { label: 'Regular (Direct Payroll)', value: 'Regular' },
+                    { label: 'Contractual (Contract / Outsource)', value: 'Contractual' },
+                  ]}
+                  value={newEmploymentType}
+                  onValueChange={(val) => setNewEmploymentType(val || 'Regular')}
+                />
+
+                <Input
+                  label="Grade / Band (e.g. M1, M2, N2, N4, Housekeeping)"
+                  placeholder="e.g. M1"
+                  value={newGrade}
+                  onChangeText={setNewGrade}
+                />
 
                 <Input
                   label="Full Name *"
@@ -1162,11 +1288,18 @@ export default function UserManagementScreen() {
                 {/* Role Selector */}
                 <Select
                   label="Assign Role *"
-                  options={[
-                    { label: 'Employee (Standard Access)', value: 'employee' },
-                    { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
-                    { label: 'Administrator (System & Org Settings)', value: 'admin' },
-                  ]}
+                  options={
+                    currentAdmin?.role === 'hr'
+                      ? [
+                          { label: 'Employee (Standard Access)', value: 'employee' },
+                          { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
+                        ]
+                      : [
+                          { label: 'Employee (Standard Access)', value: 'employee' },
+                          { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
+                          { label: 'Administrator (System & Org Settings)', value: 'admin' },
+                        ]
+                  }
                   value={newRole}
                   onValueChange={(val) => setNewRole(val as any)}
                 />
@@ -1452,11 +1585,18 @@ export default function UserManagementScreen() {
 
               <Select
                 label="System Role"
-                options={[
-                  { label: 'Employee (Standard Access)', value: 'employee' },
-                  { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
-                  { label: 'Administrator (System & Org Settings)', value: 'admin' },
-                ]}
+                options={
+                  currentAdmin?.role === 'hr'
+                    ? [
+                        { label: 'Employee (Standard Access)', value: 'employee' },
+                        { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
+                      ]
+                    : [
+                        { label: 'Employee (Standard Access)', value: 'employee' },
+                        { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
+                        { label: 'Administrator (System & Org Settings)', value: 'admin' },
+                      ]
+                }
                 value={editRole}
                 onValueChange={(val) => setEditRole(val as any)}
               />
@@ -1533,16 +1673,29 @@ export default function UserManagementScreen() {
                   onChangeText={setEditDob}
                 />
 
+                {/* Unit / Sub-Brand */}
                 <Select
-                  label="Employment Type"
+                  label="Hospital Unit / Sub-Brand *"
+                  options={HOSPITAL_UNITS.map((u) => ({ label: u, value: u }))}
+                  value={editHospitalUnit}
+                  onValueChange={(val) => setEditHospitalUnit(val || 'Shanti Memorial Hospital')}
+                />
+
+                <Select
+                  label="Employment Category *"
                   options={[
-                    { label: 'Full Time (Permanent)', value: 'full_time' },
-                    { label: 'Part Time', value: 'part_time' },
-                    { label: 'Contract / Consultant', value: 'contract' },
-                    { label: 'Intern / Trainee', value: 'intern' },
+                    { label: 'Regular (Direct Payroll)', value: 'Regular' },
+                    { label: 'Contractual (Contract / Outsource)', value: 'Contractual' },
                   ]}
-                  value={editEmploymentType}
-                  onValueChange={(val) => setEditEmploymentType(val || 'full_time')}
+                  value={normalizeEmploymentType(editEmploymentType)}
+                  onValueChange={(val) => setEditEmploymentType(val || 'Regular')}
+                />
+
+                <Input
+                  label="Grade / Band (e.g. M1, M2, N2, N4, Housekeeping)"
+                  placeholder="e.g. M1"
+                  value={editGrade}
+                  onChangeText={setEditGrade}
                 />
 
                 <Input

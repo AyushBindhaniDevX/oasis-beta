@@ -33,6 +33,9 @@ import {
   Send,
   Calendar,
   Hash,
+  Clock,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react-native';
 
 interface AppointmentLetterModalProps {
@@ -315,10 +318,13 @@ export function AppointmentLetterModal({
           </View>
 
           {storedRecord?.last_emailed_at && (
-            <Text style={{ fontSize: 11, color: '#64748B', marginTop: 8 }}>
-              🕒 Last emailed: {formatDate(storedRecord.last_emailed_at)} ({storedRecord.resend_count || 1} time
-              {(storedRecord.resend_count || 1) > 1 ? 's' : ''})
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 }}>
+              <Clock size={12} color="#64748B" />
+              <Text style={{ fontSize: 11, color: '#64748B' }}>
+                Last emailed: {formatDate(storedRecord.last_emailed_at)} ({storedRecord.resend_count || 1} time
+                {(storedRecord.resend_count || 1) > 1 ? 's' : ''})
+              </Text>
+            </View>
           )}
         </View>
 
@@ -378,9 +384,16 @@ export function AppointmentLetterModal({
                 </Text>
               </View>
             </View>
-            <Text style={{ fontSize: 13, fontWeight: '700', color: '#D97706' }}>
-              {showPreview ? 'Collapse ▲' : 'View ▼'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#D97706' }}>
+                {showPreview ? 'Collapse' : 'View'}
+              </Text>
+              {showPreview ? (
+                <ChevronUp size={14} color="#D97706" />
+              ) : (
+                <ChevronDown size={14} color="#D97706" />
+              )}
+            </View>
           </TouchableOpacity>
 
           {showPreview ? (

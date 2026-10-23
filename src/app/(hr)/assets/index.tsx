@@ -665,9 +665,12 @@ export default function HRAssetsScreen() {
                         Grant camera permission to scan physical QR codes and barcode stickers attached to company devices.
                       </Text>
                       {cameraError && (
-                        <Text style={[styles.cameraPermSub, { color: '#DC2626', marginTop: 4, fontWeight: '600' }]}>
-                          ⚠️ {cameraError}
-                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 }}>
+                          <AlertTriangle size={14} color="#DC2626" />
+                          <Text style={[styles.cameraPermSub, { color: '#DC2626', fontWeight: '600' }]}>
+                            {cameraError}
+                          </Text>
+                        </View>
                       )}
                       <TouchableOpacity
                         onPress={handleRequestCameraPermission}

@@ -42,6 +42,7 @@ import {
   Layers,
   Sparkles,
   Play,
+  CornerDownRight,
 } from 'lucide-react-native';
 
 export default function HRLearningScreen() {
@@ -256,9 +257,12 @@ export default function HRLearningScreen() {
                         <View key={mod.id} style={{ marginTop: 4 }}>
                           <Text style={styles.modTitle}>• {mod.title}</Text>
                           {mod.lessons.map((les) => (
-                            <Text key={les.id} style={styles.lesTitle}>
-                              {'   '}↳ [{les.type.toUpperCase()}] {les.title} ({les.duration_minutes}m)
-                            </Text>
+                            <View key={les.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 16 }}>
+                              <CornerDownRight size={12} color="#64748B" />
+                              <Text style={styles.lesTitle}>
+                                [{les.type.toUpperCase()}] {les.title} ({les.duration_minutes}m)
+                              </Text>
+                            </View>
                           ))}
                         </View>
                       ))}

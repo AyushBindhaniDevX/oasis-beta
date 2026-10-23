@@ -246,11 +246,14 @@ export function RegularizationModal({
                       {remaining} remaining for {monthKey}
                     </Text>
                   </View>
-                  <Text style={{ fontSize: 11, color: isBlocked ? '#991B1B' : '#115E59' }}>
-                    {isBlocked
-                      ? '⚠️ Maximum 5 regularizations per month policy reached. Contact HR for administrative assistance.'
-                      : 'Hospital Policy: Employees may regularize missed punches a maximum of 5 times per month.'}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {isBlocked && <AlertCircle size={14} color="#991B1B" />}
+                    <Text style={{ fontSize: 11, color: isBlocked ? '#991B1B' : '#115E59', flex: 1 }}>
+                      {isBlocked
+                        ? 'Maximum 5 regularizations per month policy reached. Contact HR for administrative assistance.'
+                        : 'Hospital Policy: Employees may regularize missed punches a maximum of 5 times per month.'}
+                    </Text>
+                  </View>
                 </View>
               );
             })()}

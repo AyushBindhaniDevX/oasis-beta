@@ -155,7 +155,9 @@ export interface Employee {
   is_hhc_enabled?: boolean;
   is_pf_eligible?: boolean; // PF vs Non-PF categorization
   is_overtime_eligible?: boolean; // Overtime calculation designated staff
-  hospital_unit?: 'Shanti Memorial Hospital' | 'Chikitsa Unit' | string;
+  hospital_unit?: 'Shanti Memorial Hospital' | 'Gopal Trust' | 'Chikitsa' | string;
+  employment_type?: 'Regular' | 'Contractual' | 'full_time' | 'contract' | string;
+  grade?: string | null;
   conveyance_allowance?: number;
   washing_allowance?: number;
   special_allowance?: number | null;
@@ -339,6 +341,8 @@ export interface PayrollPeriod {
   organization_id: string;
   month: number;
   year: number;
+  unit?: string;
+  hospital_unit?: string;
   status: PayrollPeriodStatus;
   processed_at: string | null;
   created_at: string;
@@ -356,16 +360,20 @@ export interface Payroll {
   gross_salary: number;
   net_salary: number;
   status: PayrollStatus;
-  // Shanti Memorial Hospital & Chikitsa Unit explicit breakdown fields
+  // Shanti Memorial Hospital, Gopal Trust & Chikitsa Unit explicit breakdown fields
   hospital_unit?: string;
+  employment_type?: string;
   is_pf_eligible?: boolean;
-  salary_details?: number; // Base monthly scale
+  salary_details?: number; // Base monthly scale / Offer Salary
   payable_days?: number; // Standard 30 days
   present_days?: number;
   off_days?: number;
   leave_days?: number;
   holiday_days?: number;
   paid_days?: number;
+  pl_days?: number;
+  cl_days?: number;
+  sl_days?: number;
   basic?: number; // 50% of G. Salary
   hra?: number; // 20% of G. Salary
   conveyance?: number;
@@ -376,6 +384,8 @@ export interface Payroll {
   pf?: number;
   ot_ded?: number; // miscellaneous deductions
   gross_deductions?: number;
+  total_deductions?: number;
+  total_salary?: number; // Gross - Total Deductions
   ot_hours_or_days?: number;
   ot_amount?: number;
   other_allowances?: number;
@@ -508,6 +518,14 @@ export interface PerformanceRatingBreakdown {
   teamwork: number; // 1-5
 }
 
+export interface AppraisalKpi {
+  id: string;
+  name: string;
+  description?: string;
+  weight?: number; // e.g. weight percentage or 1
+  target_score?: number; // 1-5
+}
+
 export interface AppraisalReview {
   id: string;
   organization_id: string;
@@ -523,6 +541,9 @@ export interface AppraisalReview {
   manager_comments?: string | null;
   manager_submitted_at?: string | null;
   ratings_breakdown?: PerformanceRatingBreakdown | null;
+  custom_kpis?: AppraisalKpi[];
+  self_kpi_ratings?: Record<string, number>;
+  manager_kpi_ratings?: Record<string, number>;
   overall_score?: number | null; // out of 100 or 5.0
   recommendation?: AppraisalRecommendation | null;
   created_at: string;

@@ -40,7 +40,9 @@ import type {
   Employee,
   GoalPriority,
   KudosBadge,
+  AppraisalKpi,
 } from '@/types';
+import { PRESET_KPIS } from '@/app/(hr)/performance';
 import {
   Award,
   Target,
@@ -91,6 +93,7 @@ export default function EmployeePerformanceScreen() {
   const [savingGoal, setSavingGoal] = useState(false);
 
   // Self Review Form
+  const [selfKpiRatings, setSelfKpiRatings] = useState<Record<string, number>>({});
   const [selfTech, setSelfTech] = useState(4);
   const [selfProd, setSelfProd] = useState(4);
   const [selfComm, setSelfComm] = useState(5);
@@ -202,6 +205,15 @@ export default function EmployeePerformanceScreen() {
 
   const handleOpenSelfReview = (appraisal: AppraisalReview) => {
     setSelectedAppraisal(appraisal);
+    const kpis: AppraisalKpi[] =
+      appraisal.custom_kpis && appraisal.custom_kpis.length > 0
+        ? appraisal.custom_kpis
+        : PRESET_KPIS.standard;
+    const initialKpiRatings: Record<string, number> = {};
+    kpis.forEach((kpi) => {
+      initialKpiRatings[kpi.id] = appraisal.self_kpi_ratings?.[kpi.id] || 4;
+    });
+    setSelfKpiRatings(initialKpiRatings);
     setSelfTech(appraisal.ratings_breakdown?.technical_skills || 4);
     setSelfProd(appraisal.ratings_breakdown?.productivity || 4);
     setSelfComm(appraisal.ratings_breakdown?.communication || 5);
@@ -215,12 +227,23 @@ export default function EmployeePerformanceScreen() {
     if (!selectedAppraisal || !profile) return;
     setSubmittingSelf(true);
     try {
-      const avg = (selfTech + selfProd + selfComm + selfLead + selfTeam) / 5;
+      const activeKpis: AppraisalKpi[] =
+        selectedAppraisal.custom_kpis && selectedAppraisal.custom_kpis.length > 0
+          ? selectedAppraisal.custom_kpis
+          : PRESET_KPIS.standard;
+
+      const kpiValues = activeKpis.map((k) => selfKpiRatings[k.id] || 4);
+      const avg =
+        kpiValues.length > 0
+          ? kpiValues.reduce((sum, v) => sum + v, 0) / kpiValues.length
+          : 4;
+
       await submitSelfReview(
         selectedAppraisal.id,
         {
           self_rating: parseFloat(avg.toFixed(1)),
           self_comments: selfComments.trim() || 'Submitted self evaluation.',
+          self_kpi_ratings: selfKpiRatings,
           ratings_breakdown: {
             technical_skills: selfTech,
             productivity: selfProd,
@@ -374,15 +397,21 @@ export default function EmployeePerformanceScreen() {
                       <View style={styles.ratingsGrid}>
                         <View style={styles.ratingBox}>
                           <Text style={styles.ratingBoxLabel}>Self Rating</Text>
-                          <Text style={[styles.ratingBoxValue, { color: '#0D7377' }]}>
-                            ★ {rev.self_rating ? rev.self_rating.toFixed(1) : 'Pending'}
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                            <Star size={13} color="#0D7377" fill="#0D7377" />
+                            <Text style={[styles.ratingBoxValue, { color: '#0D7377' }]}>
+                              {rev.self_rating ? rev.self_rating.toFixed(1) : 'Pending'}
+                            </Text>
+                          </View>
                         </View>
                         <View style={styles.ratingBox}>
                           <Text style={styles.ratingBoxLabel}>Manager Rating</Text>
-                          <Text style={[styles.ratingBoxValue, { color: '#4F46E5' }]}>
-                            ★ {rev.manager_rating ? rev.manager_rating.toFixed(1) : 'In Review'}
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                            <Star size={13} color="#4F46E5" fill="#4F46E5" />
+                            <Text style={[styles.ratingBoxValue, { color: '#4F46E5' }]}>
+                              {rev.manager_rating ? rev.manager_rating.toFixed(1) : 'In Review'}
+                            </Text>
+                          </View>
                         </View>
                         <View style={styles.ratingBox}>
                           <Text style={styles.ratingBoxLabel}>Final Score</Text>
@@ -611,38 +640,74 @@ export default function EmployeePerformanceScreen() {
       >
         <ScrollView style={{ maxHeight: 480 }} showsVerticalScrollIndicator={false}>
           <View style={{ gap: 14 }}>
-            <Text style={{ fontSize: 13, color: '#64748B' }}>
-              Rate your own contributions across the following dimensions (1 to 5 stars):
-            </Text>
-            {[
-              { label: 'Technical Execution & Quality', val: selfTech, set: setSelfTech },
-              { label: 'Speed & Project Delivery', val: selfProd, set: setSelfProd },
-              { label: 'Communication & Collaboration', val: selfComm, set: setSelfComm },
-              { label: 'Leadership & Problem Solving', val: selfLead, set: setSelfLead },
-              { label: 'Teamwork & Core Values', val: selfTeam, set: setSelfTeam },
-            ].map((d) => (
-              <View
-                key={d.label}
-                style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
-              >
-                <Text style={{ fontSize: 13, color: '#1E293B', flex: 1 }}>{d.label}</Text>
-                <View style={{ flexDirection: 'row', gap: 4 }}>
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <TouchableOpacity
-                      key={star}
-                      onPress={() => d.set(star)}
-                      style={[styles.starBtn, d.val >= star && { backgroundColor: '#FEF08A' }]}
-                    >
-                      <Star
-                        size={18}
-                        color={d.val >= star ? '#CA8A04' : '#94A3B8'}
-                        fill={d.val >= star ? '#EAB308' : 'none'}
-                      />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            ))}
+            <View style={{ backgroundColor: '#F0FDFA', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#CCECEC' }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F766E' }}>
+                {selectedAppraisal?.cycle_name || 'Appraisal Cycle'}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#134E4A', marginTop: 2 }}>
+                Period: {selectedAppraisal?.period} • Rate your performance on each evaluated KPI (1 to 5 stars).
+              </Text>
+            </View>
+
+            {(() => {
+              const activeKpis: AppraisalKpi[] =
+                selectedAppraisal?.custom_kpis && selectedAppraisal.custom_kpis.length > 0
+                  ? selectedAppraisal.custom_kpis
+                  : PRESET_KPIS.standard;
+
+              return activeKpis.map((kpi) => {
+                const currentRating = selfKpiRatings[kpi.id] || 4;
+                return (
+                  <View
+                    key={kpi.id}
+                    style={{
+                      padding: 12,
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: '#E2E8F0',
+                      backgroundColor: '#FAFAFA',
+                      gap: 8,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E293B', flex: 1 }}>
+                        {kpi.name}
+                      </Text>
+                      {kpi.weight ? (
+                        <View style={{ backgroundColor: '#E2E8F0', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                          <Text style={{ fontSize: 10, fontWeight: '700', color: '#475569' }}>
+                            Weight: {kpi.weight}%
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    {kpi.description ? (
+                      <Text style={{ fontSize: 11, color: '#64748B' }}>{kpi.description}</Text>
+                    ) : null}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: '#0F766E' }}>
+                        Your Rating: {currentRating} / 5 Stars
+                      </Text>
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <TouchableOpacity
+                            key={star}
+                            onPress={() => setSelfKpiRatings((prev) => ({ ...prev, [kpi.id]: star }))}
+                            style={[styles.starBtn, currentRating >= star && { backgroundColor: '#FEF08A' }]}
+                          >
+                            <Star
+                              size={18}
+                              color={currentRating >= star ? '#CA8A04' : '#94A3B8'}
+                              fill={currentRating >= star ? '#EAB308' : 'none'}
+                            />
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                );
+              });
+            })()}
 
             <View>
               <Text style={styles.formLabel}>Self Assessment Summary & Key Achievements</Text>

@@ -29,7 +29,7 @@ import {
   CalendarDays, CheckCircle2,
   Clock, LogIn, LogOut as LogOutIcon,
   Mic, Navigation, Receipt,
-  Users, Globe, Lock, Building2, Cake, Heart, PartyPopper
+  Users, Globe, Lock, Building2, Cake, Heart, PartyPopper, Sparkles
 } from 'lucide-react-native';
 
 // Components & Context
@@ -509,7 +509,10 @@ export default function EmployeeDashboard() {
                       <PartyPopper size={32} color="#A16207" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 20, fontWeight: '800', color: '#854D0E', marginBottom: 4 }}>Happy Birthday, {profile?.full_name?.split(' ')[0]}! 🎉</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <Text style={{ fontSize: 20, fontWeight: '800', color: '#854D0E' }}>Happy Birthday, {profile?.full_name?.split(' ')[0]}!</Text>
+                        <Sparkles size={20} color="#854D0E" />
+                      </View>
                       <Text style={{ fontSize: 14, color: '#A16207', fontWeight: '500' }}>
                         Wishing you a fantastic day from all of us at {organization?.name || 'the team'}!
                       </Text>

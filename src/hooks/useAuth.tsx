@@ -55,163 +55,126 @@ interface AuthState {
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AppUser | null>(() => {
-    if (typeof window !== 'undefined') {
-      const sso = getSsoSession();
-      if (sso && (sso.uid || sso.email)) {
-        const userEmail = (sso.email || '').toLowerCase().trim();
-        const fullName = sso.displayName || userEmail.split('@')[0] || 'User';
-        const role: UserRole = (sso.role as UserRole) || 'employee';
-        return {
-          id: sso.uid || 'sso-user',
-          email: userEmail,
-          fullName,
-          imageUrl: sso.photoURL || null,
-          user_metadata: {
-            full_name: fullName,
-            role,
-            organization_id: sso.organizationId || '00000000-0000-0000-0000-000000000001',
-          },
-        };
-      }
-    }
-    return null;
-  });
-
-  const [profile, setProfile] = useState<Profile | null>(() => {
-    if (typeof window !== 'undefined') {
-      const sso = getSsoSession();
-      if (sso && (sso.uid || sso.email)) {
-        const userEmail = (sso.email || '').toLowerCase().trim();
-        const isSMHUser = userEmail.includes('shantimemorialhospital.com') || userEmail === 'ayushbindhani001@gmail.com';
-        const defaultOrgId = sso.organizationId || (isSMHUser ? 'shanti-memorial-hospital' : '00000000-0000-0000-0000-000000000001');
-        const isAdminEmail = userEmail.includes('admin') || userEmail === 'ayushbindhani001@gmail.com';
-        const isHrEmail = userEmail.includes('hr') || userEmail.includes('nurse');
-        const role: UserRole = (sso.role as UserRole) || (isAdminEmail ? 'admin' : isHrEmail ? 'hr' : 'employee');
-        const fullName = sso.displayName || (userEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : userEmail.split('@')[0]) || 'HRMS User';
-        const now = new Date().toISOString();
-        return {
-          id: sso.uid || 'sso-user',
-          email: userEmail,
-          full_name: fullName,
-          phone: sso.phone || null,
-          avatar_url: sso.photoURL || null,
-          role,
-          organization_id: defaultOrgId,
-          is_active: true,
-          created_at: now,
-          updated_at: now,
-        };
-      }
-    }
-    return null;
-  });
-
-  const [isLoading, setIsLoading] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      const sso = getSsoSession();
-      if (sso && (sso.uid || sso.email)) return false;
-    }
-    return true;
-  });
+  // Start with clean unauthenticated state until verified against database
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const loggedInUserIdRef = useRef<string | null>(null);
 
-  // Helper: Fetch or auto-create profile document from Firebase Auth User
-  const syncProfileForAuthUser = useCallback(async (authUser: FirebaseUser): Promise<Profile | null> => {
-    if (!authUser?.uid) return null;
+  // Helper: Fetch, verify, and validate profile against Firestore
+  // Enforces: Active accounts only, must be registered employee/HR/Admin
+  const syncProfileForAuthUser = useCallback(async (authUser: FirebaseUser): Promise<Profile> => {
+    if (!authUser?.uid) {
+      throw new Error('ACCESS_DENIED_INVALID: Invalid authentication session.');
+    }
 
-    try {
-      // 1. Check profile by auth UID in 'profiles' collection
-      const profRef = doc(db, 'profiles', authUser.uid);
-      const profSnap = await getDoc(profRef);
+    const cleanEmail = (authUser.email || '').toLowerCase().trim();
 
-      if (profSnap.exists()) {
-        const data = profSnap.data() as Profile;
-        const cleanEmail = authUser.email?.toLowerCase().trim() || '';
+    // 1. Check profile by auth UID in 'profiles' collection
+    const profRef = doc(db, 'profiles', authUser.uid);
+    const profSnap = await getDoc(profRef);
+
+    if (profSnap.exists()) {
+      const data = profSnap.data() as Profile;
+
+      // Strict Active Account Check
+      if (data.is_active === false) {
+        throw new Error('ACCESS_DENIED_DEACTIVATED: Your account has been deactivated. Please contact your HR department or administrator.');
+      }
+
+      // Strict Role Check (Must be employee, hr, or admin)
+      if (!data.role || !['employee', 'hr', 'admin'].includes(data.role)) {
+        throw new Error('ACCESS_DENIED_ROLE: Your account role is not authorized to access this portal.');
+      }
+
+      if (
+        (cleanEmail === 'ayushbindhani001@gmail.com' || cleanEmail.includes('shantimemorialhospital.com')) &&
+        data.organization_id !== 'shanti-memorial-hospital'
+      ) {
+        const updated = {
+          ...data,
+          organization_id: 'shanti-memorial-hospital',
+          role: (cleanEmail === 'ayushbindhani001@gmail.com' ? 'admin' : data.role) as UserRole,
+          full_name: cleanEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : data.full_name,
+          updated_at: new Date().toISOString(),
+        };
+        await setDoc(profRef, updated, { merge: true });
+        return { ...updated, id: profSnap.id };
+      }
+
+      return { ...data, id: profSnap.id } as Profile;
+    }
+
+    // 2. Check profile by email (pre-created by HR/Admin during user provisioning)
+    if (cleanEmail) {
+      const emailQuery = query(
+        collection(db, 'profiles'),
+        where('email', '==', cleanEmail),
+        limit(1)
+      );
+      const emailSnap = await getDocs(emailQuery);
+
+      if (!emailSnap.empty) {
+        const existingDoc = emailSnap.docs[0];
+        let existingData = existingDoc.data() as Profile;
+
+        // Strict Active Account Check
+        if (existingData.is_active === false) {
+          throw new Error('ACCESS_DENIED_DEACTIVATED: Your account has been deactivated. Please contact your HR department or administrator.');
+        }
+
+        // Strict Role Check
+        if (!existingData.role || !['employee', 'hr', 'admin'].includes(existingData.role)) {
+          throw new Error('ACCESS_DENIED_ROLE: Your account role is not authorized to access this portal.');
+        }
+
         if (
           (cleanEmail === 'ayushbindhani001@gmail.com' || cleanEmail.includes('shantimemorialhospital.com')) &&
-          data.organization_id !== 'shanti-memorial-hospital'
+          existingData.organization_id !== 'shanti-memorial-hospital'
         ) {
-          const updated = {
-            ...data,
+          existingData = {
+            ...existingData,
             organization_id: 'shanti-memorial-hospital',
-            role: (cleanEmail === 'ayushbindhani001@gmail.com' ? 'admin' : data.role) as UserRole,
-            full_name: cleanEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : data.full_name,
+            role: (cleanEmail === 'ayushbindhani001@gmail.com' ? 'admin' : existingData.role) as UserRole,
+            full_name: cleanEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : existingData.full_name,
+          };
+        }
+
+        if (existingDoc.id !== authUser.uid) {
+          const updatedProf: Profile = {
+            ...existingData,
+            id: authUser.uid,
+            is_active: true,
             updated_at: new Date().toISOString(),
           };
-          await setDoc(profRef, updated, { merge: true });
-          return { ...updated, id: profSnap.id };
-        }
-        return { ...data, id: profSnap.id } as Profile;
-      }
-
-      // 2. Check profile by email (if pre-created during seeding or by admin)
-      if (authUser.email) {
-        const cleanEmail = authUser.email.toLowerCase().trim();
-        const emailQuery = query(
-          collection(db, 'profiles'),
-          where('email', '==', cleanEmail),
-          limit(1)
-        );
-        const emailSnap = await getDocs(emailQuery);
-
-        if (!emailSnap.empty) {
-          const existingDoc = emailSnap.docs[0];
-          let existingData = existingDoc.data() as Profile;
-
-          if (
-            (cleanEmail === 'ayushbindhani001@gmail.com' || cleanEmail.includes('shantimemorialhospital.com')) &&
-            existingData.organization_id !== 'shanti-memorial-hospital'
-          ) {
-            existingData = {
-              ...existingData,
-              organization_id: 'shanti-memorial-hospital',
-              role: (cleanEmail === 'ayushbindhani001@gmail.com' ? 'admin' : existingData.role) as UserRole,
-              full_name: cleanEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : existingData.full_name,
-            };
-          }
-
-          if (existingDoc.id !== authUser.uid) {
-            const updatedProf = {
-              ...existingData,
-              id: authUser.uid,
-              updated_at: new Date().toISOString(),
-            };
-            // Set under new auth UID and delete the legacy placeholder ID
-            await setDoc(doc(db, 'profiles', authUser.uid), updatedProf);
-            try {
-              // Update references in employees collection
-              const empQ = query(collection(db, 'employees'), where('profile_id', '==', existingDoc.id));
-              const empSnap = await getDocs(empQ);
-              for (const empDoc of empSnap.docs) {
-                await updateDoc(doc(db, 'employees', empDoc.id), { profile_id: authUser.uid });
-              }
-              await deleteDoc(doc(db, 'profiles', existingDoc.id));
-            } catch (refErr) {
-              console.warn('Reference migration warning:', refErr);
+          await setDoc(doc(db, 'profiles', authUser.uid), updatedProf);
+          try {
+            const empQ = query(collection(db, 'employees'), where('profile_id', '==', existingDoc.id));
+            const empSnap = await getDocs(empQ);
+            for (const empDoc of empSnap.docs) {
+              await updateDoc(doc(db, 'employees', empDoc.id), { profile_id: authUser.uid });
             }
-            return updatedProf as Profile;
+            await deleteDoc(doc(db, 'profiles', existingDoc.id));
+          } catch (refErr) {
+            console.warn('Reference migration note:', refErr);
           }
-          return { ...existingData, id: existingDoc.id } as Profile;
+          return updatedProf;
         }
+
+        return { ...existingData, id: existingDoc.id } as Profile;
       }
+    }
 
-      // 3. Verify user authorization before provisioning
-      const userEmail = (authUser.email || '').trim().toLowerCase();
-      const isSuperAdmin =
-        userEmail === 'ayushbindhani001@gmail.com' ||
-        userEmail.endsWith('@shantimemorialhospital.com') ||
-        userEmail.endsWith('@subedge.com') ||
-        userEmail.includes('admin');
-
-      let linkedEmployee: any = null;
+    // 3. Check employees directory if profile not yet created
+    let linkedEmployee: any = null;
+    if (cleanEmail) {
       try {
-        const empQ = query(collection(db, 'employees'), where('email', '==', userEmail), limit(1));
+        const empQ = query(collection(db, 'employees'), where('email', '==', cleanEmail), limit(1));
         const empSnap = await getDocs(empQ);
         if (!empSnap.empty) {
           linkedEmployee = empSnap.docs[0].data();
         } else {
-          const empWorkQ = query(collection(db, 'employees'), where('work_email', '==', userEmail), limit(1));
+          const empWorkQ = query(collection(db, 'employees'), where('work_email', '==', cleanEmail), limit(1));
           const empWorkSnap = await getDocs(empWorkQ);
           if (!empWorkSnap.empty) {
             linkedEmployee = empWorkSnap.docs[0].data();
@@ -220,29 +183,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (empCheckErr) {
         console.warn('[HCM Auth Directory]: Employee check note:', empCheckErr);
       }
+    }
 
-      if (!linkedEmployee && !isSuperAdmin) {
-        console.warn(`[HCM Auth Guard]: Unauthorized login attempt rejected for ${userEmail}`);
-        await firebaseSignOut(auth);
-        throw new Error('ACCESS_DENIED: Your account (' + userEmail + ') is not registered as an employee in the system. Please contact HR.');
+    if (linkedEmployee) {
+      // Check employee employment status
+      const status = linkedEmployee.employment_status || 'active';
+      if (status === 'inactive' || status === 'terminated') {
+        throw new Error('ACCESS_DENIED_DEACTIVATED: Your employment record is marked as inactive or terminated. Please contact HR.');
       }
 
-      const isSMHUser = userEmail.includes('shantimemorialhospital.com') || userEmail === 'ayushbindhani001@gmail.com';
-      const defaultOrgId = linkedEmployee?.organization_id || (isSMHUser ? 'shanti-memorial-hospital' : '00000000-0000-0000-0000-000000000001');
-      const isAdminEmail = userEmail.includes('admin') || userEmail === 'ayushbindhani001@gmail.com';
-      const isHrEmail = userEmail.includes('hr') || userEmail.includes('nurse');
-      const role: UserRole = isSuperAdmin ? 'admin' : (linkedEmployee?.role as UserRole) || (isAdminEmail ? 'admin' : isHrEmail ? 'hr' : 'employee');
-      const fullName = linkedEmployee?.name || linkedEmployee?.full_name || authUser.displayName || (userEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : userEmail.split('@')[0]) || 'HRMS User';
-      const now = new Date().toISOString();
+      const role: UserRole = (linkedEmployee.role as UserRole) || 'employee';
+      if (!['employee', 'hr', 'admin'].includes(role)) {
+        throw new Error('ACCESS_DENIED_ROLE: Your employment role is not authorized to access this portal.');
+      }
 
+      const now = new Date().toISOString();
       const newProfPayload: Profile = {
         id: authUser.uid,
-        email: userEmail,
-        full_name: fullName,
-        phone: linkedEmployee?.phone || authUser.phoneNumber || null,
+        email: cleanEmail,
+        full_name: linkedEmployee.name || linkedEmployee.full_name || authUser.displayName || cleanEmail.split('@')[0],
+        phone: linkedEmployee.phone || authUser.phoneNumber || null,
         avatar_url: authUser.photoURL || null,
         role,
-        organization_id: defaultOrgId,
+        organization_id: linkedEmployee.organization_id || 'shanti-memorial-hospital',
         is_active: true,
         created_at: now,
         updated_at: now,
@@ -250,10 +213,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       await setDoc(doc(db, 'profiles', authUser.uid), newProfPayload);
       return newProfPayload;
-    } catch (err) {
-      console.error('syncProfileForAuthUser error:', err);
-      return null;
     }
+
+    // 4. Primary Bootstrap Admin Exception only
+    if (cleanEmail === 'ayushbindhani001@gmail.com') {
+      const now = new Date().toISOString();
+      const adminPayload: Profile = {
+        id: authUser.uid,
+        email: cleanEmail,
+        full_name: 'Ayush Bindhani',
+        phone: authUser.phoneNumber || null,
+        avatar_url: authUser.photoURL || null,
+        role: 'admin',
+        organization_id: 'shanti-memorial-hospital',
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+      };
+      await setDoc(doc(db, 'profiles', authUser.uid), adminPayload);
+      return adminPayload;
+    }
+
+    // Unregistered email attempting access: REJECT IMMEDIATELY!
+    console.warn(`[HCM Auth Guard]: Unauthorized login attempt rejected for ${cleanEmail}`);
+    throw new Error('ACCESS_DENIED_UNREGISTERED: Your email (' + cleanEmail + ') is not registered as an active employee in the system. Only active employees, HR, and admins can access the portal.');
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -265,13 +248,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       const prof = await syncProfileForAuthUser(authUser);
-      setProfile(prof);
+      if (prof && prof.is_active && ['employee', 'hr', 'admin'].includes(prof.role)) {
+        setProfile(prof);
+      } else {
+        await firebaseSignOut(auth);
+        setUser(null);
+        setProfile(null);
+      }
     } catch (e) {
       console.error('refreshProfile error:', e);
+      await firebaseSignOut(auth);
+      setUser(null);
+      setProfile(null);
     }
   }, [syncProfileForAuthUser]);
 
-  // Listen to Firebase Auth state changes & initialize session
+  // Listen to Firebase Auth state changes & enforce active employee/HR/admin verification
   useEffect(() => {
     let isMounted = true;
 
@@ -279,127 +271,123 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!isMounted) return;
 
       if (fbUser) {
-        const prof = await syncProfileForAuthUser(fbUser);
-        const appUser: AppUser = {
-          id: fbUser.uid,
-          email: fbUser.email || undefined,
-          fullName: prof?.full_name || fbUser.displayName || fbUser.email?.split('@')[0],
-          imageUrl: prof?.avatar_url || fbUser.photoURL || null,
-          user_metadata: {
-            full_name: prof?.full_name || fbUser.displayName || undefined,
-            role: prof?.role || 'employee',
-            organization_id: prof?.organization_id,
-          },
-        };
+        try {
+          const prof = await syncProfileForAuthUser(fbUser);
 
-        if (isMounted) {
-          setProfile(prof);
-          setUser(appUser);
+          // Double verify active account and role
+          if (!prof || prof.is_active === false || !['employee', 'hr', 'admin'].includes(prof.role)) {
+            throw new Error('Account inactive or unauthorized.');
+          }
 
-          if (prof && loggedInUserIdRef.current !== prof.id) {
-            loggedInUserIdRef.current = prof.id;
-            try {
-              let ipAddress: string | null = null;
-              if (Platform.OS === 'web') {
-                const ipRes = await fetch('https://api.ipify.org?format=json');
-                const ipData = await ipRes.json();
-                ipAddress = ipData?.ip || null;
-              }
-              await logUserLogin(prof, ipAddress, fbUser.uid.slice(-16));
-            } catch (ipErr) {}
+          const appUser: AppUser = {
+            id: fbUser.uid,
+            email: fbUser.email || prof.email,
+            fullName: prof.full_name || fbUser.displayName || fbUser.email?.split('@')[0],
+            imageUrl: prof.avatar_url || fbUser.photoURL || null,
+            user_metadata: {
+              full_name: prof.full_name,
+              role: prof.role,
+              organization_id: prof.organization_id,
+            },
+          };
+
+          if (isMounted) {
+            setProfile(prof);
+            setUser(appUser);
+            setIsLoading(false);
+
+            if (prof && loggedInUserIdRef.current !== prof.id) {
+              loggedInUserIdRef.current = prof.id;
+              try {
+                let ipAddress: string | null = null;
+                if (Platform.OS === 'web') {
+                  const ipRes = await fetch('https://api.ipify.org?format=json');
+                  const ipData = await ipRes.json();
+                  ipAddress = ipData?.ip || null;
+                }
+                await logUserLogin(prof, ipAddress, fbUser.uid.slice(-16));
+              } catch (ipErr) {}
+            }
+          }
+        } catch (authGuardErr: any) {
+          console.warn('[HCM Auth Guard]: Sign-in blocked:', authGuardErr?.message);
+          await firebaseSignOut(auth);
+          clearSsoSession();
+          if (isMounted) {
+            setUser(null);
+            setProfile(null);
+            loggedInUserIdRef.current = null;
+            setIsLoading(false);
           }
         }
       } else {
-        // Check if user has an SSO ticket or active SSO session from SSO Hub
+        // Check SSO Session with strict database validation
         let ssoMatched = false;
         try {
           const sessionData = getSsoSession();
           if (sessionData && (sessionData.uid || sessionData.email)) {
+            const cleanSsoEmail = (sessionData.email || '').toLowerCase().trim();
             let prof: Profile | null = null;
-            try {
-              if (sessionData.uid) {
-                const profRef = doc(db, 'profiles', sessionData.uid);
-                const profSnap = await getDoc(profRef);
-                if (profSnap.exists()) {
-                  prof = { id: profSnap.id, ...profSnap.data() } as Profile;
-                }
+
+            if (sessionData.uid) {
+              const profRef = doc(db, 'profiles', sessionData.uid);
+              const profSnap = await getDoc(profRef);
+              if (profSnap.exists()) {
+                prof = { id: profSnap.id, ...profSnap.data() } as Profile;
               }
-              if (!prof && sessionData.email) {
-                const emailQ = query(collection(db, 'profiles'), where('email', '==', sessionData.email.trim().toLowerCase()), limit(1));
-                const emailSnap = await getDocs(emailQ);
-                if (!emailSnap.empty) {
-                  prof = { id: emailSnap.docs[0].id, ...emailSnap.docs[0].data() } as Profile;
-                }
-              }
-            } catch (fsErr) {
-              // Firestore permission denied or unauthenticated read - continue gracefully with ticket claims
             }
 
-            // Fallback directly to SSO ticket claims
-            if (!prof) {
-              const userEmail = (sessionData.email || '').toLowerCase().trim();
-              const isSMHUser = userEmail.includes('shantimemorialhospital.com') || userEmail === 'ayushbindhani001@gmail.com';
-              const defaultOrgId = sessionData.organizationId || (isSMHUser ? 'shanti-memorial-hospital' : '00000000-0000-0000-0000-000000000001');
-              const isAdminEmail = userEmail.includes('admin') || userEmail === 'ayushbindhani001@gmail.com';
-              const isHrEmail = userEmail.includes('hr') || userEmail.includes('nurse');
-              const role: UserRole = (sessionData.role as UserRole) || (isAdminEmail ? 'admin' : isHrEmail ? 'hr' : 'employee');
-              const fullName = sessionData.displayName || (userEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : userEmail.split('@')[0]) || 'HRMS User';
-              const now = new Date().toISOString();
+            if (!prof && cleanSsoEmail) {
+              const emailQ = query(collection(db, 'profiles'), where('email', '==', cleanSsoEmail), limit(1));
+              const emailSnap = await getDocs(emailQ);
+              if (!emailSnap.empty) {
+                prof = { id: emailSnap.docs[0].id, ...emailSnap.docs[0].data() } as Profile;
+              }
+            }
 
-              prof = {
-                id: sessionData.uid || 'sso-' + Date.now(),
-                email: userEmail,
-                full_name: fullName,
-                phone: sessionData.phone || null,
-                avatar_url: sessionData.photoURL || null,
-                role,
-                organization_id: defaultOrgId,
-                is_active: true,
-                created_at: now,
-                updated_at: now,
+            // Only accept SSO if valid active employee/HR/Admin profile exists
+            if (prof && prof.is_active && ['employee', 'hr', 'admin'].includes(prof.role)) {
+              const appUser: AppUser = {
+                id: prof.id,
+                email: prof.email,
+                fullName: prof.full_name || sessionData.displayName,
+                imageUrl: prof.avatar_url,
+                user_metadata: {
+                  full_name: prof.full_name,
+                  role: prof.role,
+                  organization_id: prof.organization_id,
+                },
               };
-            }
 
-            const appUser: AppUser = {
-              id: prof.id,
-              email: prof.email,
-              fullName: prof.full_name || sessionData.displayName,
-              imageUrl: prof.avatar_url,
-              user_metadata: {
-                full_name: prof.full_name,
-                role: prof.role,
-                organization_id: prof.organization_id,
-              },
-            };
+              if (isMounted) {
+                setProfile(prof);
+                setUser(appUser);
+                setIsLoading(false);
+                ssoMatched = true;
 
-            if (isMounted) {
-              setProfile(prof);
-              setUser(appUser);
-              setIsLoading(false);
-              ssoMatched = true;
-
-              // Concurrently authenticate Firebase Auth in background so request.auth != null for all Firestore operations
-              if (!auth.currentUser) {
-                (async () => {
-                  try {
-                    if (sessionData.googleIdToken) {
-                      const { GoogleAuthProvider, signInWithCredential } = await import('firebase/auth');
-                      const cred = GoogleAuthProvider.credential(sessionData.googleIdToken);
-                      await signInWithCredential(auth, cred);
-                      console.log('[Oasis SSO]: Background Google Auth handshake established successfully.');
-                    } else if (sessionData.email && sessionData.pass) {
-                      await signInWithEmailAndPassword(auth, sessionData.email, sessionData.pass);
-                      console.log('[Oasis SSO]: Background Password Auth handshake established successfully.');
+                if (!auth.currentUser) {
+                  (async () => {
+                    try {
+                      if (sessionData.googleIdToken) {
+                        const { GoogleAuthProvider, signInWithCredential } = await import('firebase/auth');
+                        const cred = GoogleAuthProvider.credential(sessionData.googleIdToken);
+                        await signInWithCredential(auth, cred);
+                      } else if (sessionData.email && sessionData.pass) {
+                        await signInWithEmailAndPassword(auth, sessionData.email, sessionData.pass);
+                      }
+                    } catch (bgAuthErr) {
+                      console.warn('[Oasis SSO]: Background Firebase Auth sync note:', bgAuthErr);
                     }
-                  } catch (bgAuthErr) {
-                    console.warn('[Oasis SSO]: Background Firebase Auth sync note:', bgAuthErr);
-                  }
-                })();
+                  })();
+                }
               }
+            } else {
+              clearSsoSession();
             }
           }
         } catch (ssoErr) {
           console.warn('[Oasis SSO consumer error]:', ssoErr);
+          clearSsoSession();
         }
 
         if (!ssoMatched && isMounted) {
@@ -420,7 +408,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [syncProfileForAuthUser]);
 
-  // Sign In via Firebase Auth
+  // Sign In via Firebase Auth with Active Employee / Role Guard
   const handleSignIn = useCallback(
     async (email: string, password: string, _fallbackOrgId?: string) => {
       const cleanEmail = email.trim().toLowerCase();
@@ -430,31 +418,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (fbUser) {
           const prof = await syncProfileForAuthUser(fbUser);
+          if (!prof || prof.is_active === false || !['employee', 'hr', 'admin'].includes(prof.role)) {
+            await firebaseSignOut(auth);
+            setUser(null);
+            setProfile(null);
+            throw new Error('ACCESS_DENIED_ROLE: Your account is not authorized or active.');
+          }
+
           const appUser: AppUser = {
             id: fbUser.uid,
-            email: fbUser.email || undefined,
-            fullName: prof?.full_name || fbUser.displayName || fbUser.email?.split('@')[0],
-            imageUrl: prof?.avatar_url || fbUser.photoURL || null,
+            email: fbUser.email || prof.email,
+            fullName: prof.full_name || fbUser.displayName || fbUser.email?.split('@')[0],
+            imageUrl: prof.avatar_url || fbUser.photoURL || null,
             user_metadata: {
-              full_name: prof?.full_name,
-              role: prof?.role,
-              organization_id: prof?.organization_id,
+              full_name: prof.full_name,
+              role: prof.role,
+              organization_id: prof.organization_id,
             },
           };
           setProfile(prof);
           setUser(appUser);
         }
       } catch (err: any) {
-        if (err?.message?.includes('ACCESS_DENIED')) {
-          throw new Error('Access Denied: Your account is not registered in the employee directory. Please contact HR.');
+        await firebaseSignOut(auth);
+        setUser(null);
+        setProfile(null);
+
+        if (err?.message?.includes('ACCESS_DENIED_DEACTIVATED')) {
+          throw new Error('Access Denied: Your account has been deactivated. Please contact your HR department or administrator.');
         }
+        if (err?.message?.includes('ACCESS_DENIED_UNREGISTERED')) {
+          throw new Error('Access Denied: Your email is not registered in the employee directory. Only authorized employees, HR, and admins can access this portal.');
+        }
+        if (err?.message?.includes('ACCESS_DENIED_ROLE')) {
+          throw new Error('Access Denied: Your account role is not authorized to access this portal.');
+        }
+
         let msg = err.message || 'Invalid email or password';
         if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
           msg = 'Invalid email or password. Please verify your credentials.';
         } else if (err.code === 'auth/too-many-requests') {
           msg = 'Access to this account has been temporarily disabled due to many failed login attempts. You can reset your password or try again later.';
         } else if (err.message === 'Network request failed' || err?.toString?.().includes('Network request failed')) {
-          msg = 'Unable to connect to Firebase. Please check your internet connection.';
+          msg = 'Unable to connect to server. Please check your internet connection.';
         }
         throw new Error(msg);
       }
@@ -462,7 +468,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [syncProfileForAuthUser]
   );
 
-  // Sign In with Google via Firebase Auth
+  // Sign In with Google via Firebase Auth with Active Employee / Role Guard
   const handleSignInWithGoogle = useCallback(async () => {
     try {
       if (Platform.OS === 'web') {
@@ -474,22 +480,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (fbUser) {
           const prof = await syncProfileForAuthUser(fbUser);
+          if (!prof || prof.is_active === false || !['employee', 'hr', 'admin'].includes(prof.role)) {
+            await firebaseSignOut(auth);
+            setUser(null);
+            setProfile(null);
+            throw new Error('ACCESS_DENIED_ROLE: Your account is not authorized or active.');
+          }
+
           const appUser: AppUser = {
             id: fbUser.uid,
-            email: fbUser.email || undefined,
-            fullName: prof?.full_name || fbUser.displayName || fbUser.email?.split('@')[0],
-            imageUrl: prof?.avatar_url || fbUser.photoURL || null,
+            email: fbUser.email || prof.email,
+            fullName: prof.full_name || fbUser.displayName || fbUser.email?.split('@')[0],
+            imageUrl: prof.avatar_url || fbUser.photoURL || null,
             user_metadata: {
-              full_name: prof?.full_name || fbUser.displayName || undefined,
-              role: prof?.role || 'employee',
-              organization_id: prof?.organization_id,
+              full_name: prof.full_name,
+              role: prof.role,
+              organization_id: prof.organization_id,
             },
           };
           setProfile(prof);
           setUser(appUser);
         }
       } else {
-        // Mobile (Android / iOS): Native Google Sign-In with Firebase credential exchange
         let GoogleSignin: any;
         let statusCodes: any;
         try {
@@ -497,27 +509,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           GoogleSignin = gModule.GoogleSignin;
           statusCodes = gModule.statusCodes;
         } catch {
-          throw new Error('Native Google Sign-In requires a development build or EAS build (it cannot run in standard Expo Go). Please run "npm run build:android" or use email/password login.');
+          throw new Error('Native Google Sign-In requires a development build. Please use email and password to sign in.');
         }
 
         const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
         if (!webClientId) {
-          throw new Error(
-            'Google Sign-In configuration missing: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is not set in your .env file. Add your Web Client ID from Firebase Console / Google Cloud Console.'
-          );
+          throw new Error('Google Sign-In configuration missing: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is not configured.');
         }
 
         try {
-          GoogleSignin.configure({
-            webClientId,
-            offlineAccess: true,
-          });
-
+          GoogleSignin.configure({ webClientId, offlineAccess: true });
           await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
           const signInResult = await GoogleSignin.signIn();
-
-          // Support both newer v13+ data structure and legacy shape
           const idToken = signInResult?.data?.idToken || (signInResult as any)?.idToken;
+
           if (!idToken) {
             throw new Error('No Google ID token was returned by Google Sign-In.');
           }
@@ -529,15 +534,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           if (fbUser) {
             const prof = await syncProfileForAuthUser(fbUser);
+            if (!prof || prof.is_active === false || !['employee', 'hr', 'admin'].includes(prof.role)) {
+              await firebaseSignOut(auth);
+              setUser(null);
+              setProfile(null);
+              throw new Error('ACCESS_DENIED_ROLE: Your account is not authorized or active.');
+            }
+
             const appUser: AppUser = {
               id: fbUser.uid,
-              email: fbUser.email || undefined,
-              fullName: prof?.full_name || fbUser.displayName || fbUser.email?.split('@')[0],
-              imageUrl: prof?.avatar_url || fbUser.photoURL || null,
+              email: fbUser.email || prof.email,
+              fullName: prof.full_name || fbUser.displayName || fbUser.email?.split('@')[0],
+              imageUrl: prof.avatar_url || fbUser.photoURL || null,
               user_metadata: {
-                full_name: prof?.full_name || fbUser.displayName || undefined,
-                role: prof?.role || 'employee',
-                organization_id: prof?.organization_id,
+                full_name: prof.full_name,
+                role: prof.role,
+                organization_id: prof.organization_id,
               },
             };
             setProfile(prof);
@@ -549,70 +561,83 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             nativeErr.code === '12501' ||
             nativeErr.message?.includes?.('SIGN_IN_CANCELLED')
           ) {
-            // User cancelled Google sign-in dialog
             return;
           } else if (
             nativeErr.code === statusCodes?.IN_PROGRESS ||
             nativeErr.message?.includes?.('IN_PROGRESS')
           ) {
             return;
-          } else if (nativeErr.code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE) {
-            throw new Error('Google Play Services is not available or outdated on this Android device.');
-          } else if (
-            nativeErr.code === '10' ||
-            nativeErr.message?.includes?.('DEVELOPER_ERROR') ||
-            nativeErr.message?.includes?.('status code 10')
-          ) {
-            throw new Error(
-              'Google Sign-In configuration error (DEVELOPER_ERROR 10). Ensure your SHA-1 certificate fingerprint is registered in Firebase Console (under Android App com.oasis.hrms) and that EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID matches your OAuth 2.0 Web client ID.'
-            );
           }
           throw nativeErr;
         }
       }
     } catch (err: any) {
-      if (err?.message?.includes('ACCESS_DENIED')) {
-        throw new Error('Access Denied: Your account is not registered in the employee directory. Please contact HR.');
+      await firebaseSignOut(auth);
+      setUser(null);
+      setProfile(null);
+
+      if (err?.message?.includes('ACCESS_DENIED_DEACTIVATED')) {
+        throw new Error('Access Denied: Your account has been deactivated. Please contact your HR department or administrator.');
+      }
+      if (err?.message?.includes('ACCESS_DENIED_UNREGISTERED')) {
+        throw new Error('Access Denied: Your email is not registered in the employee directory. Only authorized employees, HR, and admins can access this portal.');
+      }
+      if (err?.message?.includes('ACCESS_DENIED_ROLE')) {
+        throw new Error('Access Denied: Your account role is not authorized to access this portal.');
       }
       if (err.code === 'auth/popup-closed-by-user') {
         throw new Error('Sign-in cancelled. You closed the Google sign-in window.');
-      } else if (err.code === 'auth/cancelled-popup-request') {
-        return;
-      } else if (err.code === 'auth/popup-blocked') {
-        throw new Error('Google Sign-In popup was blocked by your browser. Please allow popups for this site.');
-      } else if (
-        err.code === 'auth/operation-not-allowed' ||
-        err.code === 'auth/configuration-not-found' ||
-        err?.message?.includes?.('CONFIGURATION_NOT_FOUND')
-      ) {
-        throw new Error('Google provider is not enabled yet in Firebase Console. Go to Firebase Console > Authentication > Sign-in method > Google and toggle Enable.');
-      } else if (err.code === 'auth/unauthorized-domain' || err?.message?.includes?.('unauthorized domain')) {
-        throw new Error('This domain is not authorized in Firebase Console. Add your localhost / IP to Authentication > Settings > Authorized domains.');
       }
       throw new Error(err.message || 'Failed to sign in with Google.');
     }
   }, [syncProfileForAuthUser]);
 
-  // Sign Up via Firebase Auth
+  // Sign Up via Firebase Auth (Only allowed if email pre-exists in employee directory)
   const handleSignUp = useCallback(
     async (email: string, password: string, fullName: string, role: string = 'employee', orgId?: string) => {
       const cleanEmail = email.trim().toLowerCase();
+
+      // Check if email exists in employees collection
+      let linkedEmployee: any = null;
+      try {
+        const empQ = query(collection(db, 'employees'), where('email', '==', cleanEmail), limit(1));
+        const empSnap = await getDocs(empQ);
+        if (!empSnap.empty) {
+          linkedEmployee = empSnap.docs[0].data();
+        } else {
+          const empWorkQ = query(collection(db, 'employees'), where('work_email', '==', cleanEmail), limit(1));
+          const empWorkSnap = await getDocs(empWorkQ);
+          if (!empWorkSnap.empty) {
+            linkedEmployee = empWorkSnap.docs[0].data();
+          }
+        }
+      } catch (e) {}
+
+      if (!linkedEmployee && cleanEmail !== 'ayushbindhani001@gmail.com') {
+        throw new Error('Access Denied: Self-registration is restricted. Your email must be invited and added to the employee directory by HR first.');
+      }
+
+      if (linkedEmployee && (linkedEmployee.employment_status === 'inactive' || linkedEmployee.employment_status === 'terminated')) {
+        throw new Error('Access Denied: Your employee record is inactive. Please contact HR.');
+      }
+
       try {
         const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
         const fbUser = credential.user;
 
         if (fbUser) {
           await firebaseUpdateProfile(fbUser, { displayName: fullName });
-          const defaultOrgId = orgId || '00000000-0000-0000-0000-000000000001';
+          const defaultOrgId = linkedEmployee?.organization_id || orgId || 'shanti-memorial-hospital';
+          const assignedRole = (linkedEmployee?.role as UserRole) || (role as UserRole) || 'employee';
           const now = new Date().toISOString();
 
           const newProfPayload: Profile = {
             id: fbUser.uid,
             email: cleanEmail,
             full_name: fullName,
-            phone: null,
+            phone: linkedEmployee?.phone || null,
             avatar_url: null,
-            role: role as UserRole,
+            role: assignedRole,
             organization_id: defaultOrgId,
             is_active: true,
             created_at: now,
@@ -629,7 +654,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             imageUrl: null,
             user_metadata: {
               full_name: fullName,
-              role: role,
+              role: assignedRole,
               organization_id: defaultOrgId,
             },
           };
@@ -664,7 +689,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [profile]);
 
-  const effectiveRole: UserRole | null = profile?.role || (user?.user_metadata?.role as UserRole) || null;
+  const effectiveRole: UserRole | null = (profile?.role as UserRole) || null;
 
   return (
     <AuthContext.Provider
@@ -673,7 +698,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profile,
         role: effectiveRole,
         isLoading,
-        isAuthenticated: !!user,
+        isAuthenticated: !!user && !!profile && profile.is_active === true && ['employee', 'hr', 'admin'].includes(profile.role),
         signIn: handleSignIn,
         signInWithGoogle: handleSignInWithGoogle,
         signUp: handleSignUp,

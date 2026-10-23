@@ -45,6 +45,7 @@ import type {
   GoalStatus,
   AppraisalRecommendation,
   KudosBadge,
+  AppraisalKpi,
 } from '@/types';
 import {
   Award,
@@ -67,6 +68,28 @@ import {
   Sliders,
   Check,
 } from 'lucide-react-native';
+
+export const PRESET_KPIS: Record<string, AppraisalKpi[]> = {
+  clinical: [
+    { id: 'kpi_patient_care', name: 'Patient Care & Bedside Manners', description: 'Patient satisfaction, compassionate handling and attendant interaction', weight: 25 },
+    { id: 'kpi_clinical_skills', name: 'Clinical & Procedural Precision', description: 'Accurate protocol execution, medical charting and diagnosis/care delivery', weight: 25 },
+    { id: 'kpi_hygiene_safety', name: 'Hygiene & Infection Control', description: 'NABH compliance, sanitization protocols and patient safety measures', weight: 25 },
+    { id: 'kpi_emergency_response', name: 'Shift Punctuality & Emergency Response', description: 'Timely roster coverage, code blue/red responsiveness and smooth handovers', weight: 25 },
+  ],
+  operations: [
+    { id: 'kpi_turnaround', name: 'Task Turnaround & Accuracy', description: 'Timely turnaround on bills, EMR data entry and departmental workflows', weight: 25 },
+    { id: 'kpi_compliance', name: 'Statutory & Policy Compliance', description: 'Adherence to internal operating guidelines, attendance and leave rules', weight: 25 },
+    { id: 'kpi_collaboration', name: 'Cross-functional Collaboration', description: 'Cooperation with doctors, nursing staff and administration departments', weight: 25 },
+    { id: 'kpi_cost_efficiency', name: 'Resource & Asset Care', description: 'Care of equipment, minimizing waste and proactive support', weight: 25 },
+  ],
+  standard: [
+    { id: 'kpi_tech', name: 'Technical Skills & Execution', description: 'Core functional job knowledge and quality of execution', weight: 20 },
+    { id: 'kpi_prod', name: 'Productivity & Delivery', description: 'Output volume, timeliness and meeting assigned targets', weight: 20 },
+    { id: 'kpi_comm', name: 'Communication & Interpersonal', description: 'Clarity, listening skills and teamwork', weight: 20 },
+    { id: 'kpi_lead', name: 'Ownership & Problem Solving', description: 'Initiative, troubleshooting and dependability', weight: 20 },
+    { id: 'kpi_team', name: 'Teamwork & Core Hospital Values', description: 'Upholding mission, ethics and collaborative culture', weight: 20 },
+  ],
+};
 
 export default function HRPerformanceScreen() {
   const colors = useTheme();
@@ -110,13 +133,18 @@ export default function HRPerformanceScreen() {
   const [newKr1Unit, setNewKr1Unit] = useState('%');
   const [savingGoal, setSavingGoal] = useState(false);
 
-  // New Appraisal Form State
+  // New Appraisal Form State (With Custom Rating KPIs)
   const [newAppraisalEmpId, setNewAppraisalEmpId] = useState('');
   const [newAppraisalCycle, setNewAppraisalCycle] = useState('Q2 2026 Appraisal');
   const [newAppraisalPeriod, setNewAppraisalPeriod] = useState('Q2 2026');
+  const [appraisalKpis, setAppraisalKpis] = useState<AppraisalKpi[]>(PRESET_KPIS.clinical);
+  const [customKpiName, setCustomKpiName] = useState('');
+  const [customKpiDesc, setCustomKpiDesc] = useState('');
+  const [customKpiWeight, setCustomKpiWeight] = useState('25');
   const [savingAppraisal, setSavingAppraisal] = useState(false);
 
-  // Manager Evaluation Form State
+  // Manager Evaluation Form State (With Custom KPI Ratings)
+  const [evalKpiRatings, setEvalKpiRatings] = useState<Record<string, number>>({});
   const [evalTech, setEvalTech] = useState(4);
   const [evalProd, setEvalProd] = useState(4);
   const [evalComm, setEvalComm] = useState(4);
@@ -241,11 +269,42 @@ export default function HRPerformanceScreen() {
   };
 
   // ----------------------------------------------------
+  // CUSTOM KPI HANDLERS
+  // ----------------------------------------------------
+  const handleAddCustomKpi = () => {
+    if (!customKpiName.trim()) {
+      Alert.alert('Required', 'Please enter a KPI Title');
+      return;
+    }
+    const newKpi: AppraisalKpi = {
+      id: `kpi_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: customKpiName.trim(),
+      description: customKpiDesc.trim() || 'Custom evaluated metric',
+      weight: parseInt(customKpiWeight, 10) || 25,
+    };
+    setAppraisalKpis((prev) => [...prev, newKpi]);
+    setCustomKpiName('');
+    setCustomKpiDesc('');
+  };
+
+  const handleRemoveKpi = (id: string) => {
+    if (appraisalKpis.length <= 1) {
+      Alert.alert('Minimum Requirement', 'Please keep at least 1 rating KPI in the cycle.');
+      return;
+    }
+    setAppraisalKpis((prev) => prev.filter((k) => k.id !== id));
+  };
+
+  // ----------------------------------------------------
   // APPRAISAL HANDLERS
   // ----------------------------------------------------
   const handleCreateAppraisal = async () => {
     if (!newAppraisalEmpId) {
       Alert.alert('Required', 'Please select an employee.');
+      return;
+    }
+    if (appraisalKpis.length === 0) {
+      Alert.alert('Required', 'Please configure at least one rating KPI.');
       return;
     }
     setSavingAppraisal(true);
@@ -262,6 +321,7 @@ export default function HRPerformanceScreen() {
             status: 'self_review',
             self_rating: 0,
             self_comments: null,
+            custom_kpis: appraisalKpis,
           }, profile?.id)
         );
         await Promise.all(promises);
@@ -275,6 +335,7 @@ export default function HRPerformanceScreen() {
             status: 'self_review',
             self_rating: 0,
             self_comments: null,
+            custom_kpis: appraisalKpis,
           },
           profile?.id
         );
@@ -282,6 +343,7 @@ export default function HRPerformanceScreen() {
       
       setShowAppraisalModal(false);
       await loadData();
+      Alert.alert('Appraisal Initiated', `Successfully launched cycle with ${appraisalKpis.length} custom rating KPIs.`);
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to start appraisal cycle');
@@ -292,6 +354,12 @@ export default function HRPerformanceScreen() {
 
   const handleOpenManagerEval = (appraisal: AppraisalReview) => {
     setSelectedAppraisal(appraisal);
+    const kpis = appraisal.custom_kpis && appraisal.custom_kpis.length > 0 ? appraisal.custom_kpis : PRESET_KPIS.standard;
+    const initialKpiRatings: Record<string, number> = {};
+    kpis.forEach((k) => {
+      initialKpiRatings[k.id] = appraisal.manager_kpi_ratings?.[k.id] || appraisal.self_kpi_ratings?.[k.id] || 4;
+    });
+    setEvalKpiRatings(initialKpiRatings);
     setEvalTech(appraisal.ratings_breakdown?.technical_skills || 4);
     setEvalProd(appraisal.ratings_breakdown?.productivity || 4);
     setEvalComm(appraisal.ratings_breakdown?.communication || 4);
@@ -306,7 +374,14 @@ export default function HRPerformanceScreen() {
     if (!selectedAppraisal || !profile) return;
     setSubmittingEval(true);
     try {
-      const avgRating = (evalTech + evalProd + evalComm + evalLead + evalTeam) / 5;
+      const kpis = selectedAppraisal.custom_kpis && selectedAppraisal.custom_kpis.length > 0 ? selectedAppraisal.custom_kpis : null;
+      let avgRating: number;
+      if (kpis && kpis.length > 0) {
+        const sum = kpis.reduce((acc, k) => acc + (evalKpiRatings[k.id] || 4), 0);
+        avgRating = sum / kpis.length;
+      } else {
+        avgRating = (evalTech + evalProd + evalComm + evalLead + evalTeam) / 5;
+      }
       const overallScore = Math.round((avgRating / 5) * 100);
 
       await submitManagerReview(
@@ -316,6 +391,7 @@ export default function HRPerformanceScreen() {
           manager_comments: evalComments.trim() || 'Completed evaluation with strong contribution.',
           overall_score: overallScore,
           recommendation: evalRecommendation,
+          manager_kpi_ratings: evalKpiRatings,
           ratings_breakdown: {
             technical_skills: evalTech,
             productivity: evalProd,
@@ -690,16 +766,22 @@ export default function HRPerformanceScreen() {
                       <View style={[styles.ratingsRow, { borderTopColor: colors.border }]}>
                         <View style={styles.ratingCol}>
                           <Text style={styles.ratingLabel}>Self Rating</Text>
-                          <Text style={[styles.ratingValue, { color: colors.text }]}>
-                            ★ {rev.self_rating ? rev.self_rating.toFixed(1) : '—'} / 5.0
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                            <Star size={12} color={colors.text} fill={colors.text} />
+                            <Text style={[styles.ratingValue, { color: colors.text }]}>
+                              {rev.self_rating ? rev.self_rating.toFixed(1) : '—'} / 5.0
+                            </Text>
+                          </View>
                         </View>
 
                         <View style={styles.ratingCol}>
                           <Text style={styles.ratingLabel}>Manager Rating</Text>
-                          <Text style={[styles.ratingValue, { color: colors.primary }]}>
-                            ★ {rev.manager_rating ? rev.manager_rating.toFixed(1) : 'Pending'}
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                            <Star size={12} color={colors.primary} fill={colors.primary} />
+                            <Text style={[styles.ratingValue, { color: colors.primary }]}>
+                              {rev.manager_rating ? rev.manager_rating.toFixed(1) : 'Pending'}
+                            </Text>
+                          </View>
                         </View>
 
                         <View style={styles.ratingCol}>
@@ -938,56 +1020,173 @@ export default function HRPerformanceScreen() {
         {/* MODAL: LAUNCH APPRAISAL */}
         {/* ---------------------------------------------------- */}
         <Modal visible={showAppraisalModal} onClose={() => setShowAppraisalModal(false)} title="Initiate Appraisal Cycle">
-          <View style={{ gap: 14 }}>
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Select Employee *</Text>
-              <ScrollView style={{ maxHeight: 150, borderWidth: 1, borderColor: colors.border, borderRadius: 8 }}>
-                <TouchableOpacity
-                  onPress={() => setNewAppraisalEmpId('all')}
-                  style={[
-                    styles.empOption,
-                    newAppraisalEmpId === 'all' && { backgroundColor: '#eff6ff' },
-                  ]}
-                >
-                  <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#e0e7ff', alignItems: 'center', justifyContent: 'center' }}>
-                    <Users size={16} color="#4f46e5" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>All Employees</Text>
-                    <Text style={{ fontSize: 12, color: colors.textSecondary }}>Launch for entire organization</Text>
-                  </View>
-                  {newAppraisalEmpId === 'all' && <Check size={18} color={colors.primary} />}
-                </TouchableOpacity>
-                {employees.map((emp) => (
+          <ScrollView style={{ maxHeight: 540 }} showsVerticalScrollIndicator={false}>
+            <View style={{ gap: 14 }}>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Select Employee *</Text>
+                <ScrollView style={{ maxHeight: 130, borderWidth: 1, borderColor: colors.border, borderRadius: 8 }}>
                   <TouchableOpacity
-                    key={emp.id}
-                    onPress={() => setNewAppraisalEmpId(emp.id)}
+                    onPress={() => setNewAppraisalEmpId('all')}
                     style={[
                       styles.empOption,
-                      newAppraisalEmpId === emp.id && { backgroundColor: '#eff6ff' },
+                      newAppraisalEmpId === 'all' && { backgroundColor: '#eff6ff' },
                     ]}
                   >
-                    <Avatar name={emp.profile?.full_name || 'Emp'} url={emp.profile?.avatar_url} size={28} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>{emp.profile?.full_name || 'Employee'}</Text>
-                      <Text style={{ fontSize: 12, color: colors.textSecondary }}>{emp.designation || 'Staff'}</Text>
+                    <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#e0e7ff', alignItems: 'center', justifyContent: 'center' }}>
+                      <Users size={16} color="#4f46e5" />
                     </View>
-                    {newAppraisalEmpId === emp.id && <Check size={18} color={colors.primary} />}
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>All Employees</Text>
+                      <Text style={{ fontSize: 12, color: colors.textSecondary }}>Launch for entire organization</Text>
+                    </View>
+                    {newAppraisalEmpId === 'all' && <Check size={18} color={colors.primary} />}
                   </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
+                  {employees.map((emp) => (
+                    <TouchableOpacity
+                      key={emp.id}
+                      onPress={() => setNewAppraisalEmpId(emp.id)}
+                      style={[
+                        styles.empOption,
+                        newAppraisalEmpId === emp.id && { backgroundColor: '#eff6ff' },
+                      ]}
+                    >
+                      <Avatar name={emp.profile?.full_name || 'Emp'} url={emp.profile?.avatar_url} size={28} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>{emp.profile?.full_name || 'Employee'}</Text>
+                        <Text style={{ fontSize: 12, color: colors.textSecondary }}>{emp.designation || 'Staff'}</Text>
+                      </View>
+                      {newAppraisalEmpId === emp.id && <Check size={18} color={colors.primary} />}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Appraisal Cycle Name</Text>
-              <TextInput value={newAppraisalCycle} onChangeText={setNewAppraisalCycle} style={styles.modalInput} />
-            </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Appraisal Cycle Name</Text>
+                <TextInput value={newAppraisalCycle} onChangeText={setNewAppraisalCycle} style={styles.modalInput} />
+              </View>
 
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
-              <Button title="Cancel" onPress={() => setShowAppraisalModal(false)} variant="outline" style={{ flex: 1 }} />
-              <Button title="Initiate Cycle" onPress={handleCreateAppraisal} loading={savingAppraisal} style={{ flex: 1, backgroundColor: colors.primary }} />
+              {/* ── Custom Rating KPIs Configuration Section ── */}
+              <View style={{ marginTop: 6, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#E2E8F0' }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <View>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A' }}>
+                      Evaluation Rating KPIs ({appraisalKpis.length})
+                    </Text>
+                    <Text style={{ fontSize: 11, color: '#64748B' }}>
+                      Define custom evaluation criteria instead of defaults
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Preset Chips */}
+                <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  <TouchableOpacity
+                    onPress={() => setAppraisalKpis(PRESET_KPIS.clinical)}
+                    style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE' }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#2563EB' }}>Clinical Preset</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setAppraisalKpis(PRESET_KPIS.operations)}
+                    style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0' }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#16A34A' }}>Operations Preset</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setAppraisalKpis(PRESET_KPIS.standard)}
+                    style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: '#FAF5FF', borderWidth: 1, borderColor: '#E9D5FF' }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#7C3AED' }}>Standard 5-D</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setAppraisalKpis([])}
+                    style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#DC2626' }}>Clear All</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* KPI List */}
+                <View style={{ gap: 6, marginBottom: 12 }}>
+                  {appraisalKpis.map((kpi, idx) => (
+                    <View
+                      key={kpi.id || idx}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: 10,
+                        backgroundColor: '#F8FAFC',
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: '#E2E8F0',
+                      }}
+                    >
+                      <View style={{ flex: 1, paddingRight: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E293B' }}>{kpi.name}</Text>
+                          <Badge label={`${kpi.weight || 25}%`} variant="neutral" />
+                        </View>
+                        {kpi.description ? (
+                          <Text style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>{kpi.description}</Text>
+                        ) : null}
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => handleRemoveKpi(kpi.id)}
+                        style={{ padding: 6 }}
+                        accessibilityLabel="Delete KPI"
+                      >
+                        <Trash2 size={16} color="#DC2626" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                  {appraisalKpis.length === 0 && (
+                    <Text style={{ fontSize: 12, color: '#DC2626', textAlign: 'center', paddingVertical: 10 }}>
+                      No KPIs defined. Add at least one rating KPI below.
+                    </Text>
+                  )}
+                </View>
+
+                {/* Inline Add Custom KPI */}
+                <View style={{ backgroundColor: '#F1F5F9', padding: 12, borderRadius: 10, gap: 8 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#334155' }}>+ Add Custom Rating KPI</Text>
+                  <TextInput
+                    placeholder="KPI Title (e.g. Bedside Manners, NABH Compliance)"
+                    value={customKpiName}
+                    onChangeText={setCustomKpiName}
+                    style={[styles.modalInput, { backgroundColor: '#FFF' }]}
+                  />
+                  <TextInput
+                    placeholder="KPI Description / Guidance"
+                    value={customKpiDesc}
+                    onChangeText={setCustomKpiDesc}
+                    style={[styles.modalInput, { backgroundColor: '#FFF' }]}
+                  />
+                  <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                    <TextInput
+                      placeholder="Weight % (e.g. 25)"
+                      value={customKpiWeight}
+                      onChangeText={setCustomKpiWeight}
+                      keyboardType="numeric"
+                      style={[styles.modalInput, { width: 120, backgroundColor: '#FFF' }]}
+                    />
+                    <TouchableOpacity
+                      onPress={handleAddCustomKpi}
+                      style={{ flex: 1, backgroundColor: '#0D7377', paddingVertical: 11, borderRadius: 8, alignItems: 'center' }}
+                    >
+                      <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 12 }}>+ Add KPI to Cycle</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+                <Button title="Cancel" onPress={() => setShowAppraisalModal(false)} variant="outline" style={{ flex: 1 }} />
+                <Button title="Initiate Cycle" onPress={handleCreateAppraisal} loading={savingAppraisal} style={{ flex: 1, backgroundColor: colors.primary }} />
+              </View>
             </View>
-          </View>
+          </ScrollView>
         </Modal>
 
         {/* ---------------------------------------------------- */}
@@ -1001,9 +1200,13 @@ export default function HRPerformanceScreen() {
                   <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
                     Self Assessment by {(selectedAppraisal.employee as any)?.profile?.full_name || 'Employee'}
                   </Text>
-                  <Text style={{ fontSize: 13, color: colors.text, marginTop: 4 }}>
-                    Rating: ★ {selectedAppraisal.self_rating || 4.0}/5.0
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                    <Text style={{ fontSize: 13, color: colors.text }}>Rating:</Text>
+                    <Star size={13} color="#f59e0b" fill="#f59e0b" />
+                    <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>
+                      {selectedAppraisal.self_rating || 4.0}/5.0
+                    </Text>
+                  </View>
                   {selectedAppraisal.self_comments && (
                     <Text style={{ fontSize: 13, color: colors.textSecondary, fontStyle: 'italic', marginTop: 2 }}>
                       "{selectedAppraisal.self_comments}"
@@ -1011,34 +1214,52 @@ export default function HRPerformanceScreen() {
                   )}
                 </View>
 
-                {/* 5 Dimensions Ratings */}
-                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>Evaluation Dimensions (1 - 5 Stars):</Text>
+                {/* Dynamic Custom or Standard Dimensions Ratings */}
+                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>
+                  Evaluation Dimensions ({selectedAppraisal.custom_kpis && selectedAppraisal.custom_kpis.length > 0 ? `${selectedAppraisal.custom_kpis.length} Custom KPIs` : '5 Dimensions'}):
+                </Text>
 
-                {[
-                  { label: 'Technical Skills & Execution', val: evalTech, set: setEvalTech },
-                  { label: 'Productivity & Delivery', val: evalProd, set: setEvalProd },
-                  { label: 'Communication & Collaboration', val: evalComm, set: setEvalComm },
-                  { label: 'Ownership & Leadership', val: evalLead, set: setEvalLead },
-                  { label: 'Teamwork & Culture', val: evalTeam, set: setEvalTeam },
-                ].map((dim) => (
-                  <View key={dim.label} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ fontSize: 13, color: colors.text, flex: 1 }}>{dim.label}</Text>
-                    <View style={{ flexDirection: 'row', gap: 4 }}>
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <TouchableOpacity
-                          key={star}
-                          onPress={() => dim.set(star)}
-                          style={[
-                            styles.starBtn,
-                            dim.val >= star && { backgroundColor: '#fef08a' },
-                          ]}
-                        >
-                          <Star size={16} color={dim.val >= star ? '#ca8a04' : '#94a3b8'} fill={dim.val >= star ? '#eab308' : 'none'} />
-                        </TouchableOpacity>
-                      ))}
+                {(selectedAppraisal.custom_kpis && selectedAppraisal.custom_kpis.length > 0
+                  ? selectedAppraisal.custom_kpis
+                  : [
+                      { id: 'kpi_tech', name: 'Technical Skills & Execution', description: '' },
+                      { id: 'kpi_prod', name: 'Productivity & Delivery', description: '' },
+                      { id: 'kpi_comm', name: 'Communication & Collaboration', description: '' },
+                      { id: 'kpi_lead', name: 'Ownership & Leadership', description: '' },
+                      { id: 'kpi_team', name: 'Teamwork & Culture', description: '' },
+                    ]
+                ).map((kpi) => {
+                  const currentVal = evalKpiRatings[kpi.id] || 4;
+                  const selfRatingForKpi = selectedAppraisal.self_kpi_ratings?.[kpi.id];
+                  return (
+                    <View key={kpi.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <View style={{ flex: 1, paddingRight: 8 }}>
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>{kpi.name}</Text>
+                          {selfRatingForKpi ? (
+                            <Text style={{ fontSize: 11, color: '#0D7377', fontWeight: '600', marginTop: 2 }}>
+                              Employee Self-Rating: {selfRatingForKpi} / 5.0
+                            </Text>
+                          ) : null}
+                        </View>
+                        <View style={{ flexDirection: 'row', gap: 4 }}>
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <TouchableOpacity
+                              key={star}
+                              onPress={() => setEvalKpiRatings((prev) => ({ ...prev, [kpi.id]: star }))}
+                              style={[
+                                styles.starBtn,
+                                currentVal >= star && { backgroundColor: '#fef08a' },
+                              ]}
+                            >
+                              <Star size={16} color={currentVal >= star ? '#ca8a04' : '#94a3b8'} fill={currentVal >= star ? '#eab308' : 'none'} />
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
                     </View>
-                  </View>
-                ))}
+                  );
+                })}
 
                 <View style={styles.formGroup}>
                   <Text style={styles.formLabel}>Manager Feedback & Guidance</Text>

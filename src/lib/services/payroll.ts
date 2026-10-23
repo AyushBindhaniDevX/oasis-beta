@@ -426,7 +426,7 @@ export async function calculateStatutoryForEmployee(
   };
 }
 
-export async function createPayrollPeriod(month: number, year: number, orgId: string): Promise<PayrollPeriod> {
+export async function createPayrollPeriod(month: number, year: number, orgId: string, unit?: string): Promise<PayrollPeriod> {
   if (!orgId) {
     throw new Error('No organization is linked to your account, so payroll cannot be generated.');
   }
@@ -434,13 +434,16 @@ export async function createPayrollPeriod(month: number, year: number, orgId: st
     throw new Error('Please choose a valid month before generating payroll.');
   }
 
-  const periodId = `pp_${orgId}_${year}_${month}`;
+  const targetUnit = unit && unit !== 'all' && unit !== 'All Units' ? unit : 'All Units';
+  const safeUnitSlug = targetUnit !== 'All Units' ? `_${targetUnit.toLowerCase().replace(/[^a-z0-9]/g, '')}` : '';
+  const periodId = `pp_${orgId}_${year}_${month}${safeUnitSlug}`;
   const now = new Date().toISOString();
 
   // Check for duplicate
   const existingSnap = await getDoc(doc(db, 'payroll_periods', periodId));
   if (existingSnap.exists()) {
-    throw new Error(`A payroll period for ${MONTHS[month - 1]} ${year} already exists.`);
+    const label = targetUnit !== 'All Units' ? ` for ${targetUnit}` : '';
+    throw new Error(`A payroll period for ${MONTHS[month - 1]} ${year}${label} already exists.`);
   }
 
   const period: PayrollPeriod = {
@@ -448,6 +451,8 @@ export async function createPayrollPeriod(month: number, year: number, orgId: st
     month,
     year,
     organization_id: orgId,
+    unit: targetUnit,
+    hospital_unit: targetUnit,
     status: 'open',
     processed_at: null,
     created_at: now,
@@ -455,18 +460,23 @@ export async function createPayrollPeriod(month: number, year: number, orgId: st
 
   await setDoc(doc(db, 'payroll_periods', periodId), period);
 
-  // Fetch active employees
-  const employees = await getEmployees({ organization_id: orgId, employment_status: 'active' });
+  // Fetch active employees (filtered by unit if specific unit selected)
+  const empFilter: any = { organization_id: orgId, employment_status: 'active' };
+  if (targetUnit !== 'All Units') {
+    empFilter.hospital_unit = targetUnit;
+  }
+  const employees = await getEmployees(empFilter);
 
   if (!employees || employees.length === 0) {
     await deleteDoc(doc(db, 'payroll_periods', periodId));
-    throw new Error('No active employees were found for this organization. Add employees first, then try again.');
+    const unitMsg = targetUnit !== 'All Units' ? ` for ${targetUnit}` : '';
+    throw new Error(`No active employees were found${unitMsg}. Please verify employee profiles and try again.`);
   }
 
   // Generate entries
   for (const emp of employees) {
     const breakdown = await calculateStatutoryForEmployee(emp, month, year);
-    const entryId = `payroll_${emp.id}_${year}_${month}`;
+    const entryId = `payroll_${emp.id}_${year}_${month}${safeUnitSlug}`;
     const entryData: Payroll = {
       id: entryId,
       payroll_period_id: periodId,
@@ -485,6 +495,9 @@ export async function createPayrollPeriod(month: number, year: number, orgId: st
       leave_days: breakdown.leave_days,
       holiday_days: breakdown.holiday_days,
       paid_days: breakdown.paid_days,
+      pl_days: 0,
+      cl_days: 0,
+      sl_days: Math.max(0, (breakdown.payable_days || 30) - (breakdown.paid_days || 30)),
       basic: breakdown.basic,
       hra: breakdown.hra,
       conveyance: breakdown.conveyance,
@@ -495,11 +508,14 @@ export async function createPayrollPeriod(month: number, year: number, orgId: st
       pf: breakdown.pf,
       ot_ded: breakdown.ot_ded,
       gross_deductions: breakdown.gross_deductions,
+      total_deductions: breakdown.gross_deductions,
+      total_salary: Math.max(0, breakdown.gross_salary - breakdown.gross_deductions),
       ot_hours_or_days: breakdown.ot_hours_or_days,
       ot_amount: breakdown.ot_amount,
       other_allowances: breakdown.other_allowances,
       is_pf_eligible: breakdown.is_pf_eligible,
-      hospital_unit: breakdown.hospital_unit,
+      hospital_unit: emp.hospital_unit || breakdown.hospital_unit || 'Shanti Memorial Hospital',
+      employment_type: emp.employment_type || (breakdown.is_pf_eligible ? 'Regular' : 'Contractual'),
       status: 'draft',
       created_at: now,
       updated_at: now,
@@ -586,7 +602,20 @@ export async function getPayrollEntries(periodId: string): Promise<Payroll[]> {
     const entries: Payroll[] = [];
     entriesSnap.forEach((d) => {
       const entry = { id: d.id, ...d.data() } as Payroll;
-      entry.employee = entry.employee_id ? empMap.get(entry.employee_id) : undefined;
+      const linkedEmp = entry.employee_id ? empMap.get(entry.employee_id) : undefined;
+      entry.employee = linkedEmp;
+      if (!entry.hospital_unit && linkedEmp?.hospital_unit) {
+        entry.hospital_unit = linkedEmp.hospital_unit;
+      }
+      if (!entry.employment_type && linkedEmp?.employment_type) {
+        entry.employment_type = linkedEmp.employment_type;
+      }
+      if (entry.total_deductions === undefined) {
+        entry.total_deductions = entry.gross_deductions ?? Object.values(entry.deductions || {}).reduce((a, b) => a + b, 0);
+      }
+      if (entry.total_salary === undefined) {
+        entry.total_salary = Math.max(0, (entry.gross_salary || 0) - (entry.total_deductions || 0));
+      }
       entries.push(entry);
     });
 

@@ -223,6 +223,7 @@ export async function submitSelfReview(
     self_rating: number;
     self_comments: string;
     ratings_breakdown?: PerformanceRatingBreakdown;
+    self_kpi_ratings?: Record<string, number>;
   },
   userId?: string
 ): Promise<void> {
@@ -231,6 +232,7 @@ export async function submitSelfReview(
     self_rating: data.self_rating,
     self_comments: data.self_comments,
     ratings_breakdown: data.ratings_breakdown || null,
+    self_kpi_ratings: data.self_kpi_ratings || null,
     self_submitted_at: now,
     status: 'manager_review',
     updated_at: now,
@@ -249,6 +251,7 @@ export async function submitManagerReview(
     overall_score: number;
     recommendation: AppraisalRecommendation;
     ratings_breakdown?: PerformanceRatingBreakdown;
+    manager_kpi_ratings?: Record<string, number>;
     reviewer_id: string;
   },
   employeeProfileId?: string
@@ -260,6 +263,7 @@ export async function submitManagerReview(
     overall_score: data.overall_score,
     recommendation: data.recommendation,
     ratings_breakdown: data.ratings_breakdown || null,
+    manager_kpi_ratings: data.manager_kpi_ratings || null,
     reviewer_id: data.reviewer_id,
     manager_submitted_at: now,
     status: 'completed',

@@ -164,8 +164,10 @@ export async function getEmployees(params?: {
   employment_status?: string;
   search?: string;
   organization_id?: string;
+  hospital_unit?: string;
+  employment_type?: string;
 }): Promise<Employee[]> {
-  const { department_id, workplace_id, employment_status, search, organization_id } = params || {};
+  const { department_id, workplace_id, employment_status, search, organization_id, hospital_unit, employment_type } = params || {};
 
   try {
     const [empSnap, profSnap, deptSnap, wpSnap] = await Promise.all([
@@ -231,6 +233,21 @@ export async function getEmployees(params?: {
             (e.organization_id === 'smh' || e.profile?.organization_id === 'smh'))
       );
     }
+    if (hospital_unit && hospital_unit !== 'all') {
+      const huLower = hospital_unit.toLowerCase();
+      results = results.filter((e) => {
+        const u = (e.hospital_unit || 'Shanti Memorial Hospital').toLowerCase();
+        return u.includes(huLower) || huLower.includes(u);
+      });
+    }
+    if (employment_type && employment_type !== 'all') {
+      const etTarget = employment_type.toLowerCase();
+      results = results.filter((e) => {
+        const et = (e.employment_type || (e.is_pf_eligible ? 'Regular' : 'Contractual')).toLowerCase();
+        if (etTarget.includes('contract')) return et.includes('contract');
+        return !et.includes('contract');
+      });
+    }
     if (search) {
       const s = search.toLowerCase();
       results = results.filter(
@@ -287,6 +304,9 @@ export async function createEmployee(params: {
   date_of_birth?: string;
   tax_config?: any;
   is_hhc_enabled?: boolean;
+  hospital_unit?: string;
+  employment_type?: string;
+  grade?: string;
 }): Promise<void> {
   const cleanEmail = params.email.trim().toLowerCase();
   let uid = generateUuid();
@@ -361,6 +381,9 @@ export async function createEmployee(params: {
     workplace_id: params.workplace_id || null,
     default_shift_id: params.default_shift_id || null,
     employment_status: 'active',
+    employment_type: params.employment_type || 'Regular',
+    hospital_unit: params.hospital_unit || 'Shanti Memorial Hospital',
+    grade: params.grade || null,
     joining_date: now.split('T')[0],
     date_of_birth: params.date_of_birth || null,
     designation: params.designation || null,

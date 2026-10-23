@@ -425,7 +425,7 @@ export async function sendWelcomeEmail(
     ? `
       <div style="background: #F0FDF4; border: 1px solid #86EFAC; border-radius: 12px; padding: 18px 20px; margin: 22px 0;">
         <div style="font-weight: 700; color: #166534; font-size: 14px; margin-bottom: 12px;">
-          🔐 Your Oasis HRMS Access Credentials
+          Your Oasis HRMS Access Credentials
         </div>
         <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
           <tr>
@@ -448,7 +448,7 @@ export async function sendWelcomeEmail(
           </tr>
         </table>
         <div style="margin-top: 12px; padding: 10px 14px; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 8px; font-size: 12px; color: #92400E;">
-          ⚠️ <strong>Security Notice:</strong> For your protection, you will be prompted to change this temporary password upon your first sign-in.
+          <strong>Security Notice:</strong> For your protection, you will be prompted to change this temporary password upon your first sign-in.
         </div>
       </div>
     `
@@ -619,7 +619,7 @@ export async function sendLeaveStatusEmail(
     <div style="background: ${isApproved ? '#ECFDF5' : '#FEF2F2'}; border: 1px solid ${isApproved ? '#A7F3D0' : '#FECACA'}; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
       <div style="margin-bottom: 12px;">
         <span style="font-weight: 700; font-size: 14px; color: ${isApproved ? '#065F46' : '#991B1B'};">
-          Decision: ${isApproved ? '✅ Approved' : '❌ Declined'}
+          Decision: ${isApproved ? 'Approved' : 'Declined'}
         </span>
       </div>
       <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
@@ -665,7 +665,7 @@ export async function sendLeaveStatusEmail(
 
   return sendResendEmail({
     to,
-    subject: `Leave Request ${isApproved ? 'Approved ✅' : 'Declined ❌'} — ${leaveType} | ${orgName}`,
+    subject: `Leave Request ${isApproved ? 'Approved' : 'Declined'} — ${leaveType} | ${orgName}`,
     category: 'leave',
     htmlContent,
     orgContext: orgCtx,
@@ -771,7 +771,7 @@ export async function sendRegularizationStatusEmail(
     <div style="background: ${isApproved ? '#ECFDF5' : '#FEF2F2'}; border: 1px solid ${isApproved ? '#A7F3D0' : '#FECACA'}; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
       <div style="margin-bottom: 12px;">
         <span style="font-weight: 700; font-size: 14px; color: ${isApproved ? '#065F46' : '#991B1B'};">
-          Decision: ${isApproved ? '✅ Approved' : '❌ Declined'}
+          Decision: ${isApproved ? 'Approved' : 'Declined'}
         </span>
       </div>
       <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
@@ -795,7 +795,7 @@ export async function sendRegularizationStatusEmail(
 
   return sendResendEmail({
     to,
-    subject: `Attendance Regularization ${isApproved ? 'Approved ✅' : 'Declined ❌'} — ${date} | ${orgName}`,
+    subject: `Attendance Regularization ${isApproved ? 'Approved' : 'Declined'} — ${date} | ${orgName}`,
     category: 'general',
     htmlContent,
     orgContext: orgCtx,
@@ -849,7 +849,7 @@ export async function sendExpenseStatusEmail(
         <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
           <td style="padding: 6px 0; color: #64748B;">Status:</td>
           <td style="padding: 6px 0; font-weight: 700; color: ${isApproved ? '#065F46' : '#991B1B'}; text-align: right;">
-            ${isApproved ? 'Approved ✅' : 'Declined ❌'}
+            ${isApproved ? 'Approved' : 'Declined'}
           </td>
         </tr>
         ${extra?.reviewerNote ? `
@@ -876,7 +876,7 @@ export async function sendExpenseStatusEmail(
 
   return sendResendEmail({
     to,
-    subject: `Expense Claim ${isApproved ? 'Approved ✅' : 'Declined ❌'}: ₹${amount.toLocaleString('en-IN')} | ${orgName}`,
+    subject: `Expense Claim ${isApproved ? 'Approved' : 'Declined'}: ₹${amount.toLocaleString('en-IN')} | ${orgName}`,
     category: 'expense',
     htmlContent,
     orgContext: orgCtx,
@@ -929,7 +929,7 @@ export async function sendTicketStatusEmail(
         ` : ''}
         <tr style="border-bottom: 1px solid #EDF2F7;">
           <td style="padding: 6px 0; color: #64748B;">Status:</td>
-          <td style="padding: 6px 0; font-weight: 700; color: #059669; text-align: right;">Resolved ✅</td>
+          <td style="padding: 6px 0; font-weight: 700; color: #059669; text-align: right;">Resolved</td>
         </tr>
       </table>
 
@@ -1540,7 +1540,7 @@ export async function sendAppointmentLetterEmail(
     </div>
 
     <p style="font-size: 11.5px; color: #64748B; text-align: center; margin-top: 14px;">
-      📄 An official printable PDF copy of this appointment letter has been registered in your employee profile and is downloadable anytime.
+      An official printable PDF copy of this appointment letter has been registered in your employee profile and is downloadable anytime.
     </p>
   `;
 

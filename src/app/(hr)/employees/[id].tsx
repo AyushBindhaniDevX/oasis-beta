@@ -26,6 +26,7 @@ import { getShifts, assignEmployeeShift } from '@/lib/services/shifts';
 import { updateUserProfileData } from '@/lib/services/organization';
 import { getLeaveBalances, getLeaveTypes, updateLeaveBalance } from '@/lib/services/leave';
 import { formatDate, formatCurrency } from '@/utils/format';
+import { HOSPITAL_UNITS, EMPLOYMENT_TYPES } from '@/constants/config';
 import { AppointmentLetterModal } from '@/components/AppointmentLetterModal';
 import { resendAppointmentLetterEmail, downloadAppointmentLetterPdf } from '@/lib/services/appointmentLetters';
 import type { Employee, Department, Workplace, WorkShift, LeaveBalance, LeaveType } from '@/types';
@@ -141,6 +142,9 @@ export default function EmployeeDetailScreen() {
   const [status, setStatus] = useState<string>('active');
   const [isHhcEnabled, setIsHhcEnabled] = useState(false);
   const [joiningDate, setJoiningDate] = useState('');
+  const [hospitalUnit, setHospitalUnit] = useState<string>('Shanti Memorial Hospital');
+  const [employmentType, setEmploymentType] = useState<string>('Regular');
+  const [grade, setGrade] = useState<string>('');
 
   // Tax Configuration State
   const [taxRegime, setTaxRegime] = useState<string>('new');
@@ -239,6 +243,9 @@ export default function EmployeeDetailScreen() {
     setStatus(emp.employment_status || 'active');
     setIsHhcEnabled(!!emp.is_hhc_enabled || !!emp.profile?.is_hhc_enabled);
     setJoiningDate(emp.joining_date || '');
+    setHospitalUnit(emp.hospital_unit || 'Shanti Memorial Hospital');
+    setEmploymentType(emp.employment_type || 'Regular');
+    setGrade(emp.grade || '');
 
     // Populate tax config
     const tc = emp.tax_config || {};
@@ -305,6 +312,9 @@ export default function EmployeeDetailScreen() {
         employment_status: status as any,
         joining_date: joiningDate || null,
         is_hhc_enabled: isHhcEnabled,
+        hospital_unit: hospitalUnit,
+        employment_type: employmentType as any,
+        grade: grade.trim() || null,
         tax_config: {
           pf_number: pfNumber.trim() || null,
           tax_regime: taxRegime as any,
@@ -399,6 +409,9 @@ export default function EmployeeDetailScreen() {
             <Row label="Work Email" value={emp.profile?.email || 'N/A'} colors={colors} />
             <Row label="Phone Number" value={emp.profile?.phone || 'N/A'} colors={colors} />
             <Row label="Department" value={emp.department?.name || 'Unassigned'} colors={colors} />
+            <Row label="Hospital Unit / Brand" value={emp.hospital_unit || 'Shanti Memorial Hospital'} colors={colors} />
+            <Row label="Employment Category" value={emp.employment_type || 'Regular'} colors={colors} />
+            <Row label="Pay Grade" value={emp.grade || 'N/A'} colors={colors} />
             <Row label="Workplace Location" value={emp.workplace?.name || 'Unassigned'} colors={colors} />
             <Row label="L1 Manager (Supervisor)" value={l1Manager?.profile?.full_name || l1Manager?.employee_code || 'None / Not Assigned'} colors={colors} />
             <Row label="L2 Manager (HOD)" value={l2Manager?.profile?.full_name ? `${l2Manager.profile.full_name} (${l2Manager.employee_code || 'HOD'})` : 'None / Not Assigned'} colors={colors} />
@@ -662,6 +675,24 @@ export default function EmployeeDetailScreen() {
               value={designation}
               onChangeText={setDesignation}
               placeholder="e.g. Senior Software Engineer"
+            />
+            <Select
+              label="Hospital Unit / Sub-Brand *"
+              value={hospitalUnit}
+              onValueChange={(val) => setHospitalUnit(val || 'Shanti Memorial Hospital')}
+              options={HOSPITAL_UNITS.map(u => ({ label: u, value: u }))}
+            />
+            <Select
+              label="Employment Category *"
+              value={employmentType}
+              onValueChange={(val) => setEmploymentType(val || 'Regular')}
+              options={EMPLOYMENT_TYPES.map(t => ({ label: t.label, value: t.value }))}
+            />
+            <Input
+              label="Grade / Level"
+              value={grade}
+              onChangeText={setGrade}
+              placeholder="e.g. M1, M2, N4, Housekeeping"
             />
 
             <Select

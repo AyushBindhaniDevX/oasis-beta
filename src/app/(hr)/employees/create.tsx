@@ -12,6 +12,7 @@ import { SidebarLayout } from '@/components/layout/Sidebar';
 import { getDepartments, createEmployee, getEmployees, getWorkplaces } from '@/lib/services/employee';
 import { getShifts } from '@/lib/services/shifts';
 import { CustomPayrollItemsManager } from '@/components/payroll/CustomPayrollItemsManager';
+import { HOSPITAL_UNITS } from '@/constants/config';
 import type { Department, Employee, WorkShift, Workplace, CustomPayrollItem } from '@/types';
 import { RefreshCw, ShieldCheck, ChevronDown, ChevronUp, Sliders, Eye, EyeOff, KeyRound, HeartPulse } from 'lucide-react-native';
 
@@ -33,6 +34,9 @@ export default function CreateEmployeeScreen() {
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
   const [empCode, setEmpCode] = useState('');
+  const [hospitalUnit, setHospitalUnit] = useState<string>('Shanti Memorial Hospital');
+  const [employmentType, setEmploymentType] = useState<string>('Regular');
+  const [grade, setGrade] = useState<string>('M1');
   const [password, setPassword] = useState('Welcome@123');
   const [showPassword, setShowPassword] = useState(false);
   const [deptId, setDeptId] = useState<string | null>(null);
@@ -190,6 +194,9 @@ export default function CreateEmployeeScreen() {
         default_shift_id: shiftId || undefined,
         role: role,
         designation: designation.trim() || undefined,
+        hospital_unit: hospitalUnit,
+        employment_type: employmentType,
+        grade: grade.trim() || undefined,
         is_hhc_enabled: isHhcEnabled,
         basic_salary: parseFloat(basicSalary) || 0,
         conveyance_allowance: parseFloat(conveyanceAllowance) || 1200,
@@ -367,7 +374,46 @@ export default function CreateEmployeeScreen() {
           />
 
           {/* ─── Org Structure ──────────────────────────────────────────── */}
-          <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginTop: 8 }]}>ORGANISATION</Text>
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginTop: 8 }]}>ORGANISATION & UNIT</Text>
+
+          {/* Locked Active Org */}
+          <View style={{ backgroundColor: colors.surface, padding: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <View>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: colors.textSecondary, letterSpacing: 0.5 }}>PARENT ORGANIZATION</Text>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text, marginTop: 2 }}>
+                {tenantOrg?.name || 'Shanti Memorial Hospital'}
+              </Text>
+            </View>
+            <View style={{ backgroundColor: '#E2E8F0', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: '#475569' }}>SCOPED</Text>
+            </View>
+          </View>
+
+          {/* Unit / Sub-Brand Selector */}
+          <Select
+            label="Hospital Unit / Sub-Brand *"
+            options={HOSPITAL_UNITS.map((u) => ({ label: u, value: u }))}
+            value={hospitalUnit}
+            onValueChange={(val) => setHospitalUnit(val || 'Shanti Memorial Hospital')}
+          />
+
+          {/* Employment Category */}
+          <Select
+            label="Employment Category *"
+            options={[
+              { label: 'Regular (Direct Payroll)', value: 'Regular' },
+              { label: 'Contractual (Contract Basis)', value: 'Contractual' },
+            ]}
+            value={employmentType}
+            onValueChange={(val) => setEmploymentType(val || 'Regular')}
+          />
+
+          <Input
+            label="Grade / Band (e.g. M1, M2, N2, N4, Housekeeping)"
+            placeholder="e.g. M1"
+            value={grade}
+            onChangeText={setGrade}
+          />
 
           <Select
             label="Department"

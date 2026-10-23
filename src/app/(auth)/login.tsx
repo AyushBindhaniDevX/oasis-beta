@@ -45,18 +45,20 @@ export default function LoginScreen() {
   const { tenant } = useTenantBranding();
   const { user, profile, signIn, signInWithGoogle, isLoading: authLoading } = useAuth();
 
-  // Auto-redirect if user already has an active SSO session
+  const isAuthorized = !!user && !!profile && profile.is_active === true && ['employee', 'hr', 'admin'].includes(profile.role);
+
+  // Auto-redirect if user has an active, verified session
   useEffect(() => {
-    if (user || profile) {
+    if (isAuthorized && profile) {
       const targetRoute =
-        profile?.role === 'admin'
+        profile.role === 'admin'
           ? '/(admin)/dashboard'
-          : profile?.role === 'hr'
+          : profile.role === 'hr'
           ? '/(hr)/dashboard'
           : '/(employee)/dashboard';
       router.replace(targetRoute as never);
     }
-  }, [user, profile, router]);
+  }, [isAuthorized, profile, router]);
 
   const {
     hasHardware,
@@ -152,12 +154,12 @@ export default function LoginScreen() {
   const showBiometric = hasHardware && isBiometricEnabled;
   const busy = loading || googleLoading || authLoading;
 
-  if (authLoading || user || profile) {
+  if (authLoading || (isAuthorized && (user || profile))) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#0D7377" />
         <Text style={styles.loadingText}>
-          {user || profile ? 'Redirecting to your workspace...' : 'Verifying SSO session...'}
+          {isAuthorized ? 'Redirecting to your workspace...' : 'Verifying session...'}
         </Text>
       </View>
     );

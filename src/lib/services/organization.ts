@@ -168,6 +168,8 @@ export async function createSystemUser(params: {
   workplace_id?: string;
   basic_salary?: number;
   employment_type?: 'full_time' | 'part_time' | 'contract' | 'intern' | string;
+  hospital_unit?: string;
+  grade?: string;
   default_shift_id?: string;
   manager_id?: string;
   date_of_birth?: string;
@@ -278,6 +280,9 @@ export async function createSystemUser(params: {
       washing_allowance: (params as any).washing_allowance !== undefined ? Number((params as any).washing_allowance) : 500,
       special_allowance: (params as any).special_allowance != null && (params as any).special_allowance !== '' ? Number((params as any).special_allowance) : null,
       employment_status: 'active',
+      employment_type: params.employment_type || 'Regular',
+      hospital_unit: params.hospital_unit || 'Shanti Memorial Hospital',
+      grade: params.grade || null,
       onboarding_completed: true,
       tax_config: {
         ...taxConfig,

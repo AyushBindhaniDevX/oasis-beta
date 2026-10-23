@@ -708,7 +708,7 @@ export async function submitCandidateEvaluation(candidateId: string, evaluation:
   candidate.timeline.unshift({
     id: `t_${Date.now()}`,
     type: 'scorecard_added',
-    title: `Evaluation Submitted: ${candidate.rating} ★ (${evaluation.recommendation.replace('_', ' ').toUpperCase()})`,
+    title: `Evaluation Submitted: ${candidate.rating}/5.0 (${evaluation.recommendation.replace('_', ' ').toUpperCase()})`,
     description: evaluation.interviewer_notes,
     actor_name: evaluation.evaluator_name || 'Interviewer',
     created_at: new Date().toISOString(),

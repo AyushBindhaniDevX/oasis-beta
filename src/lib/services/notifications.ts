@@ -258,7 +258,7 @@ export async function publishAnnouncement(payload: Partial<Announcement>): Promi
     if (emp.profile_id) {
       notifyPromises.push(createNotification({
         profile_id: emp.profile_id,
-        title: `📢 ${ann.title}`,
+        title: ann.title,
         message: ann.message,
         type: 'announcement'
       }));
@@ -311,7 +311,7 @@ export async function checkAndSendBirthdayNotifications(organizationId: string):
             // Notify the employee
             notifyPromises.push(createNotification({
               profile_id: emp.profile_id,
-              title: '🎉 Happy Birthday!',
+              title: 'Happy Birthday!',
               message: `Wishing you a wonderful year ahead from everyone at the company!`,
               type: 'general'
             }));
@@ -324,7 +324,7 @@ export async function checkAndSendBirthdayNotifications(organizationId: string):
               if (otherEmp.profile_id && otherEmp.id !== emp.id) {
                 notifyPromises.push(createNotification({
                   profile_id: otherEmp.profile_id,
-                  title: '🎂 Birthday Alert!',
+                  title: 'Birthday Alert!',
                   message: `Today is ${empName}'s birthday! Wish them a happy birthday!`,
                   type: 'general'
                 }));

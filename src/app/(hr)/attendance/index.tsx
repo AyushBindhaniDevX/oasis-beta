@@ -271,15 +271,22 @@ export default function HRAttendanceScreen() {
                       </View>
                       <View style={{ alignItems: 'flex-end', gap: 4 }}>
                         <Badge label={item.status} variant={statusVariant(item.status)} />
-                        <Text
-                          style={{
-                            color: item.clock_in_verified ? colors.success : colors.danger,
-                            fontSize: 11,
-                            fontWeight: '600',
-                          }}
-                        >
-                          {item.clock_in_verified ? '✓ Verified' : '✗ Unverified'}
-                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                          {item.clock_in_verified ? (
+                            <CheckCircle2 size={12} color={colors.success} />
+                          ) : (
+                            <XCircle size={12} color={colors.danger} />
+                          )}
+                          <Text
+                            style={{
+                              color: item.clock_in_verified ? colors.success : colors.danger,
+                              fontSize: 11,
+                              fontWeight: '600',
+                            }}
+                          >
+                            {item.clock_in_verified ? 'Verified' : 'Unverified'}
+                          </Text>
+                        </View>
                       </View>
                     </Card>
                   );

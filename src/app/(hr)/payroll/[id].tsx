@@ -36,7 +36,13 @@ import { getAllEmployees } from '@/lib/services/employee';
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { formatCurrency } from '@/utils/format';
-import { MONTHS } from '@/constants/config';
+import {
+  MONTHS,
+  HOSPITAL_UNITS,
+  EMPLOYMENT_TYPES,
+  normalizeHospitalUnit,
+  normalizeEmploymentType,
+} from '@/constants/config';
 import { CustomPayrollItemsManager } from '@/components/payroll/CustomPayrollItemsManager';
 import type { Payroll, PayrollPeriod, Employee, CustomPayrollItem } from '@/types';
 import {
@@ -55,9 +61,18 @@ import {
   Send,
   Lock,
   Download,
+  Printer,
+  Building2,
+  Briefcase,
+  Search,
+  FileSpreadsheet,
 } from 'lucide-react-native';
 
 import { exportExcel, exportTxt } from '@/utils/excel';
+import {
+  exportSalaryRegisterPdf,
+  exportSalaryRegisterExcel,
+} from '@/utils/salary-register-export';
 
 export default function PayrollDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -81,6 +96,13 @@ export default function PayrollDetailScreen() {
   const [generatingSlip, setGeneratingSlip] = useState<string | null>(null);
   const [generatedSlips, setGeneratedSlips] = useState<Set<string>>(new Set());
 
+  // Filter & Search states
+  const [selectedUnit, setSelectedUnit] = useState<string>('All');
+  const [selectedCategory, setSelectedCategory] = useState<'All' | 'Regular' | 'Contractual'>('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
+
   // Form state
   const [selEmpId, setSelEmpId] = useState<string | null>(null);
   const [basicSalary, setBasicSalary] = useState('');
@@ -102,9 +124,13 @@ export default function PayrollDetailScreen() {
         getPayrollEntries(id!),
         getAllEmployees(orgId),
       ]);
-      setPeriod(periodSnap.exists() ? ({ id: periodSnap.id, ...periodSnap.data() } as PayrollPeriod) : null);
+      const p = periodSnap.exists() ? ({ id: periodSnap.id, ...periodSnap.data() } as PayrollPeriod) : null;
+      setPeriod(p);
       setEntries(entriesData);
       setEmployees(emps);
+      if (p?.hospital_unit || (p as any)?.unit) {
+        setSelectedUnit(p?.hospital_unit || (p as any)?.unit || 'All');
+      }
       if (emps.length > 0 && !selEmpId) {
         setSelEmpId(emps[0].id);
       }
@@ -317,14 +343,81 @@ export default function PayrollDetailScreen() {
     }
   };
 
+  // Filtered entries according to unit, employment type category, and search query
+  const filteredEntries = useMemo(() => {
+    return entries.filter((entry) => {
+      const emp = entry.employee as any;
+      const unit = normalizeHospitalUnit(entry.hospital_unit || emp?.hospital_unit);
+      const category = normalizeEmploymentType(entry.employment_type || emp?.employment_type);
+      const name = (emp?.profile?.full_name || '').toLowerCase();
+      const code = (emp?.employee_code || emp?.id || '').toLowerCase();
+      const q = searchQuery.trim().toLowerCase();
+
+      if (selectedUnit !== 'All' && unit !== selectedUnit) return false;
+      if (selectedCategory !== 'All' && category !== selectedCategory) return false;
+      if (q && !name.includes(q) && !code.includes(q)) return false;
+
+      return true;
+    });
+  }, [entries, selectedUnit, selectedCategory, searchQuery]);
+
+  // Export Prescribed 28-Column Salary Register as PDF / Landscape Print
+  const handleExportRegisterPdf = async () => {
+    if (!period) return;
+    if (filteredEntries.length === 0) {
+      Alert.alert('No Data', 'No payroll entries found for the selected unit and employment filter.');
+      return;
+    }
+    setExportingPdf(true);
+    try {
+      const activeUnit = selectedUnit !== 'All' ? selectedUnit : period.hospital_unit || (period as any).unit || undefined;
+      await exportSalaryRegisterPdf({
+        period,
+        entries: filteredEntries,
+        unitName: activeUnit,
+        employmentType: selectedCategory,
+        organization: tenantOrg,
+      });
+    } catch (err: any) {
+      console.error('Export PDF error:', err);
+      Alert.alert('Export Failed', err?.message || 'Could not generate salary register PDF.');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  // Export Prescribed Multi-Sheet Salary Register as Excel
+  const handleExportRegisterExcel = async () => {
+    if (!period) return;
+    if (filteredEntries.length === 0) {
+      Alert.alert('No Data', 'No payroll entries found for the selected unit and employment filter.');
+      return;
+    }
+    setExportingExcel(true);
+    try {
+      const activeUnit = selectedUnit !== 'All' ? selectedUnit : period.hospital_unit || (period as any).unit || undefined;
+      await exportSalaryRegisterExcel({
+        period,
+        entries: filteredEntries,
+        unitName: activeUnit,
+        employmentType: selectedCategory,
+        organization: tenantOrg,
+      });
+    } catch (err: any) {
+      console.error('Export Excel error:', err);
+      Alert.alert('Export Failed', err?.message || 'Could not generate salary register Excel.');
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
   const handleExportECR = async () => {
-    if (entries.length === 0) {
+    if (filteredEntries.length === 0) {
       Alert.alert('Validation Error', 'No payroll entries found for ECR generation.');
       return;
     }
-    
-    // ECR Format: UAN#~#Member Name#~#Gross Wages#~#EPF Wages#~#EPS Wages#~#EDLI Wages#~#EPF Contri Remitted#~#EPS Contri Remitted#~#EPF EPS Diff Remitted#~#NCP Days#~#Refund of Advances
-    const lines = entries.map(entry => {
+
+    const lines = filteredEntries.map((entry) => {
       const emp = entry.employee as any;
       const tc = emp?.tax_config || {};
       const uan = tc.uan_number || tc.pf_number || '';
@@ -333,16 +426,12 @@ export default function PayrollDetailScreen() {
       const epfWages = Math.min(Math.round(entry.basic_salary || 0), 15000);
       const epsWages = epfWages;
       const edliWages = epfWages;
-      
       const epfContri = Math.round(entry.deductions?.['EPF'] || entry.deductions?.['pf'] || 0);
-      
-      // Employer contributions based on 12% total (8.33% EPS, 3.67% EPF diff)
       const epsContri = Math.round((epsWages * 8.33) / 100);
       const epfDiff = Math.round((epfWages * 3.67) / 100);
-      
       const ncpDays = entry.lop_days || 0;
       const refund = 0;
-      
+
       return `${uan}#~#${name}#~#${gross}#~#${epfWages}#~#${epsWages}#~#${edliWages}#~#${epfContri}#~#${epsContri}#~#${epfDiff}#~#${ncpDays}#~#${refund}`;
     });
 
@@ -351,42 +440,44 @@ export default function PayrollDetailScreen() {
   };
 
   const handleExportESI = async () => {
-    if (entries.length === 0) {
+    if (filteredEntries.length === 0) {
       Alert.alert('Validation Error', 'No payroll entries found for ESI generation.');
       return;
     }
-    
-    // ESI Format: IP Number, IP Name, No. of Days, Total Monthly Wages, Reason Code, Last Working Day
-    const rows = entries.map(entry => {
+
+    const rows = filteredEntries.map((entry) => {
       const emp = entry.employee as any;
       const tc = emp?.tax_config || {};
       const ipNum = tc.esi_number || '';
       const name = emp?.profile?.full_name || '';
-      // sanitize name: letters and spaces only
       const sanitizedName = name.replace(/[^a-zA-Z\s]/g, '');
       const days = 30 - (entry.lop_days || 0);
       const gross = Math.round(entry.gross_salary || 0);
       const reasonCode = days === 0 ? '2' : '';
-      const lwd = ''; // Assuming no resignation handling in this basic export
-      
+      const lwd = '';
+
       return [ipNum, sanitizedName, days, gross, reasonCode, lwd];
     });
 
     const headers = ['IP Number', 'IP Name', 'No. of Days', 'Total Monthly Wages', 'Reason Code', 'Last Working Day'];
-    
-    await exportExcel(`ESI_${period?.month}_${period?.year}`, [
-      { name: 'ESI Voucher', headers, rows }
-    ]);
+    await exportExcel(`ESI_${period?.month}_${period?.year}`, [{ name: 'ESI Voucher', headers, rows }]);
   };
 
   if (loading) return <LoadingState />;
 
-  const totalGross = entries.reduce((sum, e) => sum + (e.gross_salary || 0), 0);
-  const totalNet = entries.reduce((sum, e) => sum + (e.net_salary || 0), 0);
-  const totalEpf = entries.reduce((sum, e) => sum + (e.deductions?.['EPF'] || e.deductions?.['pf'] || 0), 0);
-  const totalTds = entries.reduce((sum, e) => sum + (e.deductions?.['TDS'] || e.deductions?.['tax'] || 0), 0);
+  const totalGross = filteredEntries.reduce((sum, e) => sum + (e.gross_salary || 0), 0);
+  const totalNet = filteredEntries.reduce((sum, e) => sum + (e.net_salary || 0), 0);
+  const totalEpf = filteredEntries.reduce((sum, e) => sum + (e.deductions?.['EPF'] || e.deductions?.['pf'] || 0), 0);
+  const totalTds = filteredEntries.reduce((sum, e) => sum + (e.deductions?.['TDS'] || e.deductions?.['tax'] || 0), 0);
 
   const navItems = profile?.role === 'admin' ? ADMIN_NAV : HR_NAV;
+
+  const unitBadgeColor = (u: string) => {
+    if (u === 'Shanti Memorial Hospital') return { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' };
+    if (u === 'Gopal Trust') return { bg: '#FDF2F8', text: '#BE185D', border: '#FBCFE8' };
+    if (u === 'Chikitsa') return { bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0' };
+    return { bg: '#F3F4F6', text: '#4B5563', border: '#E5E7EB' };
+  };
 
   return (
     <SidebarLayout items={navItems}>
@@ -398,16 +489,26 @@ export default function PayrollDetailScreen() {
       >
         {/* ── Top Header ──────────────────────────────────────────────────── */}
         <View style={styles.headerRow}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 280 }}>
             <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { borderColor: colors.border }]}>
               <ChevronLeft size={20} color={colors.text} />
             </TouchableOpacity>
-            <View>
-              <Text style={[styles.title, { color: colors.text }]}>
-                {period ? `${MONTHS[period.month - 1]} ${period.year} Payroll Batch` : 'Payroll Details'}
-              </Text>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <Text style={[styles.title, { color: colors.text }]}>
+                  {period ? `${MONTHS[period.month - 1]} ${period.year} Salary Register` : 'Payroll Details'}
+                </Text>
+                {period?.hospital_unit ? (
+                  <View style={[styles.unitChip, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+                    <Building2 size={13} color="#2563EB" />
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#1D4ED8' }}>
+                      {period.hospital_unit}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
               <Text style={[styles.subTitle, { color: colors.textSecondary }]}>
-                Statutory deductions (EPF, TDS, PT) are auto-calculated from employee enrollment tax profiles.
+                Standard 28-column format with unit separation and Regular / Contractual categorization.
               </Text>
             </View>
           </View>
@@ -422,7 +523,7 @@ export default function PayrollDetailScreen() {
                 >
                   <RefreshCw size={15} color={colors.primary} />
                   <Text style={[styles.syncBtnText, { color: colors.primary }]}>
-                    {recalculating ? 'Syncing...' : 'Sync & Recalculate Profiles'}
+                    {recalculating ? 'Syncing...' : 'Sync Profiles'}
                   </Text>
                 </TouchableOpacity>
 
@@ -450,7 +551,109 @@ export default function PayrollDetailScreen() {
           </View>
         ) : null}
 
-        {/* ── Summary KPI Cards ───────────────────────────────────────────── */}
+        {/* ── PRESCRIBED SALARY REGISTER EXPORT BAR ────────────────────────── */}
+        <View style={[styles.exportCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.exportCardTop}>
+            <View style={{ flex: 1, minWidth: 240 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <FileSpreadsheet size={20} color={colors.primary} />
+                <Text style={[styles.exportTitle, { color: colors.text }]}>
+                  Monthly Salary Report Register (Prescribed Format)
+                </Text>
+              </View>
+              <Text style={[styles.exportSub, { color: colors.textSecondary }]}>
+                Generates the exact 28-column sheet with unit header, paid days, breakdown, statutory withholdings, and signature blocks.
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <TouchableOpacity
+                style={[styles.exportActionBtn, { backgroundColor: '#1E40AF' }]}
+                onPress={handleExportRegisterPdf}
+                disabled={exportingPdf}
+              >
+                <Printer size={16} color="#FFF" />
+                <Text style={styles.exportActionBtnText}>
+                  {exportingPdf ? 'Preparing PDF...' : 'Print / Download PDF Register'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.exportActionBtn, { backgroundColor: '#059669' }]}
+                onPress={handleExportRegisterExcel}
+                disabled={exportingExcel}
+              >
+                <Download size={16} color="#FFF" />
+                <Text style={styles.exportActionBtnText}>
+                  {exportingExcel ? 'Generating...' : 'Export Excel Register'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Unit & Employment Type Filter Tabs */}
+          <View style={[styles.filterBar, { borderTopColor: colors.border }]}>
+            {/* Unit Filter */}
+            <View style={styles.filterSection}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 6 }}>
+                <Building2 size={14} color={colors.textSecondary} />
+                <Text style={{ fontSize: 11, fontWeight: '800', color: colors.textSecondary }}>UNIT:</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                {['All', ...HOSPITAL_UNITS].map((u) => {
+                  const active = selectedUnit === u;
+                  return (
+                    <TouchableOpacity
+                      key={u}
+                      onPress={() => setSelectedUnit(u)}
+                      style={[
+                        styles.chipBtn,
+                        {
+                          backgroundColor: active ? colors.primary : colors.background,
+                          borderColor: active ? colors.primary : colors.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.chipBtnText, { color: active ? '#FFF' : colors.text }]}>
+                        {u === 'All' ? 'All Units' : u}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* Employment Type Filter */}
+            <View style={styles.filterSection}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 6 }}>
+                <Briefcase size={14} color={colors.textSecondary} />
+                <Text style={{ fontSize: 11, fontWeight: '800', color: colors.textSecondary }}>TYPE:</Text>
+              </View>
+              {(['All', 'Regular', 'Contractual'] as const).map((cat) => {
+                const active = selectedCategory === cat;
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    onPress={() => setSelectedCategory(cat)}
+                    style={[
+                      styles.chipBtn,
+                      {
+                        backgroundColor: active ? '#7C3AED' : colors.background,
+                        borderColor: active ? '#7C3AED' : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.chipBtnText, { color: active ? '#FFF' : colors.text }]}>
+                      {cat}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
+        {/* ── Summary KPI Cards for Active Selection ────────────────────────── */}
         <View style={styles.kpiGrid}>
           {/* Total Net */}
           <View style={[styles.kpiCard, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
@@ -460,7 +663,7 @@ export default function PayrollDetailScreen() {
             <View>
               <Text style={[styles.kpiLabel, { color: '#166534' }]}>TOTAL NET PAYOUT</Text>
               <Text style={[styles.kpiValue, { color: '#14532D' }]}>{formatCurrency(totalNet)}</Text>
-              <Text style={[styles.kpiSub, { color: '#15803D' }]}>{entries.length} Active Employees</Text>
+              <Text style={[styles.kpiSub, { color: '#15803D' }]}>{filteredEntries.length} Listed Employees</Text>
             </View>
           </View>
 
@@ -472,7 +675,7 @@ export default function PayrollDetailScreen() {
             <View>
               <Text style={[styles.kpiLabel, { color: '#1E40AF' }]}>GROSS COMPENSATION</Text>
               <Text style={[styles.kpiValue, { color: '#1E3A8A' }]}>{formatCurrency(totalGross)}</Text>
-              <Text style={[styles.kpiSub, { color: '#3B82F6' }]}>Basic + HRA + Allowances</Text>
+              <Text style={[styles.kpiSub, { color: '#3B82F6' }]}>Basic + Allowances</Text>
             </View>
           </View>
 
@@ -504,33 +707,58 @@ export default function PayrollDetailScreen() {
         {/* ── Payroll Entries List ────────────────────────────────────────── */}
         <View style={[styles.entriesCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
           <View style={styles.entriesCardHeader}>
-            <View>
-              <Text style={[styles.entriesTitle, { color: colors.text }]}>Employee Payroll Breakdown</Text>
+            <View style={{ flex: 1, minWidth: 220 }}>
+              <Text style={[styles.entriesTitle, { color: colors.text }]}>
+                Employee Salary Register ({filteredEntries.length})
+              </Text>
               <Text style={[styles.entriesSub, { color: colors.textSecondary }]}>
-                Detailed itemized salary registers with auto-applied tax formulas.
+                Showing {selectedUnit !== 'All' ? selectedUnit : 'All Units'} • {selectedCategory !== 'All' ? selectedCategory : 'All Categories'}
               </Text>
             </View>
-            <Badge
-              label={period?.status?.toUpperCase() || 'OPEN'}
-              variant={period?.status === 'closed' ? 'success' : period?.status === 'processing' ? 'accent' : 'warning'}
-            />
+
+            {/* Quick search input */}
+            <View style={[styles.searchBox, { borderColor: colors.border, backgroundColor: colors.background }]}>
+              <Search size={14} color={colors.textSecondary} />
+              <Input
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search staff or code..."
+                style={styles.searchInput}
+              />
+            </View>
           </View>
 
-          {entries.length === 0 ? (
+          {filteredEntries.length === 0 ? (
             <View style={styles.emptyBox}>
               <CreditCard size={40} color={colors.textSecondary} />
               <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                No employee payroll entries generated for this period. Click "+ Add Custom Entry" or "Sync" to populate.
+                No employee records match the active unit, category, or search filters.
               </Text>
             </View>
           ) : (
             <View style={{ gap: 12, padding: 16 }}>
-              {entries.map((entry) => {
+              {filteredEntries.map((entry, idx) => {
                 const emp = entry.employee as any;
                 const empName = emp?.profile?.full_name || 'Staff Member';
-                const empCode = emp?.employee_code || emp?.id || 'EMP';
+                const empCode = emp?.employee_code || emp?.id || `EMP-${idx + 1}`;
                 const slipGenerated = generatedSlips.has(entry.id);
                 const taxCfg = emp?.tax_config || {};
+
+                const unit = normalizeHospitalUnit(entry.hospital_unit || emp?.hospital_unit);
+                const category = normalizeEmploymentType(entry.employment_type || emp?.employment_type);
+                const grade = emp?.grade || 'M1';
+                const uColor = unitBadgeColor(unit);
+
+                const offerSalary = Math.round(entry.salary_details ?? entry.basic_salary ?? 25000);
+                const paidDays = entry.paid_days ?? 26;
+                const convAll = Math.round(entry.conveyance ?? (entry.allowances?.['Conveyance Allowance'] || 1200));
+                const washAll = Math.round(entry.washing ?? (entry.allowances?.['Washing Allowance'] || 500));
+                const specialAll = Math.round(entry.special_allowance ?? (entry.allowances?.['Special Allowance'] || 0));
+                const epf = Math.round(entry.pf ?? (entry.deductions?.['EPF'] || entry.deductions?.pf || 0));
+                const esic = Math.round(entry.esi ?? (entry.deductions?.['ESIC'] || entry.deductions?.esi || 0));
+                const tds = Math.round(entry.pt_tds ?? (entry.deductions?.['TDS'] || entry.deductions?.tax || 0));
+                const otherDed = Math.round(entry.ot_ded ?? (entry.deductions?.['Miscellaneous Deductions'] || 0));
+                const grossDed = Math.round(entry.total_deductions ?? entry.gross_deductions ?? (epf + esic + tds + otherDed));
 
                 return (
                   <View
@@ -538,74 +766,99 @@ export default function PayrollDetailScreen() {
                     style={[styles.entryItemCard, { backgroundColor: colors.background, borderColor: '#e2e8f0' }]}
                   >
                     <View style={styles.entryItemTop}>
-                      <View style={{ flex: 1 }}>
+                      <View style={{ flex: 1, minWidth: 260 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <Text style={[styles.snoPill, { color: colors.textSecondary }]}>#{idx + 1}</Text>
                           <Text style={[styles.empNameText, { color: colors.text }]}>{empName}</Text>
                           <View style={styles.codePill}>
                             <Text style={styles.codePillText}>{empCode}</Text>
                           </View>
-                          {taxCfg.pf_number ? (
-                            <View style={[styles.taxPill, { backgroundColor: '#E0F2FE' }]}>
-                              <Text style={{ fontSize: 10, fontWeight: '700', color: '#0369A1' }}>
-                                PF: {taxCfg.pf_number}
-                              </Text>
-                            </View>
-                          ) : null}
-                          <View style={[styles.taxPill, { backgroundColor: '#F3E8FF' }]}>
-                            <Text style={{ fontSize: 10, fontWeight: '700', color: '#7E22CE' }}>
-                              Regime: {taxCfg.tax_regime?.toUpperCase() || 'NEW'}
+
+                          {/* Unit Badge */}
+                          <View style={[styles.unitPill, { backgroundColor: uColor.bg, borderColor: uColor.border }]}>
+                            <Text style={[styles.unitPillText, { color: uColor.text }]}>{unit}</Text>
+                          </View>
+
+                          {/* Employment Type Badge */}
+                          <View
+                            style={[
+                              styles.catPill,
+                              {
+                                backgroundColor: category === 'Regular' ? '#F0FDF4' : '#FFFBEB',
+                                borderColor: category === 'Regular' ? '#BBF7D0' : '#FDE68A',
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.catPillText,
+                                { color: category === 'Regular' ? '#15803D' : '#B45309' },
+                              ]}
+                            >
+                              {category}
                             </Text>
+                          </View>
+
+                          {/* Grade Pill */}
+                          <View style={styles.gradePill}>
+                            <Text style={styles.gradePillText}>Grade: {grade}</Text>
                           </View>
                         </View>
 
                         <Text style={[styles.empDesigText, { color: colors.textSecondary }]}>
-                          {emp?.designation || 'Employee'} • Basic: {formatCurrency(entry.basic_salary)} • HRA: {formatCurrency(entry.allowances?.['HRA'] || entry.allowances?.hra || 0)} • Gross: {formatCurrency(entry.gross_salary)}
+                          {emp?.department?.name || 'General'} • {emp?.designation || 'Staff'} • Offer: {formatCurrency(offerSalary)} • Paid: {paidDays}d • Gross: {formatCurrency(entry.gross_salary)}
                         </Text>
 
-                        {/* Deductions & Allowances Breakdown Chips */}
-                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-                          <Text style={[styles.deductionTag, { color: '#0369A1' }]}>
-                            EPF: {formatCurrency(entry.deductions?.['EPF'] || entry.deductions?.pf || 0)}
+                        {/* Prescribed Register breakdown tags */}
+                        <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                          <Text style={[styles.breakdownTag, { color: '#0369A1' }]}>
+                            Basic: {formatCurrency(entry.basic_salary)}
                           </Text>
-                          <Text style={[styles.deductionTag, { color: '#B45309' }]}>
-                            TDS: {formatCurrency(entry.deductions?.['TDS'] || entry.deductions?.tax || 0)}
+                          <Text style={[styles.breakdownTag, { color: '#0369A1' }]}>
+                            HRA: {formatCurrency(entry.allowances?.['HRA'] || entry.allowances?.hra || 0)}
                           </Text>
-                          {entry.lop_days > 0 ? (
-                            <Text style={[styles.deductionTag, { color: '#DC2626' }]}>
-                              LOP: {entry.lop_days}d (−{formatCurrency(entry.lop_amount)})
+                          {convAll > 0 ? (
+                            <Text style={[styles.breakdownTag, { color: '#0369A1' }]}>
+                              Conv: {formatCurrency(convAll)}
                             </Text>
                           ) : null}
-
-                          {/* Dynamic Custom Allowances / Bonuses Chips */}
-                          {Object.entries(entry.allowances || {}).map(([name, val]) => {
-                            if (name === 'HRA' || name === 'hra' || name === 'Special Allowance' || name === 'ta' || !val) return null;
-                            return (
-                              <Text key={name} style={[styles.deductionTag, { color: '#047857', backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]}>
-                                + {name}: {formatCurrency(val)}
-                              </Text>
-                            );
-                          })}
-
-                          {/* Dynamic Custom Deductions / Loans Chips */}
-                          {Object.entries(entry.deductions || {}).map(([name, val]) => {
-                            if (name === 'EPF' || name === 'pf' || name === 'TDS' || name === 'tax' || !val) return null;
-                            return (
-                              <Text key={name} style={[styles.deductionTag, { color: '#B91C1C', backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
-                                − {name}: {formatCurrency(val)}
-                              </Text>
-                            );
-                          })}
+                          {washAll > 0 ? (
+                            <Text style={[styles.breakdownTag, { color: '#0369A1' }]}>
+                              Wash: {formatCurrency(washAll)}
+                            </Text>
+                          ) : null}
+                          {specialAll > 0 ? (
+                            <Text style={[styles.breakdownTag, { color: '#0369A1' }]}>
+                              Special: {formatCurrency(specialAll)}
+                            </Text>
+                          ) : null}
+                          <Text style={[styles.deductionTag, { color: '#B45309' }]}>
+                            EPF: {formatCurrency(epf)}
+                          </Text>
+                          {esic > 0 ? (
+                            <Text style={[styles.deductionTag, { color: '#B45309' }]}>
+                              ESIC: {formatCurrency(esic)}
+                            </Text>
+                          ) : null}
+                          {tds > 0 ? (
+                            <Text style={[styles.deductionTag, { color: '#DC2626' }]}>
+                              TDS: {formatCurrency(tds)}
+                            </Text>
+                          ) : null}
+                          <Text style={[styles.deductionTag, { color: '#991B1B', fontWeight: '800' }]}>
+                            Tot Ded: {formatCurrency(grossDed)}
+                          </Text>
                         </View>
                       </View>
 
-                      {/* Net Salary & Actions */}
-                      <View style={{ alignItems: 'flex-end', gap: 8 }}>
+                      {/* Net Salary & Action buttons */}
+                      <View style={{ alignItems: 'flex-end', gap: 6, minWidth: 140 }}>
                         <Text style={[styles.netSalaryText, { color: '#059669' }]}>
                           {formatCurrency(entry.net_salary)}
                         </Text>
                         <Text style={styles.netSalaryLabel}>Net Take-Home</Text>
 
-                        <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
+                        <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                           {period?.status === 'open' && (
                             <TouchableOpacity
                               style={[styles.smallActionBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
@@ -645,7 +898,7 @@ export default function PayrollDetailScreen() {
 
           {/* Bottom Batch Actions */}
           <View style={[styles.batchActionsRow, { borderTopColor: '#f1f5f9' }]}>
-            <View style={{ flexDirection: 'row', gap: 10, flex: 1 }}>
+            <View style={{ flexDirection: 'row', gap: 10, flex: 1, flexWrap: 'wrap' }}>
               <TouchableOpacity
                 style={[styles.processBatchBtn, { backgroundColor: '#F3F4F6' }]}
                 onPress={handleExportECR}
@@ -683,7 +936,7 @@ export default function PayrollDetailScreen() {
               >
                 <Send size={16} color="#FFF" />
                 <Text style={styles.processBatchBtnText}>
-                  {distributing ? 'Distributing...' : 'Distribute Digital Payslips to Employees'}
+                  {distributing ? 'Distributing...' : 'Distribute Digital Payslips'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -910,4 +1163,135 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   processBatchBtnText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
+  exportCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    padding: 16,
+    gap: 14,
+  },
+  exportCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  exportTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  exportSub: {
+    fontSize: 12,
+    marginTop: 3,
+    maxWidth: 650,
+  },
+  exportActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  exportActionBtnText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  filterBar: {
+    borderTopWidth: 1,
+    paddingTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  filterSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  chipBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  chipBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  unitChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  unitPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  unitPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  catPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  catPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  gradePill: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  gradePillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  snoPill: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  breakdownTag: {
+    fontSize: 11,
+    fontWeight: '600',
+    backgroundColor: '#F0F9FF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 0.5,
+    borderColor: '#BAE6FD',
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    minWidth: 200,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 12,
+    paddingVertical: 4,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+  },
 });
