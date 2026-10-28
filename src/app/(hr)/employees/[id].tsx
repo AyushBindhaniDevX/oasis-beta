@@ -676,11 +676,12 @@ export default function EmployeeDetailScreen() {
               onChangeText={setDesignation}
               placeholder="e.g. Senior Software Engineer"
             />
+            {/* Unified Unit / Sub-Brand (Geofenced Workplace) Selector */}
             <Select
-              label="Unit / Sub-Brand *"
+              label="Unit / Sub-Brand (Geofenced Workplace) *"
               value={hospitalUnit}
               onValueChange={(val) => {
-                const chosen = val || 'Headquarters';
+                const chosen = val || (workplaces[0]?.name || 'Main Unit');
                 setHospitalUnit(chosen);
                 const matchedWp = workplaces.find(w => w.name.toLowerCase() === chosen.toLowerCase());
                 if (matchedWp) {
@@ -690,7 +691,7 @@ export default function EmployeeDetailScreen() {
               options={(() => {
                 if (workplaces.length > 0) {
                   return workplaces.map((w) => ({
-                    label: w.address ? `${w.name} (${w.address})` : w.name,
+                    label: `${w.name}${w.radius_meters ? ` (${w.radius_meters}m geofence)` : ''}${w.address ? ` — ${w.address}` : ''}`,
                     value: w.name,
                   }));
                 }
@@ -717,16 +718,6 @@ export default function EmployeeDetailScreen() {
               options={[
                 { label: 'None / Unassigned', value: '' },
                 ...departments.map(d => ({ label: d.name, value: d.id })),
-              ]}
-            />
-
-            <Select
-              label="Primary Workplace (Location)"
-              value={workplaceId}
-              onValueChange={setWorkplaceId}
-              options={[
-                { label: 'None / Unassigned', value: '' },
-                ...workplaces.map(w => ({ label: w.name, value: w.id })),
               ]}
             />
 

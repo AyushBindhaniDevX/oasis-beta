@@ -7,10 +7,10 @@ import {
   TouchableOpacity,
   RefreshControl,
   useWindowDimensions,
-  Modal,
   TextInput,
   ActivityIndicator,
 } from 'react-native';
+import { Modal } from '@/components/ui/Modal';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
@@ -37,7 +37,12 @@ import {
   Building2,
   ShieldCheck,
   UserCheck,
+  CheckSquare,
+  MinusSquare,
+  Square,
+  RotateCcw,
 } from 'lucide-react-native';
+import { Select } from '@/components/ui/Select';
 import { exportOrPrintPdf } from '@/utils/pdf';
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
@@ -96,6 +101,43 @@ export default function ShiftsScreen() {
       return { day, dateStr, label: `${day} ${dayNum} ${monthStr}`, isToday: d.toDateString() === new Date().toDateString() };
     });
   }, [weekOffset]);
+
+  const displayedEmployees = React.useMemo(() => {
+    const filtered = employees.filter(e => selectedDeptId === 'all' || e.department_id === selectedDeptId);
+    const seen = new Set<string>();
+    return filtered.filter(e => {
+      if (!e.id || seen.has(e.id)) return false;
+      seen.add(e.id);
+      return true;
+    });
+  }, [employees, selectedDeptId]);
+
+  // Mass action selection state
+  const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
+  const [massShiftModalOpen, setMassShiftModalOpen] = useState(false);
+  const [massTargetShiftId, setMassTargetShiftId] = useState<string | null>(null);
+  const [massTargetScope, setMassTargetScope] = useState<'all' | 'weekdays' | 'weekend' | string>('all');
+  const [massApplying, setMassApplying] = useState(false);
+
+  const isAllSelected = displayedEmployees.length > 0 && displayedEmployees.every((e) => selectedEmpIds.has(e.id));
+  const isSomeSelected = displayedEmployees.some((e) => selectedEmpIds.has(e.id)) && !isAllSelected;
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedEmpIds(new Set());
+    } else {
+      setSelectedEmpIds(new Set(displayedEmployees.map((e) => e.id)));
+    }
+  };
+
+  const toggleSelectEmp = (empId: string) => {
+    setSelectedEmpIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(empId)) next.delete(empId);
+      else next.add(empId);
+      return next;
+    });
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -165,11 +207,64 @@ export default function ShiftsScreen() {
     const key = `${assignModal.employee.id}_${assignModal.date}`;
 
     // Optimistic update
-    setRosterMap((prev) => ({ ...prev, [key]: shiftId || 'OFF' }));
+    setRosterMap((prev) => {
+      const next = { ...prev };
+      if (shiftId === null) {
+        delete next[key];
+      } else {
+        next[key] = shiftId;
+      }
+      return next;
+    });
     setAssignModal({ open: false, employee: null, date: '', dayLabel: '' });
 
     await assignEmployeeShift(assignModal.employee.id, assignModal.date, shiftId, orgId);
     await loadData();
+  };
+
+  const handleMassAssign = async (targetShiftId: string | 'OFF' | null, scope: 'all' | 'weekdays' | 'weekend' | string) => {
+    if (selectedEmpIds.size === 0) return;
+    setMassApplying(true);
+    try {
+      const orgId = tenantOrg?.id || profile?.organization_id || '';
+      let targetDates = weekDates.map((d) => d.dateStr);
+      if (scope === 'weekdays') {
+        targetDates = weekDates.slice(0, 5).map((d) => d.dateStr);
+      } else if (scope === 'weekend') {
+        targetDates = weekDates.slice(5, 7).map((d) => d.dateStr);
+      } else if (scope !== 'all') {
+        targetDates = [scope];
+      }
+
+      setRosterMap((prev) => {
+        const next = { ...prev };
+        for (const empId of selectedEmpIds) {
+          for (const d of targetDates) {
+            const key = `${empId}_${d}`;
+            if (targetShiftId === null) {
+              delete next[key];
+            } else {
+              next[key] = targetShiftId;
+            }
+          }
+        }
+        return next;
+      });
+
+      const promises: Promise<void>[] = [];
+      for (const empId of selectedEmpIds) {
+        for (const date of targetDates) {
+          promises.push(assignEmployeeShift(empId, date, targetShiftId, orgId));
+        }
+      }
+      await Promise.all(promises);
+      setMassShiftModalOpen(false);
+      await loadData();
+    } catch (e) {
+      console.error('Failed mass shift assignment:', e);
+    } finally {
+      setMassApplying(false);
+    }
   };
 
   const handleDownloadPDF = async () => {
@@ -389,9 +484,10 @@ export default function ShiftsScreen() {
                 ${employees.map(emp => {
                   let dutyDaysCount = 0;
                   const dayCells = weekDates.map(d => {
-                    const shiftId = rosterMap[emp.id + '_' + d.dateStr];
-                    const shiftDef = shifts.find(s => s.id === shiftId);
-                    if (shiftId && shiftId !== 'OFF' && shiftDef) {
+                    const rawShiftId = rosterMap[emp.id + '_' + d.dateStr];
+                    const effectiveShiftId = rawShiftId !== undefined ? rawShiftId : (emp.default_shift_id || 'OFF');
+                    const shiftDef = shifts.find(s => s.id === effectiveShiftId);
+                    if (effectiveShiftId && effectiveShiftId !== 'OFF' && shiftDef) {
                       dutyDaysCount++;
                       return `<td><span class="shift-chip" style="background-color: ${shiftDef.color}25; color: ${shiftDef.color}; border-color: ${shiftDef.color}60;">${shiftDef.name}</span></td>`;
                     } else {
@@ -650,13 +746,77 @@ export default function ShiftsScreen() {
                 </TouchableOpacity>
               </View>
 
+              {/* Mass Selection Action Bar */}
+              {selectedEmpIds.size > 0 && (
+                <View style={styles.massActionBar}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <View style={styles.massBadge}>
+                      <Text style={styles.massBadgeText}>{selectedEmpIds.size} Selected</Text>
+                    </View>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F766E' }}>
+                      Bulk action for {selectedEmpIds.size} staff member{selectedEmpIds.size > 1 ? 's' : ''}
+                    </Text>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setMassTargetShiftId(shifts[0]?.id || null);
+                        setMassTargetScope('all');
+                        setMassShiftModalOpen(true);
+                      }}
+                      style={[styles.massBtn, { backgroundColor: '#0D7377' }]}
+                    >
+                      <Clock size={14} color="#FFF" />
+                      <Text style={styles.massBtnText}>Assign Shift</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => handleMassAssign('OFF', 'all')}
+                      disabled={massApplying}
+                      style={[styles.massBtn, { backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1' }]}
+                    >
+                      <Text style={[styles.massBtnText, { color: '#475569' }]}>Mark Week OFF</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => handleMassAssign(null, 'all')}
+                      disabled={massApplying}
+                      style={[styles.massBtn, { backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#86EFAC' }]}
+                    >
+                      <RotateCcw size={14} color="#166534" />
+                      <Text style={[styles.massBtnText, { color: '#166534' }]}>Reset to Default Shift</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => setSelectedEmpIds(new Set())}
+                      style={[styles.massBtn, { backgroundColor: 'transparent' }]}
+                    >
+                      <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '700' }}>Deselect All</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
               {/* Roster Table Card */}
               <View style={styles.rosterCard}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={{ minWidth: 800 }}>
+                  <View style={{ minWidth: 840 }}>
                     {/* Header Row */}
                     <View style={styles.tableHeaderRow}>
-                      <Text style={[styles.thCell, { width: 220, textAlign: 'left', paddingLeft: 8 }]}>EMPLOYEE</Text>
+                      <TouchableOpacity
+                        onPress={toggleSelectAll}
+                        style={{ width: 44, alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        {isAllSelected ? (
+                          <CheckSquare size={18} color="#0D7377" />
+                        ) : isSomeSelected ? (
+                          <MinusSquare size={18} color="#0D7377" />
+                        ) : (
+                          <Square size={18} color="#94A3B8" />
+                        )}
+                      </TouchableOpacity>
+                      <Text style={[styles.thCell, { width: 210, textAlign: 'left', paddingLeft: 4 }]}>STAFF / EMPLOYEE</Text>
                       {weekDates.map((d) => (
                         <View key={d.dateStr} style={[styles.thCellBox, d.isToday && { backgroundColor: '#E6F4F4' }]}>
                           <Text style={[styles.thDayText, d.isToday && { color: '#0D7377', fontWeight: '800' }]}>{d.day}</Text>
@@ -666,64 +826,91 @@ export default function ShiftsScreen() {
                     </View>
 
                     {/* Employee Rows */}
-                    {employees.filter(e => selectedDeptId === 'all' || e.department_id === selectedDeptId).length === 0 ? (
+                    {displayedEmployees.length === 0 ? (
                       <View style={{ padding: 32, alignItems: 'center' }}>
                         <Text style={{ color: colors.textSecondary }}>No employees found for this department filter.</Text>
                       </View>
                     ) : (
-                      employees.filter(e => selectedDeptId === 'all' || e.department_id === selectedDeptId).map((emp) => (
-                        <View key={emp.id} style={styles.tableRow}>
-                          <View style={{ width: 220, paddingRight: 12 }}>
-                            <Text style={styles.empName}>{emp.profile?.full_name || 'Staff'}</Text>
-                            <Text style={styles.empRole}>{emp.designation || 'Team Member'}</Text>
-                          </View>
+                      displayedEmployees.map((emp) => {
+                        const isSelected = selectedEmpIds.has(emp.id);
+                        return (
+                          <View key={emp.id} style={[styles.tableRow, isSelected && { backgroundColor: '#F0FDFA' }]}>
+                            <TouchableOpacity
+                              onPress={() => toggleSelectEmp(emp.id)}
+                              style={{ width: 44, alignItems: 'center', justifyContent: 'center' }}
+                            >
+                              {isSelected ? (
+                                <CheckSquare size={18} color="#0D7377" />
+                              ) : (
+                                <Square size={18} color="#CBD5E1" />
+                              )}
+                            </TouchableOpacity>
 
-                          {weekDates.map((d) => {
-                            const key = `${emp.id}_${d.dateStr}`;
-                            const shiftId = rosterMap[key];
-                            const assignedShift = shifts.find((s) => s.id === shiftId);
-                            const isOff = shiftId === 'OFF' || !assignedShift;
-                            const isNight = assignedShift?.is_night_shift;
+                            <View style={{ width: 210, paddingRight: 10 }}>
+                              <Text style={styles.empName}>{emp.profile?.full_name || 'Staff'}</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
+                                <Text style={styles.empRole}>{emp.designation || 'Team Member'}</Text>
+                                {emp.default_shift_id && (
+                                  <View style={styles.defaultShiftBadge}>
+                                    <Text style={styles.defaultShiftBadgeText}>
+                                      Fixed: {shifts.find(s => s.id === emp.default_shift_id)?.name?.split(' ')[0] || 'Default'}
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
+                            </View>
 
-                            return (
-                              <TouchableOpacity
-                                key={d.dateStr}
-                                onPress={() =>
-                                  setAssignModal({
-                                    open: true,
-                                    employee: emp,
-                                    date: d.dateStr,
-                                    dayLabel: d.label,
-                                    currentShiftId: shiftId,
-                                  })
-                                }
-                                style={styles.cellBox}
-                              >
-                                <View
-                                  style={[
-                                    styles.shiftPill,
-                                    isOff && { backgroundColor: '#F1F5F9' },
-                                    !isOff && isNight && { backgroundColor: '#1E293B' },
-                                    !isOff && !isNight && { backgroundColor: (assignedShift?.color || '#0D7377') + '20', borderColor: assignedShift?.color || '#0D7377', borderWidth: 1 },
-                                  ]}
+                            {weekDates.map((d) => {
+                              const key = `${emp.id}_${d.dateStr}`;
+                              const rawShiftId = rosterMap[key];
+                              const isOverridden = rawShiftId !== undefined;
+                              // Fallback to employee's default shift (fixed everyday unless changed in roster)
+                              const effectiveShiftId = isOverridden ? rawShiftId : (emp.default_shift_id || 'OFF');
+                              const assignedShift = shifts.find((s) => s.id === effectiveShiftId);
+                              const isOff = effectiveShiftId === 'OFF' || !assignedShift;
+                              const isNight = assignedShift?.is_night_shift;
+
+                              return (
+                                <TouchableOpacity
+                                  key={d.dateStr}
+                                  onPress={() =>
+                                    setAssignModal({
+                                      open: true,
+                                      employee: emp,
+                                      date: d.dateStr,
+                                      dayLabel: d.label,
+                                      currentShiftId: effectiveShiftId,
+                                    })
+                                  }
+                                  style={styles.cellBox}
                                 >
-                                  <Text
+                                  <View
                                     style={[
-                                      styles.shiftPillText,
-                                      isOff && { color: '#94A3B8' },
-                                      !isOff && isNight && { color: '#FFFFFF' },
-                                      !isOff && !isNight && { color: assignedShift?.color || '#0D7377' },
+                                      styles.shiftPill,
+                                      isOff && { backgroundColor: '#F1F5F9' },
+                                      !isOff && isNight && { backgroundColor: '#1E293B' },
+                                      !isOff && !isNight && { backgroundColor: (assignedShift?.color || '#0D7377') + '20', borderColor: assignedShift?.color || '#0D7377', borderWidth: 1 },
+                                      isOverridden && { borderWidth: 1.5, borderColor: '#0D7377' },
                                     ]}
-                                    numberOfLines={1}
                                   >
-                                    {assignedShift ? assignedShift.name.split(' ')[0] : 'OFF'}
-                                  </Text>
-                                </View>
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </View>
-                      ))
+                                    <Text
+                                      style={[
+                                        styles.shiftPillText,
+                                        isOff && { color: '#94A3B8' },
+                                        !isOff && isNight && { color: '#FFFFFF' },
+                                        !isOff && !isNight && { color: assignedShift?.color || '#0D7377' },
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {assignedShift ? assignedShift.name.split(' ')[0] : 'OFF'}
+                                    </Text>
+                                  </View>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        );
+                      })
                     )}
                   </View>
                 </ScrollView>
@@ -772,121 +959,284 @@ export default function ShiftsScreen() {
         </ScrollView>
 
         {/* Assign Shift Modal */}
-        <Modal visible={assignModal.open} transparent animationType="fade">
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalBox}>
-              <View style={styles.modalHeader}>
-                <View>
-                  <Text style={styles.modalTitle}>Assign Shift</Text>
-                  <Text style={styles.modalSub}>
-                    {assignModal.employee?.profile?.full_name} • {assignModal.dayLabel}
-                  </Text>
-                </View>
-                <TouchableOpacity onPress={() => setAssignModal({ open: false, employee: null, date: '', dayLabel: '' })}>
-                  <X size={20} color="#64748B" />
-                </TouchableOpacity>
-              </View>
+        <Modal
+          visible={assignModal.open}
+          onClose={() => setAssignModal({ open: false, employee: null, date: '', dayLabel: '' })}
+          title={`Assign Shift • ${assignModal.dayLabel || ''}`}
+          maxWidth={480}
+        >
+          {assignModal.employee && (
+            <View style={{ marginBottom: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+              <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>
+                {assignModal.employee.profile?.full_name || 'Staff Member'}
+              </Text>
+              <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                {assignModal.employee.employee_code ? `${assignModal.employee.employee_code} • ` : ''}
+                {assignModal.employee.designation || 'Team Member'}
+              </Text>
+            </View>
+          )}
 
-              <View style={{ gap: 8, marginVertical: 16 }}>
+          <View style={{ gap: 8, paddingBottom: 12 }}>
+            {shifts.map((s) => {
+              const isSelected = assignModal.currentShiftId === s.id;
+              return (
+                <TouchableOpacity
+                  key={s.id}
+                  onPress={() => handleAssignShift(s.id)}
+                  style={[
+                    styles.shiftOption,
+                    isSelected && { borderColor: colors.primary, backgroundColor: colors.primary + '15', borderWidth: 2 },
+                  ]}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                    <View style={[styles.shiftDot, { backgroundColor: s.color || colors.primary }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>{s.name}</Text>
+                      <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                        {s.start_time} - {s.end_time} IST
+                      </Text>
+                    </View>
+                  </View>
+                  {s.allowance_per_day > 0 && (
+                    <Text style={{ fontSize: 12, color: '#059669', fontWeight: '700', marginLeft: 8 }}>
+                      +{formatCurrency(s.allowance_per_day)}
+                    </Text>
+                  )}
+                  {isSelected && (
+                    <CheckCircle2 size={18} color={colors.primary} style={{ marginLeft: 8 }} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+
+            <TouchableOpacity
+              onPress={() => handleAssignShift('OFF')}
+              style={[
+                styles.shiftOption,
+                assignModal.currentShiftId === 'OFF' && { borderColor: '#94A3B8', backgroundColor: '#F1F5F9', borderWidth: 2 },
+              ]}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                <View style={[styles.shiftDot, { backgroundColor: '#94A3B8' }]} />
+                <View>
+                  <Text style={{ fontWeight: '700', color: '#64748B', fontSize: 14 }}>Day OFF (Weekly Rest)</Text>
+                  <Text style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>Mark this day as weekly off / holiday</Text>
+                </View>
+              </View>
+              {assignModal.currentShiftId === 'OFF' && (
+                <CheckCircle2 size={18} color="#64748B" style={{ marginLeft: 8 }} />
+              )}
+            </TouchableOpacity>
+
+            {assignModal.employee?.default_shift_id && (
+              <TouchableOpacity
+                onPress={() => handleAssignShift(null)}
+                style={[
+                  styles.shiftOption,
+                  { borderColor: '#86EFAC', backgroundColor: '#F0FDF4' },
+                ]}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                  <RotateCcw size={16} color="#166534" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: '700', color: '#166534', fontSize: 14 }}>
+                      Reset to Fixed Default Shift
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#15803D', marginTop: 2 }}>
+                      Revert to fixed daily shift ({shifts.find(s => s.id === assignModal.employee?.default_shift_id)?.name || 'Default'})
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
+        </Modal>
+
+        {/* Mass Assign Shift Modal */}
+        <Modal
+          visible={massShiftModalOpen}
+          onClose={() => setMassShiftModalOpen(false)}
+          title={`Mass Assign Shift (${selectedEmpIds.size} Selected)`}
+          maxWidth={500}
+        >
+          <View style={{ gap: 16, paddingBottom: 12 }}>
+            <View>
+              <Text style={styles.inputLabel}>Choose Shift or Action to Apply</Text>
+              <View style={{ gap: 8, marginTop: 4 }}>
                 {shifts.map((s) => {
-                  const isSelected = assignModal.currentShiftId === s.id;
+                  const isSelected = massTargetShiftId === s.id;
                   return (
                     <TouchableOpacity
                       key={s.id}
-                      onPress={() => handleAssignShift(s.id)}
-                      style={[styles.shiftOption, isSelected && { borderColor: colors.primary, backgroundColor: colors.primary + '10' }]}
+                      onPress={() => setMassTargetShiftId(s.id)}
+                      style={[
+                        styles.shiftOption,
+                        isSelected && { borderColor: '#0D7377', backgroundColor: '#F0FDFA', borderWidth: 2 },
+                      ]}
                     >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
                         <View style={[styles.shiftDot, { backgroundColor: s.color }]} />
                         <View>
                           <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>{s.name}</Text>
-                          <Text style={{ fontSize: 12, color: colors.textSecondary }}>{s.start_time} - {s.end_time}</Text>
+                          <Text style={{ fontSize: 12, color: colors.textSecondary }}>{s.start_time} - {s.end_time} IST</Text>
                         </View>
                       </View>
-                      {s.allowance_per_day > 0 && (
-                        <Text style={{ fontSize: 12, color: '#059669', fontWeight: '700' }}>+{formatCurrency(s.allowance_per_day)}</Text>
-                      )}
+                      {isSelected && <CheckCircle2 size={18} color="#0D7377" />}
                     </TouchableOpacity>
                   );
                 })}
 
                 <TouchableOpacity
-                  onPress={() => handleAssignShift(null)}
-                  style={[styles.shiftOption, assignModal.currentShiftId === 'OFF' && { borderColor: '#94A3B8', backgroundColor: '#F1F5F9' }]}
+                  onPress={() => setMassTargetShiftId('OFF')}
+                  style={[
+                    styles.shiftOption,
+                    massTargetShiftId === 'OFF' && { borderColor: '#94A3B8', backgroundColor: '#F1F5F9', borderWidth: 2 },
+                  ]}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
                     <View style={[styles.shiftDot, { backgroundColor: '#94A3B8' }]} />
-                    <Text style={{ fontWeight: '700', color: '#64748B', fontSize: 14 }}>Day OFF (No Shift)</Text>
+                    <View>
+                      <Text style={{ fontWeight: '700', color: '#64748B', fontSize: 14 }}>Day OFF (Weekly Rest)</Text>
+                      <Text style={{ fontSize: 12, color: '#94A3B8' }}>Mark all selected days as OFF</Text>
+                    </View>
                   </View>
+                  {massTargetShiftId === 'OFF' && <CheckCircle2 size={18} color="#64748B" />}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setMassTargetShiftId(null)}
+                  style={[
+                    styles.shiftOption,
+                    massTargetShiftId === null && { borderColor: '#166534', backgroundColor: '#F0FDF4', borderWidth: 2 },
+                  ]}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                    <RotateCcw size={16} color="#166534" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontWeight: '700', color: '#166534', fontSize: 14 }}>Reset to Fixed Default Shift</Text>
+                      <Text style={{ fontSize: 12, color: '#15803D' }}>Clear date overrides; staff keeps their fixed default shift everyday</Text>
+                    </View>
+                  </View>
+                  {massTargetShiftId === null && <CheckCircle2 size={18} color="#166534" />}
                 </TouchableOpacity>
               </View>
             </View>
+
+            <View>
+              <Text style={styles.inputLabel}>Apply to Schedule Scope</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                <TouchableOpacity
+                  onPress={() => setMassTargetScope('all')}
+                  style={[
+                    styles.scopeBtn,
+                    massTargetScope === 'all' && styles.scopeBtnActive,
+                  ]}
+                >
+                  <Text style={[styles.scopeBtnText, massTargetScope === 'all' && styles.scopeBtnTextActive]}>
+                    Entire Week (7 Days)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setMassTargetScope('weekdays')}
+                  style={[
+                    styles.scopeBtn,
+                    massTargetScope === 'weekdays' && styles.scopeBtnActive,
+                  ]}
+                >
+                  <Text style={[styles.scopeBtnText, massTargetScope === 'weekdays' && styles.scopeBtnTextActive]}>
+                    Mon - Fri (5 Days)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setMassTargetScope('weekend')}
+                  style={[
+                    styles.scopeBtn,
+                    massTargetScope === 'weekend' && styles.scopeBtnActive,
+                  ]}
+                >
+                  <Text style={[styles.scopeBtnText, massTargetScope === 'weekend' && styles.scopeBtnTextActive]}>
+                    Sat & Sun (Weekend)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              onPress={() => handleMassAssign(massTargetShiftId as any, massTargetScope)}
+              disabled={massApplying}
+              style={[styles.saveBtn, { backgroundColor: '#0D7377', marginTop: 10 }]}
+            >
+              {massApplying ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.saveBtnText}>
+                  Apply to {selectedEmpIds.size} Selected Staff
+                </Text>
+              )}
+            </TouchableOpacity>
           </View>
         </Modal>
 
-        {/* Add Shift Modal */}
-        <Modal visible={addShiftOpen} transparent animationType="fade">
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalBox}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{editingShiftId ? 'Edit Shift' : 'Create Shift Type'}</Text>
-                <TouchableOpacity onPress={() => setAddShiftOpen(false)}>
-                  <X size={20} color="#64748B" />
-                </TouchableOpacity>
+        {/* Add/Edit Shift Modal */}
+        <Modal
+          visible={addShiftOpen}
+          onClose={() => setAddShiftOpen(false)}
+          title={editingShiftId ? 'Edit Shift' : 'Create Shift Type'}
+          maxWidth={480}
+        >
+          <View style={{ gap: 14, paddingBottom: 12 }}>
+            <View>
+              <Text style={styles.inputLabel}>Shift Name</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g. ICU Night Duty"
+                value={newShiftName}
+                onChangeText={setNewShiftName}
+              />
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.inputLabel}>Start Time</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="09:00"
+                  value={newShiftStart}
+                  onChangeText={setNewShiftStart}
+                />
               </View>
-
-              <View style={{ gap: 14, marginVertical: 16 }}>
-                <View>
-                  <Text style={styles.inputLabel}>Shift Name</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="e.g. ICU Night Duty"
-                    value={newShiftName}
-                    onChangeText={setNewShiftName}
-                  />
-                </View>
-
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.inputLabel}>Start Time</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="09:00"
-                      value={newShiftStart}
-                      onChangeText={setNewShiftStart}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.inputLabel}>End Time</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="17:00"
-                      value={newShiftEnd}
-                      onChangeText={setNewShiftEnd}
-                    />
-                  </View>
-                </View>
-
-                <View>
-                  <Text style={styles.inputLabel}>Daily Allowance (INR)</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="0"
-                    keyboardType="numeric"
-                    value={newShiftAllowance}
-                    onChangeText={setNewShiftAllowance}
-                  />
-                </View>
-
-                <TouchableOpacity
-                  onPress={handleCreateOrUpdateShift}
-                  disabled={savingShift}
-                  style={[styles.saveBtn, { backgroundColor: colors.primary }]}
-                >
-                  {savingShift ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>{editingShiftId ? 'Save Changes' : 'Create Shift'}</Text>}
-                </TouchableOpacity>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.inputLabel}>End Time</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="17:00"
+                  value={newShiftEnd}
+                  onChangeText={setNewShiftEnd}
+                />
               </View>
             </View>
+
+            <View>
+              <Text style={styles.inputLabel}>Daily Allowance (INR)</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="0"
+                keyboardType="numeric"
+                value={newShiftAllowance}
+                onChangeText={setNewShiftAllowance}
+              />
+            </View>
+
+            <TouchableOpacity
+              onPress={handleCreateOrUpdateShift}
+              disabled={savingShift}
+              style={[styles.saveBtn, { backgroundColor: colors.primary }]}
+            >
+              {savingShift ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>{editingShiftId ? 'Save Changes' : 'Create Shift'}</Text>}
+            </TouchableOpacity>
           </View>
         </Modal>
       </View>
@@ -942,4 +1292,78 @@ const styles = StyleSheet.create({
   textInput: { borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14 },
   saveBtn: { paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginTop: 8 },
   saveBtnText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
+  massActionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1.5,
+    borderColor: '#5EEAD4',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  massBadge: {
+    backgroundColor: '#0D7377',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
+  },
+  massBadgeText: {
+    color: '#FFF',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  massBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  massBtnText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  defaultShiftBadge: {
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  defaultShiftBadgeText: {
+    fontSize: 10,
+    color: '#166534',
+    fontWeight: '700',
+  },
+  scopeBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  scopeBtnActive: {
+    backgroundColor: '#0D7377',
+    borderColor: '#0D7377',
+  },
+  scopeBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    textAlign: 'center',
+  },
+  scopeBtnTextActive: {
+    color: '#FFF',
+    fontWeight: '700',
+  },
 });

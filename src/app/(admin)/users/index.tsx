@@ -1559,13 +1559,13 @@ export default function UserManagementScreen() {
                   </View>
                 </View>
 
-                {/* Unit / Sub-Brand Selector */}
+                {/* Unified Unit / Sub-Brand (Geofenced Workplace) Selector */}
                 <Select
-                  label="Unit / Sub-Brand *"
+                  label="Unit / Sub-Brand (Geofenced Workplace) *"
                   options={(() => {
                     if (workplaces.length > 0) {
                       return workplaces.map((w) => ({
-                        label: w.address ? `${w.name} (${w.address})` : w.name,
+                        label: `${w.name}${w.radius_meters ? ` (${w.radius_meters}m geofence)` : ''}${w.address ? ` — ${w.address}` : ''}`,
                         value: w.name,
                       }));
                     }
@@ -1573,7 +1573,7 @@ export default function UserManagementScreen() {
                   })()}
                   value={newHospitalUnit}
                   onValueChange={(val) => {
-                    const chosen = val || 'Headquarters';
+                    const chosen = val || (workplaces[0]?.name || 'Main Unit');
                     setNewHospitalUnit(chosen);
                     const matchedWp = workplaces.find((w) => w.name.toLowerCase() === chosen.toLowerCase());
                     if (matchedWp) {
@@ -1707,17 +1707,6 @@ export default function UserManagementScreen() {
                       options={departments.map((d) => ({ label: d.name, value: d.id }))}
                       value={newDeptId}
                       onValueChange={handleDeptChange}
-                    />
-
-                    <Select
-                      label="Assigned Unit / Geofenced Workplace"
-                      options={workplaces.map((w) => ({ label: `${w.name} (${w.radius_meters || 200}m geofence)`, value: w.id }))}
-                      value={newWorkplaceId}
-                      onValueChange={(val) => {
-                        setNewWorkplaceId(val);
-                        const matched = workplaces.find(w => w.id === val);
-                        if (matched) setNewHospitalUnit(matched.name);
-                      }}
                     />
 
                     <Select
@@ -1972,20 +1961,6 @@ export default function UserManagementScreen() {
                 />
 
                 <Select
-                  label="Assigned Unit / Geofenced Workplace"
-                  options={[
-                    { label: 'None / Unassigned', value: '' },
-                    ...workplaces.map((w) => ({ label: `${w.name} (${w.radius_meters || 200}m geofence)`, value: w.id })),
-                  ]}
-                  value={editWorkplaceId}
-                  onValueChange={(val) => {
-                    setEditWorkplaceId(val);
-                    const matched = workplaces.find(w => w.id === val);
-                    if (matched) setEditHospitalUnit(matched.name);
-                  }}
-                />
-
-                <Select
                   label="Reporting Manager"
                   options={[
                     { label: 'None / Top Level', value: '' },
@@ -2020,13 +1995,13 @@ export default function UserManagementScreen() {
                   onChangeText={setEditDob}
                 />
 
-                {/* Unit / Sub-Brand Selector */}
+                {/* Unified Unit / Sub-Brand (Geofenced Workplace) Selector */}
                 <Select
-                  label="Unit / Sub-Brand *"
+                  label="Unit / Sub-Brand (Geofenced Workplace) *"
                   options={(() => {
                     if (workplaces.length > 0) {
                       return workplaces.map((w) => ({
-                        label: w.address ? `${w.name} (${w.address})` : w.name,
+                        label: `${w.name}${w.radius_meters ? ` (${w.radius_meters}m geofence)` : ''}${w.address ? ` — ${w.address}` : ''}`,
                         value: w.name,
                       }));
                     }
@@ -2034,7 +2009,7 @@ export default function UserManagementScreen() {
                   })()}
                   value={editHospitalUnit}
                   onValueChange={(val) => {
-                    const chosen = val || 'Headquarters';
+                    const chosen = val || (workplaces[0]?.name || 'Main Unit');
                     setEditHospitalUnit(chosen);
                     const matchedWp = workplaces.find((w) => w.name.toLowerCase() === chosen.toLowerCase());
                     if (matchedWp) {

@@ -44,6 +44,7 @@ export const PLAN_FEATURE_DEFAULTS: Record<SubscriptionPlan, OrganizationFeature
     users: true,
     locations: true,
     directory: true,
+    templates: true,
   },
   growth: {
     payroll: true,
@@ -65,6 +66,7 @@ export const PLAN_FEATURE_DEFAULTS: Record<SubscriptionPlan, OrganizationFeature
     users: true,
     locations: true,
     directory: true,
+    templates: true,
   },
   enterprise: {
     payroll: true,
@@ -86,6 +88,7 @@ export const PLAN_FEATURE_DEFAULTS: Record<SubscriptionPlan, OrganizationFeature
     users: true,
     locations: true,
     directory: true,
+    templates: true,
   },
 };
 
@@ -277,6 +280,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
   // Check if a specific feature is enabled
   const isFeatureEnabled = useCallback((featureKey: string): boolean => {
+    if (featureKey === 'templates') return true; // Templates unlocked to all
     if (organization?.features && typeof organization.features[featureKey] === 'boolean') {
       return organization.features[featureKey] as boolean;
     }

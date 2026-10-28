@@ -389,13 +389,13 @@ export default function CreateEmployeeScreen() {
             </View>
           </View>
 
-          {/* Unit / Sub-Brand Selector */}
+          {/* Unified Unit / Sub-Brand (Geofenced Workplace) Selector */}
           <Select
-            label="Unit / Sub-Brand *"
+            label="Unit / Sub-Brand (Geofenced Workplace) *"
             options={(() => {
               if (workplaces.length > 0) {
                 return workplaces.map((w) => ({
-                  label: w.address ? `${w.name} (${w.address})` : w.name,
+                  label: `${w.name}${w.radius_meters ? ` (${w.radius_meters}m geofence)` : ''}${w.address ? ` — ${w.address}` : ''}`,
                   value: w.name,
                 }));
               }
@@ -403,7 +403,7 @@ export default function CreateEmployeeScreen() {
             })()}
             value={hospitalUnit}
             onValueChange={(val) => {
-              const chosen = val || 'Headquarters';
+              const chosen = val || (workplaces[0]?.name || 'Main Unit');
               setHospitalUnit(chosen);
               const matchedWp = workplaces.find((w) => w.name.toLowerCase() === chosen.toLowerCase());
               if (matchedWp) {
@@ -435,13 +435,6 @@ export default function CreateEmployeeScreen() {
             options={departments.map((d) => ({ label: d.name, value: d.id }))}
             value={deptId}
             onValueChange={handleDeptChange}
-          />
-
-          <Select
-            label="Primary Workplace (Location)"
-            options={workplaces.map((w) => ({ label: w.name, value: w.id }))}
-            value={workplaceId}
-            onValueChange={setWorkplaceId}
           />
 
           {/* ─── Reporting Hierarchy (4-Tier Approval Chain) ─── */}

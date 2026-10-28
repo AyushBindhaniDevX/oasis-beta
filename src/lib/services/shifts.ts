@@ -79,7 +79,7 @@ export async function getRoster(
       const entry = { id: d.id, ...d.data() } as EmployeeShift;
       if (entry.date >= startDate && entry.date <= endDate) {
         if (!organizationId || !entry.organization_id || entry.organization_id === organizationId) {
-          entry.shift = entry.shift_id ? shiftMap.get(entry.shift_id) : undefined;
+          entry.shift = entry.shift_id && entry.shift_id !== 'OFF' ? shiftMap.get(entry.shift_id) : undefined;
           roster.push(entry);
         }
       }
@@ -96,12 +96,28 @@ export async function getEmployeeShiftForDate(employeeId: string, date: string):
   try {
     const id = `${employeeId}_${date}`;
     const snap = await getDoc(doc(db, 'employee_shifts', id));
-    if (!snap.exists()) return null;
     
-    const empShift = snap.data() as EmployeeShift;
-    if (!empShift.shift_id || empShift.shift_id === 'OFF') return null;
+    let targetShiftId: string | null = null;
+    if (snap.exists()) {
+      const empShift = snap.data() as EmployeeShift;
+      if (!empShift.shift_id || empShift.shift_id === 'OFF') {
+        return null; // Explicitly OFF on this date
+      }
+      targetShiftId = empShift.shift_id;
+    } else {
+      // No date override: fallback to employee default shift
+      const empSnap = await getDoc(doc(db, 'employees', employeeId));
+      if (empSnap.exists()) {
+        const defaultShiftId = empSnap.data()?.default_shift_id;
+        if (defaultShiftId && defaultShiftId !== 'OFF') {
+          targetShiftId = defaultShiftId;
+        }
+      }
+    }
 
-    const shiftSnap = await getDoc(doc(db, 'shifts', empShift.shift_id));
+    if (!targetShiftId) return null;
+
+    const shiftSnap = await getDoc(doc(db, 'shifts', targetShiftId));
     if (!shiftSnap.exists()) return null;
 
     return { id: shiftSnap.id, ...shiftSnap.data() } as WorkShift;
@@ -121,7 +137,8 @@ export async function assignEmployeeShift(
   const id = `${employeeId}_${date}`;
 
   try {
-    if (!shiftId || shiftId === 'OFF') {
+    if (!shiftId) {
+      // Clearing override reverts back to default shift
       await deleteDoc(doc(db, 'employee_shifts', id));
       return;
     }
