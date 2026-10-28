@@ -31,7 +31,7 @@ import {
   recalculatePeriodEntries,
   calculateStatutoryForEmployee,
 } from '@/lib/services/payroll';
-import { getAllEmployees } from '@/lib/services/employee';
+import { getAllEmployees, getWorkplaces } from '@/lib/services/employee';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { formatCurrency } from '@/utils/format';
@@ -43,7 +43,7 @@ import {
   normalizeEmploymentType,
 } from '@/constants/config';
 import { CustomPayrollItemsManager } from '@/components/payroll/CustomPayrollItemsManager';
-import type { Payroll, PayrollPeriod, Employee, CustomPayrollItem } from '@/types';
+import type { Payroll, PayrollPeriod, Employee, CustomPayrollItem, Workplace } from '@/types';
 import {
   ChevronLeft,
   RefreshCw,
@@ -135,6 +135,7 @@ export default function PayrollDetailScreen() {
   const [formTotalSalary, setFormTotalSalary] = useState('34883');
   const [formNetSalary, setFormNetSalary] = useState('34883');
   const [entryCustomItems, setEntryCustomItems] = useState<CustomPayrollItem[]>([]);
+  const [workplaces, setWorkplaces] = useState<Workplace[]>([]);
   const [adding, setAdding] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Payroll | null>(null);
 
@@ -142,15 +143,17 @@ export default function PayrollDetailScreen() {
     setError(null);
     try {
       const orgId = tenantOrg?.id || profile?.organization_id;
-      const [periodSnap, entriesData, emps] = await Promise.all([
+      const [periodSnap, entriesData, emps, wpList] = await Promise.all([
         getDoc(doc(db, 'payroll_periods', id!)),
         getPayrollEntries(id!),
         getAllEmployees(orgId),
+        getWorkplaces(orgId),
       ]);
       const p = periodSnap.exists() ? ({ id: periodSnap.id, ...periodSnap.data() } as PayrollPeriod) : null;
       setPeriod(p);
       setEntries(entriesData);
       setEmployees(emps);
+      setWorkplaces(wpList || []);
       if (p?.hospital_unit || (p as any)?.unit) {
         setSelectedUnit(p?.hospital_unit || (p as any)?.unit || 'All');
       }
@@ -168,6 +171,18 @@ export default function PayrollDetailScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const availableUnits = useMemo(() => {
+    const wpNames = workplaces.map((w) => w.name.trim()).filter(Boolean);
+    const entryUnits = entries
+      .map((e) => {
+        const emp = e.employee as any;
+        return (e.hospital_unit || emp?.hospital_unit || emp?.workplace?.name || '').trim();
+      })
+      .filter(Boolean);
+    const combined = Array.from(new Set([...wpNames, ...entryUnits]));
+    return combined.length > 0 ? combined : Array.from(HOSPITAL_UNITS);
+  }, [workplaces, entries]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -675,9 +690,11 @@ export default function PayrollDetailScreen() {
     if (!period) return;
     setGeneratingSlip(entry.id);
     try {
-      const payslip = await generatePayslipForEntry(entry, period.month, period.year);
+      const emp = entry.employee || employees.find((e) => e.id === entry.employee_id);
+      const safeEntry = { ...entry, employee: emp || undefined };
+      const payslip = await generatePayslipForEntry(safeEntry, period.month, period.year);
       setGeneratedSlips((prev) => new Set([...prev, entry.id]));
-      await exportPayslipPdf(payslip, entry.employee, tenantOrg);
+      await exportPayslipPdf(payslip, payslip.payroll?.employee || emp || entry.employee, tenantOrg);
     } catch (e: any) {
       console.error('Download slip error:', e);
       Alert.alert('Download Error', e?.message || 'Could not download payslip PDF.');
@@ -927,7 +944,7 @@ export default function PayrollDetailScreen() {
               <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textSecondary }}>Unit:</Text>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-              {['All', ...HOSPITAL_UNITS].map((u) => {
+              {['All', ...availableUnits].map((u) => {
                 const active = selectedUnit === u;
                 return (
                   <TouchableOpacity

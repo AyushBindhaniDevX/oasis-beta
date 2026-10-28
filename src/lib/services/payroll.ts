@@ -1,4 +1,4 @@
-import { db } from '@/lib/firebase';
+import { db, sanitizeFirestoreData } from '@/lib/firebase';
 import {
   doc,
   getDoc,
@@ -604,7 +604,7 @@ export async function createPayrollPeriod(month: number, year: number, orgId: st
     created_at: now,
   };
 
-  await setDoc(doc(db, 'payroll_periods', periodId), period);
+  await setDoc(doc(db, 'payroll_periods', periodId), sanitizeFirestoreData(period));
 
   // Fetch active employees (filtered by unit if specific unit selected)
   const empFilter: any = { organization_id: orgId, employment_status: 'active' };
@@ -664,13 +664,13 @@ export async function createPayrollPeriod(month: number, year: number, orgId: st
       other_allowances: breakdown.other_allowances,
       is_pf_eligible: breakdown.is_pf_eligible,
       is_overtime_eligible: breakdown.is_overtime_eligible,
-      hospital_unit: emp.hospital_unit || breakdown.hospital_unit || 'Main Branch',
+      hospital_unit: emp.hospital_unit || emp.workplace?.name || breakdown.hospital_unit || 'Main Branch',
       employment_type: emp.employment_type || (breakdown.is_pf_eligible ? 'Regular' : 'Contractual'),
       status: 'draft',
       created_at: now,
       updated_at: now,
     };
-    await setDoc(doc(db, 'payroll', entryId), entryData);
+    await setDoc(doc(db, 'payroll', entryId), sanitizeFirestoreData(entryData));
   }
 
   return period;
@@ -827,15 +827,15 @@ export async function createPayrollEntry(entry: {
     updated_at: now,
   };
 
-  await setDoc(doc(db, 'payroll', entryId), payrollObj);
+  await setDoc(doc(db, 'payroll', entryId), sanitizeFirestoreData(payrollObj));
   return payrollObj;
 }
 
 export async function updatePayrollEntry(id: string, updates: Partial<Payroll>): Promise<void> {
-  await updateDoc(doc(db, 'payroll', id), {
+  await updateDoc(doc(db, 'payroll', id), sanitizeFirestoreData({
     ...updates,
     updated_at: new Date().toISOString(),
-  });
+  }));
 }
 
 export async function processPayrollPeriod(periodId: string): Promise<void> {
@@ -877,7 +877,7 @@ export async function distributePayroll(periodId: string, month: number, year: n
       created_at: now,
       payroll: entry,
     };
-    await setDoc(doc(db, 'payslips', payslipId), payslipData);
+    await setDoc(doc(db, 'payslips', payslipId), sanitizeFirestoreData(payslipData));
   }
 }
 
@@ -889,12 +889,41 @@ export async function generatePayslipForEntry(
   const now = new Date().toISOString();
   const payslipId = `ps_${payrollEntry.employee_id}_${year}_${month}`;
 
+  // If entry doesn't have employee resolved or profile resolved, attempt to resolve it
+  let resolvedEmp = payrollEntry.employee;
+  if (!resolvedEmp && payrollEntry.employee_id) {
+    try {
+      const empSnap = await getDoc(doc(db, 'employees', payrollEntry.employee_id));
+      if (empSnap.exists()) {
+        const empData = { id: empSnap.id, ...empSnap.data() } as Employee;
+        if (empData.profile_id) {
+          const profSnap = await getDoc(doc(db, 'profiles', empData.profile_id));
+          if (profSnap.exists()) {
+            empData.profile = { id: profSnap.id, ...profSnap.data() } as Profile;
+          }
+        }
+        resolvedEmp = empData;
+      }
+    } catch (e) {
+      console.warn('Could not resolve employee for payslip:', e);
+    }
+  }
+
   const existingSnap = await getDoc(doc(db, 'payslips', payslipId));
   if (existingSnap.exists()) {
-    return { id: existingSnap.id, ...existingSnap.data() } as Payslip;
+    const existingData = { id: existingSnap.id, ...existingSnap.data() } as Payslip;
+    if (resolvedEmp && !existingData.payroll?.employee) {
+      existingData.payroll = { ...(existingData.payroll || payrollEntry), employee: resolvedEmp };
+    }
+    return existingData;
   }
 
   await updateDoc(doc(db, 'payroll', payrollEntry.id), { status: 'paid', updated_at: now });
+
+  const cleanPayrollEntry: Payroll = {
+    ...payrollEntry,
+    ...(resolvedEmp ? { employee: resolvedEmp } : {}),
+  };
 
   const payslipNumber = `PS-${year}${String(month).padStart(2, '0')}-${payrollEntry.id.substring(0, 5).toUpperCase()}`;
   const payslip: Payslip = {
@@ -906,9 +935,9 @@ export async function generatePayslipForEntry(
     period_year: year,
     file_url: null,
     created_at: now,
-    payroll: payrollEntry,
+    payroll: cleanPayrollEntry,
   };
 
-  await setDoc(doc(db, 'payslips', payslipId), payslip);
+  await setDoc(doc(db, 'payslips', payslipId), sanitizeFirestoreData(payslip));
   return payslip;
 }

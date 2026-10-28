@@ -18,7 +18,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Avatar } from '@/components/ui/Avatar';
 import { LoadingState } from '@/components/ui/States';
 import { SidebarLayout } from '@/components/layout/Sidebar';
-import { getEmployeeCount, getAllEmployees } from '@/lib/services/employee';
+import { getEmployeeCount, getAllEmployees, getWorkplaces } from '@/lib/services/employee';
 import { getAttendanceStats } from '@/lib/services/attendance';
 import { getOrgUsers, getOrganization } from '@/lib/services/organization';
 import { getAuditLogs } from '@/lib/services/audit';
@@ -33,7 +33,7 @@ import {
   normalizeHospitalUnit,
   normalizeEmploymentType,
 } from '@/constants/config';
-import type { Organization, AuditLog, Profile, Employee } from '@/types';
+import type { Organization, AuditLog, Profile, Employee, Workplace } from '@/types';
 import {
   Users,
   Shield,
@@ -82,6 +82,7 @@ export default function AdminDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [empCount, setEmpCount] = useState(0);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [workplaces, setWorkplaces] = useState<Workplace[]>([]);
   const [users, setUsers] = useState<Profile[]>([]);
   const [attendanceStats, setAttendanceStats] = useState({ present: 0, late: 0, halfDay: 0, total: 0 });
   const [recentLogs, setRecentLogs] = useState<AuditLog[]>([]);
@@ -95,13 +96,14 @@ export default function AdminDashboard() {
       const today = new Date().toISOString().split('T')[0];
       const orgId = tenantOrg?.id || profile.organization_id;
 
-      const [count, attStats, orgUsers, orgData, logs, empList] = await Promise.all([
+      const [count, attStats, orgUsers, orgData, logs, empList, wpList] = await Promise.all([
         getEmployeeCount(orgId),
         getAttendanceStats(today, orgId),
         getOrgUsers(orgId),
         orgId ? getOrganization(orgId) : Promise.resolve(null),
         getAuditLogs(5, orgId),
         getAllEmployees(orgId),
+        getWorkplaces(orgId),
       ]);
 
       setEmpCount(count);
@@ -110,6 +112,7 @@ export default function AdminDashboard() {
       setOrganization(orgData || tenantOrg);
       setRecentLogs(logs);
       setEmployees(empList || []);
+      setWorkplaces(wpList || []);
 
       if (orgData && (!orgData.name || orgData.name.includes('Default') || orgData.name === 'New Organization')) {
         setShowWizard(true);
@@ -165,7 +168,8 @@ export default function AdminDashboard() {
       counts[u] = (counts[u] || 0) + 1;
     });
     const total = Math.max(1, employees.length);
-    const discoveredUnits = Object.keys(counts);
+    const wpNames = workplaces.map((w) => w.name.trim()).filter(Boolean);
+    const discoveredUnits = Array.from(new Set([...wpNames, ...Object.keys(counts)])).filter(Boolean);
     const unitList = discoveredUnits.length > 0 ? discoveredUnits : ['Headquarters', 'Branch Office'];
     const palette = [
       { color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },
@@ -323,7 +327,7 @@ export default function AdminDashboard() {
     { label: 'Present', value: `${attendanceStats.present}`, color: '#059669', bg: '#D1FAE5', icon: Calendar },
     { label: 'Late', value: `${attendanceStats.late}`, color: '#D97706', bg: '#FEF3C7', icon: AlertTriangle },
     { label: 'Admins', value: `${adminCount}`, color: '#7C3AED', bg: '#EDE9FE', icon: ShieldCheck },
-    { label: 'Units', value: `${HOSPITAL_UNITS.length}`, color: '#0369A1', bg: '#E0F2FE', icon: Building2 },
+    { label: 'Units', value: `${workplaces.length > 0 ? workplaces.length : HOSPITAL_UNITS.length}`, color: '#0369A1', bg: '#E0F2FE', icon: Building2 },
   ];
 
   const mobileAdminActions = [

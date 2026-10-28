@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -33,7 +33,7 @@ import {
   getKudos,
   sendKudos,
 } from '@/lib/services/performance';
-import { getEmployees } from '@/lib/services/employee';
+import { getEmployees, getWorkplaces } from '@/lib/services/employee';
 import { formatDate } from '@/utils/format';
 import type {
   Goal,
@@ -46,6 +46,7 @@ import type {
   AppraisalRecommendation,
   KudosBadge,
   AppraisalKpi,
+  Workplace,
 } from '@/types';
 import {
   getAppraisalCycles,
@@ -200,21 +201,25 @@ export default function HRPerformanceScreen() {
   const [kudosMessage, setKudosMessage] = useState('');
   const [sendingKudos, setSendingKudos] = useState(false);
 
+  const [workplaces, setWorkplaces] = useState<Workplace[]>([]);
+
   const loadData = useCallback(async () => {
     try {
       const orgId = tenantOrg?.id || profile?.organization_id;
-      const [gList, aList, cList, kList, eList] = await Promise.all([
+      const [gList, aList, cList, kList, eList, wpList] = await Promise.all([
         getGoals(orgId ? { organizationId: orgId } : undefined),
         getAppraisals(orgId ? { organizationId: orgId } : undefined),
         getAppraisalCycles(orgId || 'default'),
         getKudos(),
         getEmployees(orgId ? { organization_id: orgId } : undefined),
+        getWorkplaces(orgId),
       ]);
       setGoals(gList);
       setAppraisals(aList);
       setCycles(cList);
       setKudosList(kList);
       setEmployees(eList);
+      setWorkplaces(wpList || []);
       if (eList.length > 0 && !newAppraisalEmpId) {
         setNewAppraisalEmpId(eList[0].id);
       }
@@ -227,6 +232,13 @@ export default function HRPerformanceScreen() {
       setLoading(false);
     }
   }, [profile, tenantOrg, newAppraisalEmpId, kudosReceiverId]);
+
+  const availableUnits = useMemo(() => {
+    const wpNames = workplaces.map((w) => w.name.trim()).filter(Boolean);
+    const empUnits = employees.map((e) => (e.hospital_unit || '').trim()).filter(Boolean);
+    const combined = Array.from(new Set([...wpNames, ...empUnits]));
+    return combined.length > 0 ? combined : Array.from(HOSPITAL_UNITS);
+  }, [workplaces, employees]);
 
   useEffect(() => {
     loadData();
@@ -1815,7 +1827,7 @@ export default function HRPerformanceScreen() {
                 <View style={[styles.formGroup, { flex: 1 }]}>
                   <Text style={styles.formLabel}>Target Unit / Sub-Brand</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginTop: 4 }}>
-                    {['all', ...HOSPITAL_UNITS].map((u) => (
+                    {['all', ...availableUnits].map((u) => (
                       <TouchableOpacity
                         key={u}
                         onPress={() => setCycleUnitScope(u)}

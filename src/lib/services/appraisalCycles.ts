@@ -1,4 +1,4 @@
-import { db } from '@/lib/firebase';
+import { db, sanitizeFirestoreData } from '@/lib/firebase';
 import {
   collection,
   doc,
@@ -130,7 +130,7 @@ export async function createAppraisalCycle(
     updated_at: now,
   };
 
-  await setDoc(doc(db, 'appraisal_cycles', cycleId), payload);
+  await setDoc(doc(db, 'appraisal_cycles', cycleId), sanitizeFirestoreData(payload));
   return payload;
 }
 
@@ -149,7 +149,7 @@ export async function updateAppraisalCycle(
     payload.total_questions = updates.questions.length;
     payload.total_weightage = updates.questions.reduce((sum, q) => sum + (Number(q.weightage) || 0), 0);
   }
-  await updateDoc(doc(db, 'appraisal_cycles', cycleId), payload);
+  await updateDoc(doc(db, 'appraisal_cycles', cycleId), sanitizeFirestoreData(payload));
 }
 
 /**
@@ -298,8 +298,17 @@ export async function launchAppraisalCycle(
     if (cycle.target_department_id && emp.department_id !== cycle.target_department_id) {
       return false;
     }
-    if (cycle.target_unit && cycle.target_unit !== 'All Units' && emp.hospital_unit !== cycle.target_unit) {
-      return false;
+    if (cycle.target_unit && cycle.target_unit !== 'All Units' && cycle.target_unit !== 'all') {
+      const u = (emp.hospital_unit || '').toLowerCase();
+      const wpName = (emp.workplace?.name || '').toLowerCase();
+      const target = cycle.target_unit.toLowerCase();
+      const matched =
+        u === target ||
+        wpName === target ||
+        (u && (u.includes(target) || target.includes(u))) ||
+        (wpName && (wpName.includes(target) || target.includes(wpName))) ||
+        emp.workplace_id === cycle.target_unit;
+      if (!matched) return false;
     }
     return true;
   });
@@ -342,7 +351,7 @@ export async function launchAppraisalCycle(
         updated_at: now,
       };
 
-      await setDoc(doc(db, 'appraisal_reviews', reviewId), reviewPayload);
+      await setDoc(doc(db, 'appraisal_reviews', reviewId), sanitizeFirestoreData(reviewPayload));
       initiatedCount++;
     }
   }

@@ -1,6 +1,7 @@
 import { exportOrPrintPdf } from './pdf';
 import { Platform } from 'react-native';
 import { formatCurrency, formatDate } from '@/utils/format';
+import { renderTemplateString } from '@/lib/services/templates';
 import type { Employee, Organization } from '@/types';
 
 export interface AppointmentLetterData {
@@ -31,8 +32,8 @@ export function generateAppointmentLetterHtml(data: AppointmentLetterData): stri
   const refPrefix = isSMH ? 'SMH' : orgName.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || 'HR';
   const refNo = data.refNumber || `${refPrefix}/HR/APT/${new Date().getFullYear()}/${empCode}`;
   const probationMonths = data.probationMonths || 6;
-  const signatoryName = data.signatoryName || 'Authorized Signatory';
-  const signatoryTitle = data.signatoryTitle || 'Human Resources Director';
+  const signatoryName = data.customTemplate?.signatory_name || data.signatoryName || 'Authorized Signatory';
+  const signatoryTitle = data.customTemplate?.signatory_title || data.signatoryTitle || 'Human Resources Director';
 
   // Calculate Salary Components as per Hospital / Enterprise Formula
   const grossMonthly = emp.basic_salary ? (emp.basic_salary > 20000 ? emp.basic_salary : emp.basic_salary * 2) : 25000;
@@ -55,6 +56,23 @@ export function generateAppointmentLetterHtml(data: AppointmentLetterData): stri
 
   const isPf = emp.is_pf_eligible !== false;
   const isEsic = effectiveGross <= 21000;
+
+  const templateVars: Record<string, string> = {
+    employee_name: empName,
+    employee_code: empCode,
+    designation,
+    department,
+    unit,
+    organization_name: orgName,
+    joining_date: joiningDate,
+    ref_number: refNo,
+    basic_salary: formatCurrency(basic),
+    gross_salary: formatCurrency(effectiveGross),
+    annual_salary: formatCurrency(effectiveGross * 12),
+    date: issueDate,
+    signatory_name: signatoryName,
+    signatory_title: signatoryTitle,
+  };
 
   return `
 <!DOCTYPE html>
@@ -229,16 +247,20 @@ export function generateAppointmentLetterHtml(data: AppointmentLetterData): stri
       <span>Unit: <strong>${unit}</strong></span>
     </div>
 
-    <div class="letter-title">Formal Letter of Appointment</div>
+    <div class="letter-title">${data.customTemplate?.title || 'Formal Letter of Appointment'}</div>
 
-    <p>Dear <span class="highlight">${empName}</span>,</p>
+    <p>${data.customTemplate?.salutation ? renderTemplateString(data.customTemplate.salutation, templateVars) : `Dear <span class="highlight">${empName}</span>,`}</p>
 
+    ${data.customTemplate?.body ? `
+    <p style="white-space: pre-line;">${renderTemplateString(data.customTemplate.body, templateVars)}</p>
+    ` : `
     <p>
       With reference to your application, subsequent interviews, and master onboarding entry, we are pleased to appoint you as <span class="highlight">${designation}</span> in the <span class="highlight">${department}</span> department at <span class="highlight">${unit}</span>, effective from your date of joining <span class="highlight">${joiningDate}</span>.
     </p>
+    `}
 
     <p>
-      Your appointment is subject to the terms and operational policies of the Hospital as summarized below:
+      Your appointment is subject to the terms and operational policies of the organization as summarized below:
     </p>
 
     <div style="font-weight: 700; font-size: 14px; margin-top: 16px; color: #0D7377;">
@@ -304,7 +326,7 @@ export function generateAppointmentLetterHtml(data: AppointmentLetterData): stri
 
     ${data.customTemplate?.clauses && data.customTemplate.clauses.length > 0 ? `
     <ol class="terms-list">
-      ${data.customTemplate.clauses.map((c: string) => `<li>${c}</li>`).join('')}
+      ${data.customTemplate.clauses.map((c: string) => `<li>${renderTemplateString(c, templateVars)}</li>`).join('')}
     </ol>
     ` : `
     <ol class="terms-list">

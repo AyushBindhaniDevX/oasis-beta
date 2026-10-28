@@ -14,8 +14,9 @@ import { Input } from '@/components/ui/Input';
 import { LoadingState } from '@/components/ui/States';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { getPayrollPeriods, createPayrollPeriod } from '@/lib/services/payroll';
+import { getWorkplaces } from '@/lib/services/employee';
 import { MONTHS, HOSPITAL_UNITS, HospitalUnit } from '@/constants/config';
-import type { PayrollPeriod } from '@/types';
+import type { PayrollPeriod, Workplace } from '@/types';
 import { Building2, Calendar, FileSpreadsheet, Plus, Filter } from 'lucide-react-native';
 
 export default function PayrollScreen() {
@@ -24,6 +25,7 @@ export default function PayrollScreen() {
   const { organization: tenantOrg } = useTenant();
   const router = useRouter();
   const [periods, setPeriods] = useState<PayrollPeriod[]>([]);
+  const [workplaces, setWorkplaces] = useState<Workplace[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -39,8 +41,12 @@ export default function PayrollScreen() {
     setError(null);
     try {
       const orgId = tenantOrg?.id || profile?.organization_id;
-      const data = await getPayrollPeriods(orgId);
+      const [data, wpList] = await Promise.all([
+        getPayrollPeriods(orgId),
+        getWorkplaces(orgId),
+      ]);
       setPeriods(data);
+      setWorkplaces(wpList || []);
     } catch (err: any) {
       setError(err.message || 'Failed to load payroll periods. If you are using an adblocker, please disable it for this site.');
     } finally {
@@ -49,6 +55,15 @@ export default function PayrollScreen() {
   }, [profile, tenantOrg]);
 
   useEffect(() => { load(); }, [load]);
+
+  const availableUnits = useMemo(() => {
+    const wpNames = workplaces.map((w) => w.name.trim()).filter(Boolean);
+    const periodUnits = periods
+      .map((p) => (p.hospital_unit || (p as any).unit || '').trim())
+      .filter((u) => u && u !== 'ALL' && u !== 'All Units');
+    const combined = Array.from(new Set([...wpNames, ...periodUnits]));
+    return combined.length > 0 ? combined : Array.from(HOSPITAL_UNITS);
+  }, [workplaces, periods]);
 
   const handleCreate = async () => {
     if (!newMonth) {
@@ -125,7 +140,7 @@ export default function PayrollScreen() {
             </Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {['All', ...HOSPITAL_UNITS].map((unit) => {
+            {['All', ...availableUnits].map((unit) => {
               const isActive = selectedUnitFilter === unit;
               return (
                 <TouchableOpacity
@@ -225,7 +240,12 @@ export default function PayrollScreen() {
               label="Unit / Entity"
               options={[
                 { label: 'All Units (Consolidated)', value: 'ALL' },
-                ...HOSPITAL_UNITS.map(u => ({ label: u, value: u }))
+                ...(workplaces.length > 0
+                  ? workplaces.map((w) => ({
+                      label: w.address ? `${w.name} (${w.address})` : w.name,
+                      value: w.name,
+                    }))
+                  : availableUnits.map((u) => ({ label: u, value: u })))
               ]}
               value={newUnit}
               onValueChange={setNewUnit}

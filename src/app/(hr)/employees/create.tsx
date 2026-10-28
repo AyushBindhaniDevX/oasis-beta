@@ -393,10 +393,13 @@ export default function CreateEmployeeScreen() {
           <Select
             label="Unit / Sub-Brand *"
             options={(() => {
-              const wpOptions = workplaces.map((w) => ({ label: w.name, value: w.name }));
-              const builtIn = HOSPITAL_UNITS.filter((u) => !workplaces.some((w) => w.name.toLowerCase() === u.toLowerCase())).map((u) => ({ label: u, value: u }));
-              const combined = [...wpOptions, ...builtIn];
-              return combined.length > 0 ? combined : [{ label: 'Headquarters', value: 'Headquarters' }];
+              if (workplaces.length > 0) {
+                return workplaces.map((w) => ({
+                  label: w.address ? `${w.name} (${w.address})` : w.name,
+                  value: w.name,
+                }));
+              }
+              return HOSPITAL_UNITS.map((u) => ({ label: u, value: u }));
             })()}
             value={hospitalUnit}
             onValueChange={(val) => {

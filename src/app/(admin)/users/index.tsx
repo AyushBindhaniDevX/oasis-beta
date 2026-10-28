@@ -213,6 +213,9 @@ export default function UserManagementScreen() {
       setWorkplaces(wpData);
       setShifts(shiftData || []);
       setManagers(empData || []);
+      if (wpData && wpData.length > 0) {
+        setMassTargetUnit(wpData[0].name);
+      }
     } catch (err) {
       console.error('Error loading users:', err);
     } finally {
@@ -241,7 +244,8 @@ export default function UserManagementScreen() {
   const openAddModal = () => {
     const defaultOrgId = tenantOrg?.id || currentAdmin?.organization_id || '00000000-0000-0000-0000-000000000001';
     setNewOrgId(defaultOrgId);
-    setNewHospitalUnit('Headquarters');
+    const initialUnit = (workplaces && workplaces[0]?.name) || 'Headquarters';
+    setNewHospitalUnit(initialUnit);
     setNewFullName('');
     setNewEmail('');
     setNewPhone('');
@@ -782,8 +786,11 @@ export default function UserManagementScreen() {
       // Unit filter
       if (unitFilter !== 'all') {
         const emp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
-        const empUnit = normalizeHospitalUnit(emp?.hospital_unit);
-        if (empUnit.toLowerCase() !== unitFilter.toLowerCase()) return false;
+        const empUnit = normalizeHospitalUnit(emp?.hospital_unit || emp?.workplace?.name);
+        const wp = workplaces.find(w => w.id === emp?.workplace_id);
+        const wpName = wp?.name || '';
+        const target = unitFilter.toLowerCase();
+        if (empUnit.toLowerCase() !== target && wpName.toLowerCase() !== target) return false;
       }
       // Department filter
       if (deptFilter !== 'all') {
@@ -806,7 +813,17 @@ export default function UserManagementScreen() {
       }
       return true;
     });
-  }, [users, roleFilter, statusFilter, unitFilter, deptFilter, empTypeFilter, search, managers]);
+  }, [users, roleFilter, statusFilter, unitFilter, deptFilter, empTypeFilter, search, managers, workplaces]);
+
+  const availableUnits = useMemo(() => {
+    const wpNames = workplaces.map((w) => w.name.trim()).filter(Boolean);
+    const userUnits = users
+      .map((u) => ((u as any).employee?.hospital_unit || '').trim())
+      .filter(Boolean);
+    const mgrUnits = managers.map((m) => (m.hospital_unit || '').trim()).filter(Boolean);
+    const combined = Array.from(new Set([...wpNames, ...userUnits, ...mgrUnits]));
+    return combined.length > 0 ? combined : Array.from(HOSPITAL_UNITS);
+  }, [workplaces, users, managers]);
 
   // Selection state calculations & handlers
   const isAllSelected = filteredUsers.length > 0 && filteredUsers.every((u) => selectedUserIds.includes(u.id));
@@ -844,10 +861,16 @@ export default function UserManagementScreen() {
 
         if (massModalType === 'unit') {
           if (emp?.id) {
-            const matchingWp = workplaces.find((w) => w.name.toLowerCase().includes(massTargetUnit.toLowerCase()));
+            const matchingWp = workplaces.find(
+              (w) =>
+                w.name.toLowerCase() === massTargetUnit.toLowerCase() ||
+                w.id === massTargetUnit ||
+                w.name.toLowerCase().includes(massTargetUnit.toLowerCase()) ||
+                massTargetUnit.toLowerCase().includes(w.name.toLowerCase())
+            );
             batch.update(doc(db, 'employees', emp.id), {
               hospital_unit: massTargetUnit,
-              ...(matchingWp ? { workplace_id: matchingWp.id } : {}),
+              workplace_id: matchingWp ? matchingWp.id : (emp.workplace_id || null),
               updated_at: nowIso,
             });
             count++;
@@ -1104,7 +1127,7 @@ export default function UserManagementScreen() {
           {/* Unit Filter Chips */}
           <View style={{ marginTop: 2 }}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
-              {['all', ...HOSPITAL_UNITS].map((u) => (
+              {['all', ...availableUnits].map((u) => (
                 <TouchableOpacity
                   key={u}
                   onPress={() => setUnitFilter(u)}
@@ -1540,10 +1563,13 @@ export default function UserManagementScreen() {
                 <Select
                   label="Unit / Sub-Brand *"
                   options={(() => {
-                    const wpOptions = workplaces.map((w) => ({ label: w.name, value: w.name }));
-                    const builtIn = HOSPITAL_UNITS.filter((u) => !workplaces.some((w) => w.name.toLowerCase() === u.toLowerCase())).map((u) => ({ label: u, value: u }));
-                    const combined = [...wpOptions, ...builtIn];
-                    return combined.length > 0 ? combined : [{ label: 'Headquarters', value: 'Headquarters' }];
+                    if (workplaces.length > 0) {
+                      return workplaces.map((w) => ({
+                        label: w.address ? `${w.name} (${w.address})` : w.name,
+                        value: w.name,
+                      }));
+                    }
+                    return HOSPITAL_UNITS.map((u) => ({ label: u, value: u }));
                   })()}
                   value={newHospitalUnit}
                   onValueChange={(val) => {
@@ -1998,10 +2024,13 @@ export default function UserManagementScreen() {
                 <Select
                   label="Unit / Sub-Brand *"
                   options={(() => {
-                    const wpOptions = workplaces.map((w) => ({ label: w.name, value: w.name }));
-                    const builtIn = HOSPITAL_UNITS.filter((u) => !workplaces.some((w) => w.name.toLowerCase() === u.toLowerCase())).map((u) => ({ label: u, value: u }));
-                    const combined = [...wpOptions, ...builtIn];
-                    return combined.length > 0 ? combined : [{ label: 'Headquarters', value: 'Headquarters' }];
+                    if (workplaces.length > 0) {
+                      return workplaces.map((w) => ({
+                        label: w.address ? `${w.name} (${w.address})` : w.name,
+                        value: w.name,
+                      }));
+                    }
+                    return HOSPITAL_UNITS.map((u) => ({ label: u, value: u }));
                   })()}
                   value={editHospitalUnit}
                   onValueChange={(val) => {
@@ -2600,7 +2629,14 @@ export default function UserManagementScreen() {
             <Select
               label="Target Unit / Sub-Brand"
               value={massTargetUnit}
-              options={HOSPITAL_UNITS.map((u) => ({ label: u, value: u }))}
+              options={
+                workplaces.length > 0
+                  ? workplaces.map((w) => ({
+                      label: w.address ? `${w.name} (${w.address})` : w.name,
+                      value: w.name,
+                    }))
+                  : availableUnits.map((u) => ({ label: u, value: u }))
+              }
               onValueChange={(val: string) => val && setMassTargetUnit(val)}
             />
 

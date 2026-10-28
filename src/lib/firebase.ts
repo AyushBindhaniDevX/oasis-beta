@@ -75,29 +75,35 @@ export function sanitizeFirestoreData<T>(obj: T): T {
   if (obj === null || obj === undefined) {
     return obj;
   }
+  if (typeof obj === 'number') {
+    if (isNaN(obj) || !isFinite(obj)) {
+      return 0 as unknown as T;
+    }
+    return obj;
+  }
+  if (typeof obj !== 'object') {
+    return obj;
+  }
   if (Array.isArray(obj)) {
     return obj
       .filter((item) => item !== undefined)
       .map((item) => sanitizeFirestoreData(item)) as unknown as T;
   }
-  if (typeof obj === 'object') {
-    // Preserve Date, Firestore FieldValue / Timestamp or other special class instances
-    if (
-      obj instanceof Date ||
-      (obj as any)._methodName ||
-      typeof (obj as any).toMillis === 'function' ||
-      (obj as any).constructor?.name === 'FieldValue'
-    ) {
-      return obj;
-    }
-    const cleaned: Record<string, any> = {};
-    for (const [key, value] of Object.entries(obj)) {
-      if (value !== undefined) {
-        cleaned[key] = sanitizeFirestoreData(value);
-      }
-    }
-    return cleaned as T;
+  // Preserve Date, Firestore FieldValue / Timestamp or other special class instances
+  if (
+    obj instanceof Date ||
+    (obj as any)._methodName ||
+    typeof (obj as any).toMillis === 'function' ||
+    (obj as any).constructor?.name === 'FieldValue'
+  ) {
+    return obj;
   }
-  return obj;
+  const cleaned: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      cleaned[key] = sanitizeFirestoreData(value);
+    }
+  }
+  return cleaned as T;
 }
 

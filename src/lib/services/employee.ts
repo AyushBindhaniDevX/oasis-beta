@@ -262,8 +262,15 @@ export async function getEmployees(params?: {
     if (hospital_unit && hospital_unit !== 'all') {
       const huLower = hospital_unit.toLowerCase();
       results = results.filter((e) => {
-        const u = (e.hospital_unit || 'Main Branch').toLowerCase();
-        return u.includes(huLower) || huLower.includes(u);
+        const u = (e.hospital_unit || '').toLowerCase();
+        const wpName = (e.workplace?.name || '').toLowerCase();
+        return (
+          u === huLower ||
+          wpName === huLower ||
+          (u && (u.includes(huLower) || huLower.includes(u))) ||
+          (wpName && (wpName.includes(huLower) || huLower.includes(wpName))) ||
+          e.workplace_id === hospital_unit
+        );
       });
     }
     if (employment_type && employment_type !== 'all') {

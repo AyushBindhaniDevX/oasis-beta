@@ -78,6 +78,7 @@ export const EMPLOYEE_NAV: NavItem[] = [
   { label: 'Holiday Calendar', href: '/(employee)/holidays', icon: CalendarDays, feature: 'holidays' },
   { label: 'Performance', href: '/(employee)/performance', icon: Award, feature: 'performance' },
   { label: 'Salary & Payslips', href: '/(employee)/payslips', icon: Banknote, feature: 'payroll' },
+  { label: 'Templates & Letters', href: '/(hr)/templates', icon: FileText, feature: 'templates' },
   { label: 'Directory', href: '/(employee)/directory', icon: Users, feature: 'users' },
 ];
 

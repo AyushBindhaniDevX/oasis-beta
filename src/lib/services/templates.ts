@@ -1,4 +1,4 @@
-import { db } from '@/lib/firebase';
+import { db, sanitizeFirestoreData } from '@/lib/firebase';
 import {
   doc,
   getDoc,
@@ -262,7 +262,7 @@ export async function saveTemplate(template: DocumentTemplate): Promise<void> {
     id: docId,
     updated_at: new Date().toISOString(),
   };
-  await setDoc(doc(db, 'organization_templates', docId), payload);
+  await setDoc(doc(db, 'organization_templates', docId), sanitizeFirestoreData(payload));
 }
 
 /**
