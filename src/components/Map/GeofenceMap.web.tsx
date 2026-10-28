@@ -32,7 +32,7 @@ export function GeofenceMap({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <MapPin size={15} color={outOfBounds ? '#EF4444' : '#0D7377'} />
           <Text style={[styles.statusText, { color: outOfBounds ? '#EF4444' : '#0D7377' }]}>
-            {outOfBounds ? 'Outside Geofence' : 'Inside Hospital Geofence'}
+            {outOfBounds ? 'Outside Unit Geofence' : 'Inside Unit Geofence'}
           </Text>
         </View>
         <Text style={styles.subtext}>

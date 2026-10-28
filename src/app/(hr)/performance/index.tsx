@@ -87,7 +87,7 @@ export const PRESET_KPIS: Record<string, AppraisalKpi[]> = {
     { id: 'kpi_prod', name: 'Productivity & Delivery', description: 'Output volume, timeliness and meeting assigned targets', weight: 20 },
     { id: 'kpi_comm', name: 'Communication & Interpersonal', description: 'Clarity, listening skills and teamwork', weight: 20 },
     { id: 'kpi_lead', name: 'Ownership & Problem Solving', description: 'Initiative, troubleshooting and dependability', weight: 20 },
-    { id: 'kpi_team', name: 'Teamwork & Core Hospital Values', description: 'Upholding mission, ethics and collaborative culture', weight: 20 },
+    { id: 'kpi_team', name: 'Teamwork & Core Company Values', description: 'Upholding mission, ethics and collaborative culture', weight: 20 },
   ],
 };
 

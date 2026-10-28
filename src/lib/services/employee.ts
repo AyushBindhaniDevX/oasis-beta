@@ -90,11 +90,24 @@ export async function getEmployeeByProfileId(profileId: string, organizationId?:
       simpleEmp.workplace_id ? getDoc(doc(db, 'workplaces', simpleEmp.workplace_id)) : Promise.resolve(null),
     ]);
 
+    let wp: Workplace | undefined = wpSnap?.exists() ? ({ id: wpSnap.id, ...wpSnap.data() } as Workplace) : undefined;
+    if (!wp && simpleEmp.hospital_unit) {
+      try {
+        const wpQ = query(collection(db, 'workplaces'), where('name', '==', simpleEmp.hospital_unit), limit(1));
+        const wpDocs = await getDocs(wpQ);
+        if (!wpDocs.empty) {
+          wp = { id: wpDocs.docs[0].id, ...wpDocs.docs[0].data() } as Workplace;
+        }
+      } catch (e) {
+        // Continue
+      }
+    }
+
     return {
       ...simpleEmp,
       profile: profSnap?.exists() ? ({ id: profSnap.id, ...profSnap.data() } as Profile) : undefined,
       department: deptSnap?.exists() ? ({ id: deptSnap.id, ...deptSnap.data() } as Department) : undefined,
-      workplace: wpSnap?.exists() ? ({ id: wpSnap.id, ...wpSnap.data() } as Workplace) : undefined,
+      workplace: wp,
     };
   } catch (err) {
     if ((err as any)?.code !== 'permission-denied') { console.error('Error fetching employee by profile ID:', err); }
@@ -114,11 +127,24 @@ export async function getEmployeeById(id: string): Promise<Employee | null> {
       simpleEmp.workplace_id ? getDoc(doc(db, 'workplaces', simpleEmp.workplace_id)) : Promise.resolve(null),
     ]);
 
+    let wp: Workplace | undefined = wpSnap?.exists() ? ({ id: wpSnap.id, ...wpSnap.data() } as Workplace) : undefined;
+    if (!wp && simpleEmp.hospital_unit) {
+      try {
+        const wpQ = query(collection(db, 'workplaces'), where('name', '==', simpleEmp.hospital_unit), limit(1));
+        const wpDocs = await getDocs(wpQ);
+        if (!wpDocs.empty) {
+          wp = { id: wpDocs.docs[0].id, ...wpDocs.docs[0].data() } as Workplace;
+        }
+      } catch (e) {
+        // Continue
+      }
+    }
+
     const emp: Employee = {
       ...simpleEmp,
       profile: profSnap?.exists() ? ({ id: profSnap.id, ...profSnap.data() } as Profile) : undefined,
       department: deptSnap?.exists() ? ({ id: deptSnap.id, ...deptSnap.data() } as Department) : undefined,
-      workplace: wpSnap?.exists() ? ({ id: wpSnap.id, ...wpSnap.data() } as Workplace) : undefined,
+      workplace: wp,
     };
 
     // Load L1-L4 manager documents if present

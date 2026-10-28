@@ -159,21 +159,33 @@ export default function AdminDashboard() {
 
   // ── Compute Visual Analytics Data ──────────────────────────────────────────
   const unitBreakdown = useMemo(() => {
-    const counts: Record<string, number> = {
-      'Shanti Memorial Hospital': 0,
-      'Gopal Trust': 0,
-      'Chikitsa': 0,
-    };
+    const counts: Record<string, number> = {};
     employees.forEach((e) => {
-      const u = normalizeHospitalUnit(e.hospital_unit);
+      const u = (e.hospital_unit || (e as any).unit || 'Headquarters').trim();
       counts[u] = (counts[u] || 0) + 1;
     });
     const total = Math.max(1, employees.length);
+    const discoveredUnits = Object.keys(counts);
+    const unitList = discoveredUnits.length > 0 ? discoveredUnits : ['Headquarters', 'Branch Office'];
+    const palette = [
+      { color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },
+      { color: '#0D9488', bg: '#F0FDFA', border: '#99F6E4' },
+      { color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' },
+      { color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' },
+      { color: '#DB2777', bg: '#FDF2F8', border: '#FBCFE8' },
+    ];
     return {
-      smh: { count: counts['Shanti Memorial Hospital'], pct: Math.round((counts['Shanti Memorial Hospital'] / total) * 100) },
-      gt: { count: counts['Gopal Trust'], pct: Math.round((counts['Gopal Trust'] / total) * 100) },
-      chikitsa: { count: counts['Chikitsa'], pct: Math.round((counts['Chikitsa'] / total) * 100) },
       total: employees.length,
+      items: unitList.map((name, i) => {
+        const c = counts[name] || 0;
+        const style = palette[i % palette.length];
+        return {
+          name,
+          count: c,
+          pct: Math.round((c / total) * 100),
+          ...style,
+        };
+      }),
     };
   }, [employees]);
 
@@ -194,7 +206,7 @@ export default function AdminDashboard() {
     };
   }, [employees]);
 
-  const [selectedUnitFilter, setSelectedUnitFilter] = useState<'all' | 'Shanti Memorial Hospital' | 'Gopal Trust' | 'Chikitsa'>('all');
+  const [selectedUnitFilter, setSelectedUnitFilter] = useState<string>('all');
   const [selectedAttFilter, setSelectedAttFilter] = useState<'all' | 'present' | 'late' | 'halfDay' | 'absent'>('all');
   const [selectedDeptMetric, setSelectedDeptMetric] = useState<'headcount' | 'payroll'>('headcount');
   const [selectedDeptName, setSelectedDeptName] = useState<string | null>(null);
@@ -202,7 +214,7 @@ export default function AdminDashboard() {
   // ── Filtered workforce based on interactive unit filter ───────────────────
   const filteredEmployees = useMemo(() => {
     if (selectedUnitFilter === 'all') return employees;
-    return employees.filter(e => normalizeHospitalUnit(e.hospital_unit) === selectedUnitFilter);
+    return employees.filter(e => (e.hospital_unit || (e as any).unit || 'Headquarters').trim() === selectedUnitFilter);
   }, [employees, selectedUnitFilter]);
 
   const filteredCategoryBreakdown = useMemo(() => {
@@ -281,9 +293,9 @@ export default function AdminDashboard() {
       border: '#e2e8f0',
     },
     {
-      label: 'Hospital Units',
-      value: `${HOSPITAL_UNITS.length} Units`,
-      sub: HOSPITAL_UNITS.join(', '),
+      label: 'Business Units',
+      value: `${unitBreakdown.items.length} Units`,
+      sub: unitBreakdown.items.map(u => u.name).slice(0, 3).join(', '),
       icon: <Building2 size={20} color={colors.textSecondary} />,
       bg: colors.surface,
       border: '#e2e8f0',
@@ -296,7 +308,7 @@ export default function AdminDashboard() {
     { label: 'Payroll & Salary Sheets', sub: 'Monthly salary registers & cycles', href: '/(hr)/payroll', icon: FileSpreadsheet, color: '#059669', bg: colors.background },
     { label: 'Shifts & Rosters', sub: 'Weekly roster matrix & night allowance', href: '/(hr)/shifts', icon: Clock, color: colors.primary, bg: colors.background },
     { label: 'Security Audit Logs', sub: 'Compliance & access history', href: '/(admin)/audit-logs', icon: Shield, color: colors.primary, bg: colors.background },
-    { label: 'Workplace Locations', sub: 'Geofences & office radius', href: '/(hr)/locations', icon: MapPin, color: colors.primary, bg: colors.background },
+    { label: 'Units / Sub-Brands', sub: 'Geofences & unit boundaries', href: '/(hr)/locations', icon: Building2, color: colors.primary, bg: colors.background },
   ];
 
   const actionColor = (action: string): 'successLight' | 'warningLight' | 'dangerLight' | 'neutral' => {
@@ -320,7 +332,7 @@ export default function AdminDashboard() {
     { label: 'Attendance', icon: Calendar, href: '/(hr)/attendance', color: '#2563EB', bg: '#EFF6FF' },
     { label: 'Shifts', icon: Clock, href: '/(hr)/shifts', color: '#D97706', bg: '#FEF3C7' },
     { label: 'Audit Logs', icon: Shield, href: '/(admin)/audit-logs', color: '#DC2626', bg: '#FEE2E2' },
-    { label: 'Locations', icon: MapPin, href: '/(hr)/locations', color: '#7C3AED', bg: '#EDE9FE' },
+    { label: 'Units / Sub-Brands', icon: Building2, href: '/(hr)/locations', color: '#7C3AED', bg: '#EDE9FE' },
     { label: 'Performance', icon: Award, href: '/(hr)/performance', color: '#0284C7', bg: '#E0F2FE' },
     { label: 'Settings', icon: Settings, href: '/(admin)/settings', color: '#475569', bg: '#F1F5F9' },
   ];
@@ -353,7 +365,7 @@ export default function AdminDashboard() {
 
       {/* Interactive Unit Filter Chips */}
       <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-        {(['all', 'Shanti Memorial Hospital', 'Gopal Trust', 'Chikitsa'] as const).map((u) => {
+        {['all', ...unitBreakdown.items.map(u => u.name)].map((u) => {
           const isSelected = selectedUnitFilter === u;
           return (
             <TouchableOpacity
@@ -378,7 +390,7 @@ export default function AdminDashboard() {
                   color: isSelected ? '#1D4ED8' : '#64748B',
                 }}
               >
-                {u === 'all' ? 'All Units' : u === 'Shanti Memorial Hospital' ? 'SMH Main' : u}
+                {u === 'all' ? 'All Units' : u}
               </Text>
             </TouchableOpacity>
           );
@@ -387,99 +399,52 @@ export default function AdminDashboard() {
 
       {/* Stacked Proportional Unit Bar (Interactive) */}
       <View style={vStyles.stackedBarContainer}>
-        <TouchableOpacity
-          onPress={() => setSelectedUnitFilter(selectedUnitFilter === 'Shanti Memorial Hospital' ? 'all' : 'Shanti Memorial Hospital')}
-          style={[
-            vStyles.stackedSegment,
-            { width: `${Math.max(4, unitBreakdown.smh.pct)}%`, backgroundColor: '#2563EB', opacity: selectedUnitFilter === 'all' || selectedUnitFilter === 'Shanti Memorial Hospital' ? 1 : 0.35 },
-          ]}
-        />
-        <TouchableOpacity
-          onPress={() => setSelectedUnitFilter(selectedUnitFilter === 'Gopal Trust' ? 'all' : 'Gopal Trust')}
-          style={[
-            vStyles.stackedSegment,
-            { width: `${Math.max(4, unitBreakdown.gt.pct)}%`, backgroundColor: '#DB2777', opacity: selectedUnitFilter === 'all' || selectedUnitFilter === 'Gopal Trust' ? 1 : 0.35 },
-          ]}
-        />
-        <TouchableOpacity
-          onPress={() => setSelectedUnitFilter(selectedUnitFilter === 'Chikitsa' ? 'all' : 'Chikitsa')}
-          style={[
-            vStyles.stackedSegment,
-            { width: `${Math.max(4, unitBreakdown.chikitsa.pct)}%`, backgroundColor: '#16A34A', opacity: selectedUnitFilter === 'all' || selectedUnitFilter === 'Chikitsa' ? 1 : 0.35 },
-          ]}
-        />
+        {unitBreakdown.items.map((u) => (
+          <TouchableOpacity
+            key={u.name}
+            onPress={() => setSelectedUnitFilter(selectedUnitFilter === u.name ? 'all' : u.name)}
+            style={[
+              vStyles.stackedSegment,
+              {
+                width: `${Math.max(4, u.pct)}%`,
+                backgroundColor: u.color,
+                opacity: selectedUnitFilter === 'all' || selectedUnitFilter === u.name ? 1 : 0.35,
+              },
+            ]}
+          />
+        ))}
       </View>
 
       {/* Interactive Unit Legends */}
       <View style={vStyles.unitGrid}>
-        <TouchableOpacity
-          onPress={() => setSelectedUnitFilter(selectedUnitFilter === 'Shanti Memorial Hospital' ? 'all' : 'Shanti Memorial Hospital')}
-          style={[
-            vStyles.unitTile,
-            {
-              borderColor: selectedUnitFilter === 'Shanti Memorial Hospital' ? '#2563EB' : '#BFDBFE',
-              backgroundColor: selectedUnitFilter === 'Shanti Memorial Hospital' ? '#EFF6FF' : '#F8FAFC',
-              transform: [{ scale: selectedUnitFilter === 'Shanti Memorial Hospital' ? 1.02 : 1 }],
-            },
-          ]}
-          activeOpacity={0.8}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={[vStyles.unitDot, { backgroundColor: '#2563EB' }]} />
-            <Text style={vStyles.unitName} numberOfLines={1}>Shanti Memorial</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4, marginTop: 4 }}>
-            <Text style={vStyles.unitCount}>{unitBreakdown.smh.count}</Text>
-            <Text style={vStyles.unitPct}>({unitBreakdown.smh.pct}%)</Text>
-          </View>
-          <Text style={vStyles.unitLocation}>Main Hospital · Tap to filter</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setSelectedUnitFilter(selectedUnitFilter === 'Gopal Trust' ? 'all' : 'Gopal Trust')}
-          style={[
-            vStyles.unitTile,
-            {
-              borderColor: selectedUnitFilter === 'Gopal Trust' ? '#DB2777' : '#FBCFE8',
-              backgroundColor: selectedUnitFilter === 'Gopal Trust' ? '#FDF2F8' : '#F8FAFC',
-              transform: [{ scale: selectedUnitFilter === 'Gopal Trust' ? 1.02 : 1 }],
-            },
-          ]}
-          activeOpacity={0.8}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={[vStyles.unitDot, { backgroundColor: '#DB2777' }]} />
-            <Text style={vStyles.unitName} numberOfLines={1}>Gopal Trust</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4, marginTop: 4 }}>
-            <Text style={vStyles.unitCount}>{unitBreakdown.gt.count}</Text>
-            <Text style={vStyles.unitPct}>({unitBreakdown.gt.pct}%)</Text>
-          </View>
-          <Text style={vStyles.unitLocation}>Co-located Campus · Tap to filter</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setSelectedUnitFilter(selectedUnitFilter === 'Chikitsa' ? 'all' : 'Chikitsa')}
-          style={[
-            vStyles.unitTile,
-            {
-              borderColor: selectedUnitFilter === 'Chikitsa' ? '#16A34A' : '#BBF7D0',
-              backgroundColor: selectedUnitFilter === 'Chikitsa' ? '#F0FDF4' : '#F8FAFC',
-              transform: [{ scale: selectedUnitFilter === 'Chikitsa' ? 1.02 : 1 }],
-            },
-          ]}
-          activeOpacity={0.8}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={[vStyles.unitDot, { backgroundColor: '#16A34A' }]} />
-            <Text style={vStyles.unitName} numberOfLines={1}>Chikitsa</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4, marginTop: 4 }}>
-            <Text style={vStyles.unitCount}>{unitBreakdown.chikitsa.count}</Text>
-            <Text style={vStyles.unitPct}>({unitBreakdown.chikitsa.pct}%)</Text>
-          </View>
-          <Text style={vStyles.unitLocation}>Satellite Facility · Tap to filter</Text>
-        </TouchableOpacity>
+        {unitBreakdown.items.map((u) => {
+          const isSelected = selectedUnitFilter === u.name;
+          return (
+            <TouchableOpacity
+              key={u.name}
+              onPress={() => setSelectedUnitFilter(isSelected ? 'all' : u.name)}
+              style={[
+                vStyles.unitTile,
+                {
+                  borderColor: isSelected ? u.color : u.border,
+                  backgroundColor: isSelected ? u.bg : '#F8FAFC',
+                  transform: [{ scale: isSelected ? 1.02 : 1 }],
+                },
+              ]}
+              activeOpacity={0.8}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={[vStyles.unitDot, { backgroundColor: u.color }]} />
+                <Text style={vStyles.unitName} numberOfLines={1}>{u.name}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4, marginTop: 4 }}>
+                <Text style={vStyles.unitCount}>{u.count}</Text>
+                <Text style={vStyles.unitPct}>({u.pct}%)</Text>
+              </View>
+              <Text style={vStyles.unitLocation}>Active Unit · Tap to filter</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {/* Dynamic Employment Category Breakdown (Updates with Unit Filter) */}
@@ -662,7 +627,7 @@ export default function AdminDashboard() {
             {formatCurrency(totalMonthlyPayrollEst)}
           </Text>
           <Text style={{ fontSize: 11, color: '#10B981', fontWeight: '600', marginTop: 2 }}>
-            Active across SMH, Gopal Trust & Chikitsa
+            Active across all operational units
           </Text>
         </View>
         <TouchableOpacity
@@ -925,7 +890,7 @@ export default function AdminDashboard() {
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
             <Text style={{ fontSize: 12, color: colors.textSecondary }}>
-              {formatDate(new Date().toISOString())} · Multi-Unit Healthcare Management
+              {formatDate(new Date().toISOString())} · Multi-Tenant Workforce Management
             </Text>
             <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: colors.border }} />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.primaryLight, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: `${colors.primary}25` }}>

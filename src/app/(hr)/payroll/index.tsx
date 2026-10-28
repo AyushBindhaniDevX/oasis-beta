@@ -29,7 +29,7 @@ export default function PayrollScreen() {
   const [showCreate, setShowCreate] = useState(false);
   const [newMonth, setNewMonth] = useState<string | null>(null);
   const [newYear, setNewYear] = useState(String(new Date().getFullYear()));
-  const [newUnit, setNewUnit] = useState<string>('Shanti Memorial Hospital');
+  const [newUnit, setNewUnit] = useState<string>('ALL');
   const [selectedUnitFilter, setSelectedUnitFilter] = useState<string>('All');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -83,11 +83,8 @@ export default function PayrollScreen() {
     return map[s] || 'neutral';
   };
 
-  const unitBadgeColor = (unitName?: string) => {
-    if (unitName === 'Shanti Memorial Hospital') return { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' };
-    if (unitName === 'Gopal Trust') return { bg: '#FDF2F8', text: '#BE185D', border: '#FBCFE8' };
-    if (unitName === 'Chikitsa') return { bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0' };
-    return { bg: '#F3F4F6', text: '#4B5563', border: '#E5E7EB' };
+  const unitBadgeColor = (_unitName?: string) => {
+    return { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' };
   };
 
   const filteredPeriods = useMemo(() => {

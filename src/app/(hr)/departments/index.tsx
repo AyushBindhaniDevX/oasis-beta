@@ -511,7 +511,7 @@ export default function DepartmentsAndHierarchyScreen() {
 
   const employeeOptions = useMemo(() => {
     return employees.map((e) => ({
-      label: `${e.profile?.full_name || 'Staff'} (${e.designation || 'Employee'} · ${e.department?.name || 'Hospital'})`,
+      label: `${e.profile?.full_name || 'Staff'} (${e.designation || 'Employee'} · ${e.department?.name || 'General'})`,
       value: e.id,
     }));
   }, [employees]);
@@ -527,7 +527,7 @@ export default function DepartmentsAndHierarchyScreen() {
       ...employees
         .filter((e) => !forbiddenIds.has(e.id))
         .map((e) => ({
-          label: `${e.profile?.full_name || 'Staff'} (${e.designation || 'Manager'} · ${e.department?.name || 'Hospital'})`,
+          label: `${e.profile?.full_name || 'Staff'} (${e.designation || 'Manager'} · ${e.department?.name || 'General'})`,
           value: e.id,
         })),
     ];

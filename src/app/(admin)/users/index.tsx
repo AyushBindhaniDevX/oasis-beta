@@ -217,14 +217,12 @@ export default function UserManagementScreen() {
     setRefreshing(false);
   };
 
-  const tenantDomain = (tenantOrg?.settings as any)?.domain || (typeof window !== 'undefined' && window.location.hostname.includes('shanti') ? 'shantimemorialhospital.com' : 'subedge.com');
+  const tenantDomain = (tenantOrg?.settings as any)?.domain || 'company.com';
 
   const generateRandomCode = (targetOrgId?: string) => {
-    const activeOrg = targetOrgId || newOrgId || tenantOrg?.id || '';
-    const isSMH = activeOrg.includes('shanti') || tenantDomain.includes('shanti');
-    const prefix = isSMH ? 'SMH' : 'EMP';
+    const orgPrefix = (tenantOrg?.name || 'EMP').replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'EMP';
     const randomDigits = Math.floor(1000 + Math.random() * 9000);
-    return `${prefix}-${randomDigits}`;
+    return `${orgPrefix}-${randomDigits}`;
   };
 
   const openAddModal = () => {
@@ -493,7 +491,7 @@ export default function UserManagementScreen() {
         setEditEsi('');
         setEditEsiExempt(false);
         setEditEmploymentType('Regular');
-        setEditHospitalUnit('Shanti Memorial Hospital');
+        setEditHospitalUnit('Headquarters');
         setEditGrade('M1');
         setEditEpfPercentage('12');
         setEditSocsoPercentage('0.5');
@@ -591,7 +589,7 @@ export default function UserManagementScreen() {
           workplace_id: editWorkplaceId || null,
           designation: editDesignation.trim() || 'Staff',
           employment_type: editEmploymentType || 'Regular',
-          hospital_unit: editHospitalUnit || 'Shanti Memorial Hospital',
+          hospital_unit: editHospitalUnit || 'Headquarters',
           grade: editGrade.trim() || null,
           manager_id: editManagerId || null,
           default_shift_id: editShiftId || null,
@@ -969,10 +967,10 @@ export default function UserManagementScreen() {
             ))}
           </View>
 
-          {/* Unit / Sub-Brand Filter Chips */}
+          {/* Unit Filter Chips */}
           <View style={{ marginTop: 2 }}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
-              {(['all', 'Shanti Memorial Hospital', 'Gopal Trust', 'Chikitsa'] as const).map((u) => (
+              {['all', ...HOSPITAL_UNITS].map((u) => (
                 <TouchableOpacity
                   key={u}
                   onPress={() => setUnitFilter(u)}
@@ -984,18 +982,14 @@ export default function UserManagementScreen() {
                       : { backgroundColor: '#f1f5f9' },
                   ]}
                 >
-                  {u === 'all' ? (
-                    <Building size={14} color={unitFilter === u ? '#FFF' : colors.textSecondary} />
-                  ) : (
-                    <HeartPulse size={14} color={unitFilter === u ? '#FFF' : colors.textSecondary} />
-                  )}
+                  <Building size={14} color={unitFilter === u ? '#FFF' : colors.textSecondary} />
                   <Text
                     style={[
                       styles.chipText,
                       { color: unitFilter === u ? '#FFF' : colors.text, fontWeight: '700' },
                     ]}
                   >
-                    {u === 'all' ? 'All Units' : u === 'Shanti Memorial Hospital' ? 'SMH Main' : u}
+                    {u === 'all' ? 'All Units' : u}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -1085,7 +1079,7 @@ export default function UserManagementScreen() {
                         return (
                           <>
                             <Badge
-                              label={unit === 'Shanti Memorial Hospital' ? 'SMH' : unit}
+                              label={unit}
                               variant="neutral"
                             />
                             <Badge
@@ -1250,12 +1244,24 @@ export default function UserManagementScreen() {
                   </View>
                 </View>
 
-                {/* Unit / Location Selector */}
+                {/* Unit / Sub-Brand Selector */}
                 <Select
-                  label="Branch / Location / Unit *"
-                  options={HOSPITAL_UNITS.map((u) => ({ label: u, value: u }))}
+                  label="Unit / Sub-Brand *"
+                  options={(() => {
+                    const wpOptions = workplaces.map((w) => ({ label: w.name, value: w.name }));
+                    const builtIn = HOSPITAL_UNITS.filter((u) => !workplaces.some((w) => w.name.toLowerCase() === u.toLowerCase())).map((u) => ({ label: u, value: u }));
+                    const combined = [...wpOptions, ...builtIn];
+                    return combined.length > 0 ? combined : [{ label: 'Headquarters', value: 'Headquarters' }];
+                  })()}
                   value={newHospitalUnit}
-                  onValueChange={(val) => setNewHospitalUnit(val || 'Headquarters')}
+                  onValueChange={(val) => {
+                    const chosen = val || 'Headquarters';
+                    setNewHospitalUnit(chosen);
+                    const matchedWp = workplaces.find((w) => w.name.toLowerCase() === chosen.toLowerCase());
+                    if (matchedWp) {
+                      setNewWorkplaceId(matchedWp.id);
+                    }
+                  }}
                 />
 
                 {/* Employment Category */}
@@ -1386,10 +1392,14 @@ export default function UserManagementScreen() {
                     />
 
                     <Select
-                      label="Primary Workplace (Location)"
-                      options={workplaces.map((w) => ({ label: w.name, value: w.id }))}
+                      label="Assigned Unit / Geofenced Workplace"
+                      options={workplaces.map((w) => ({ label: `${w.name} (${w.radius_meters || 200}m geofence)`, value: w.id }))}
                       value={newWorkplaceId}
-                      onValueChange={setNewWorkplaceId}
+                      onValueChange={(val) => {
+                        setNewWorkplaceId(val);
+                        const matched = workplaces.find(w => w.id === val);
+                        if (matched) setNewHospitalUnit(matched.name);
+                      }}
                     />
 
                     <Select
@@ -1644,13 +1654,17 @@ export default function UserManagementScreen() {
                 />
 
                 <Select
-                  label="Primary Workplace (Location)"
+                  label="Assigned Unit / Geofenced Workplace"
                   options={[
                     { label: 'None / Unassigned', value: '' },
-                    ...workplaces.map((w) => ({ label: w.name, value: w.id })),
+                    ...workplaces.map((w) => ({ label: `${w.name} (${w.radius_meters || 200}m geofence)`, value: w.id })),
                   ]}
                   value={editWorkplaceId}
-                  onValueChange={setEditWorkplaceId}
+                  onValueChange={(val) => {
+                    setEditWorkplaceId(val);
+                    const matched = workplaces.find(w => w.id === val);
+                    if (matched) setEditHospitalUnit(matched.name);
+                  }}
                 />
 
                 <Select
@@ -1688,12 +1702,24 @@ export default function UserManagementScreen() {
                   onChangeText={setEditDob}
                 />
 
-                {/* Unit / Location Selector */}
+                {/* Unit / Sub-Brand Selector */}
                 <Select
-                  label="Branch / Location / Unit *"
-                  options={HOSPITAL_UNITS.map((u) => ({ label: u, value: u }))}
+                  label="Unit / Sub-Brand *"
+                  options={(() => {
+                    const wpOptions = workplaces.map((w) => ({ label: w.name, value: w.name }));
+                    const builtIn = HOSPITAL_UNITS.filter((u) => !workplaces.some((w) => w.name.toLowerCase() === u.toLowerCase())).map((u) => ({ label: u, value: u }));
+                    const combined = [...wpOptions, ...builtIn];
+                    return combined.length > 0 ? combined : [{ label: 'Headquarters', value: 'Headquarters' }];
+                  })()}
                   value={editHospitalUnit}
-                  onValueChange={(val) => setEditHospitalUnit(val || 'Headquarters')}
+                  onValueChange={(val) => {
+                    const chosen = val || 'Headquarters';
+                    setEditHospitalUnit(chosen);
+                    const matchedWp = workplaces.find((w) => w.name.toLowerCase() === chosen.toLowerCase());
+                    if (matchedWp) {
+                      setEditWorkplaceId(matchedWp.id);
+                    }
+                  }}
                 />
 
                 <Select

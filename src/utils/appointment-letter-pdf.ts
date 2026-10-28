@@ -23,8 +23,8 @@ export function generateAppointmentLetterHtml(data: AppointmentLetterData): stri
   const empCode = emp.employee_code || (isSMH ? 'SMH-000' : 'EMP-000');
   const designation = emp.designation || 'Professional Staff';
   const department = emp.department?.name || 'Operations';
-  const unit = emp.hospital_unit || (isSMH ? 'Chikitsa Unit of Shanti Memorial Hospital' : `${orgName} Campus`);
-  const subtitle = isSMH ? 'Multi-Super Specialty Healthcare Center · NABH Accredited' : 'Workforce & Human Capital Management';
+  const unit = emp.hospital_unit || `${orgName} - Main Unit`;
+  const subtitle = 'Workforce & Human Capital Management';
   const joiningDate = emp.joining_date ? formatDate(emp.joining_date) : formatDate(new Date().toISOString());
   const issueDate = data.issueDate ? formatDate(data.issueDate) : formatDate(new Date().toISOString());
   const refPrefix = isSMH ? 'SMH' : orgName.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || 'HR';

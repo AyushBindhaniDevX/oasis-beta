@@ -1435,15 +1435,15 @@ export async function sendAppointmentLetterEmail(
       : undefined
   );
 
-  const orgName = orgCtx.organizationName || 'Shanti Memorial Hospital';
+  const orgName = orgCtx.organizationName || 'Workplace Organization';
   const isSMH = !extra?.organizationName || extra?.organizationId === 'smh' || extra?.organizationId === 'shanti-memorial-hospital' || orgName.toLowerCase().includes('shanti');
-  const unit = extra?.unit || (isSMH ? 'Chikitsa Unit of Shanti Memorial Hospital' : `${orgName} Campus`);
-  const subtitle = isSMH ? 'Multi-Super Specialty Healthcare Center · NABH Accredited' : 'Enterprise Workplace & Healthcare Systems';
-  const department = extra?.department || 'Medical & Healthcare Services';
+  const unit = extra?.unit || `${orgName} - Main Unit`;
+  const subtitle = 'Workforce & Human Capital Management';
+  const department = extra?.department || 'General Operations';
   const joiningDate = extra?.joiningDate || new Date().toISOString().split('T')[0];
   const probationMonths = extra?.probationMonths || 6;
-  const signatoryName = extra?.signatoryName || 'Dr. Authorized Signatory';
-  const signatoryTitle = extra?.signatoryTitle || 'Medical Superintendent / HR Director';
+  const signatoryName = extra?.signatoryName || 'Authorized Signatory';
+  const signatoryTitle = extra?.signatoryTitle || 'Human Resources Director';
   const currentYear = new Date().getFullYear();
   const refPrefix = isSMH ? 'SMH' : orgName.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || 'HR';
   const refNo = extra?.refNumber || `${refPrefix}/HR/APT/${currentYear}/${employeeCode}`;

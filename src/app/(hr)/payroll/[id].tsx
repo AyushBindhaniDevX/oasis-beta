@@ -815,11 +815,8 @@ export default function PayrollDetailScreen() {
 
   const navItems = profile?.role === 'admin' ? ADMIN_NAV : HR_NAV;
 
-  const unitBadgeColor = (u: string) => {
-    if (u === 'Shanti Memorial Hospital') return { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' };
-    if (u === 'Gopal Trust') return { bg: '#FDF2F8', text: '#BE185D', border: '#FBCFE8' };
-    if (u === 'Chikitsa') return { bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0' };
-    return { bg: '#F3F4F6', text: '#4B5563', border: '#E5E7EB' };
+  const unitBadgeColor = (_u: string) => {
+    return { bg: '#EFF6FF', text: '#1D4ED8', border: '#BFDBFE' };
   };
 
   return (

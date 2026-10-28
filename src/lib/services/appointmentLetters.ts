@@ -50,7 +50,7 @@ export async function createAndStoreAppointmentLetter(
 
   const prof = employee.profile;
   const empEmail = prof?.email || (employee as any).email || '';
-  const unit = employee.hospital_unit || (isSMH ? 'Shanti Memorial Hospital & Chikitsa Unit' : `${orgName} Campus`);
+  const unit = employee.hospital_unit || (isSMH ? `${orgName} - Main Unit` : `${orgName} Campus`);
 
   const letterRecord: StoredAppointmentLetter = {
     id: letterId,
@@ -59,7 +59,7 @@ export async function createAndStoreAppointmentLetter(
     employee_code: empCode,
     employee_name: prof?.full_name || 'Staff Member',
     employee_email: empEmail,
-    designation: employee.designation || 'Healthcare Professional',
+    designation: employee.designation || 'Staff Member',
     department_name: employee.department?.name || 'General Operations',
     unit,
     ref_number: refNo,
@@ -154,14 +154,14 @@ export async function resendAppointmentLetterEmail(params: {
   }
 
   const orgId = params.organizationId || employee.organization_id || organization?.id || '00000000-0000-0000-0000-000000000001';
-  const orgName = organization?.name || 'Shanti Memorial Hospital';
+  const orgName = organization?.name || 'Workplace Organization';
   const isSMH = !organization || orgId === 'smh' || orgId === 'shanti-memorial-hospital' || orgName.toLowerCase().includes('shanti');
   const empCode = employee.employee_code || (isSMH ? 'SMH-000' : 'EMP-000');
   const prof = employee.profile;
   const empName = prof?.full_name || 'Staff Member';
-  const designation = employee.designation || 'Healthcare Professional';
+  const designation = employee.designation || 'Staff Member';
   const department = employee.department?.name || 'General Operations';
-  const unit = employee.hospital_unit || (isSMH ? 'Shanti Memorial Hospital & Chikitsa Unit' : `${orgName} Campus`);
+  const unit = employee.hospital_unit || (isSMH ? `${orgName} - Main Unit` : `${orgName} Campus`);
   const year = new Date().getFullYear();
   const refPrefix = isSMH ? 'SMH' : orgName.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || 'HR';
   const refNo = `${refPrefix}/HR/APT/${year}/${empCode}`;

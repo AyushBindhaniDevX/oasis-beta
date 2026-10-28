@@ -47,7 +47,7 @@ export const HR_NAV: NavItem[] = [
   { label: 'Shifts & Rosters', href: '/(hr)/shifts', icon: Clock, feature: 'shifts' },
   { label: 'Performance', href: '/(hr)/performance', icon: Award, feature: 'performance' },
   { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard, feature: 'payroll' },
-  { label: 'Office Locations', href: '/(hr)/locations', icon: MapPin, feature: 'locations' },
+  { label: 'Units / Sub-Brands', href: '/(hr)/locations', icon: Building2, feature: 'locations' },
 ];
 
 export const ADMIN_NAV: NavItem[] = [
@@ -62,7 +62,7 @@ export const ADMIN_NAV: NavItem[] = [
   { label: 'Shifts & Rosters', href: '/(hr)/shifts', icon: Clock, feature: 'shifts' },
   { label: 'Performance', href: '/(hr)/performance', icon: Award, feature: 'performance' },
   { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard, feature: 'payroll' },
-  { label: 'Locations', href: '/(hr)/locations', icon: MapPin, feature: 'locations' },
+  { label: 'Units / Sub-Brands', href: '/(hr)/locations', icon: Building2, feature: 'locations' },
   { label: 'Audit Logs', href: '/(admin)/audit-logs', icon: Shield, feature: 'audit_logs' },
   { label: 'Approval Workflows', href: '/(admin)/approval-workflows', icon: Workflow },
   { label: 'Data Management', href: '/(admin)/data-management', icon: FileSpreadsheet },

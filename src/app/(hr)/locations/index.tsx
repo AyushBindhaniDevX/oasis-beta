@@ -24,6 +24,7 @@ import { getCurrentLocation } from '@/lib/services/location';
 import type { Workplace } from '@/types';
 import {
   MapPin,
+  Building2,
   Edit2,
   Navigation,
   CheckCircle2,
@@ -174,13 +175,13 @@ export default function LocationsScreen() {
         {/* Top Header */}
         <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
           <View>
-            <Text style={[styles.title, { color: colors.text }]}>Office & Hospital Locations</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Units / Sub-Brands</Text>
             <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
-              Configure physical workplace coordinates and attendance geofencing zones.
+              Configure physical workplace units, sub-brands, and attendance geofencing boundaries.
             </Text>
           </View>
           <Button
-            title="+ Add Location"
+            title="+ Add Unit / Sub-Brand"
             onPress={() => {
               setFormError('');
               setShowCreate(true);
@@ -194,11 +195,20 @@ export default function LocationsScreen() {
           data={workplaces}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ padding: 20, gap: 12 }}
+          ListEmptyComponent={
+            <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 48, gap: 12 }}>
+              <Building2 size={48} color={colors.textSecondary} />
+              <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>No Units / Sub-Brands Configured</Text>
+              <Text style={{ fontSize: 13, color: colors.textSecondary, textAlign: 'center', maxWidth: 360 }}>
+                Add your business units, branch offices, and operational sub-brands with coordinates for attendance geofencing.
+              </Text>
+            </View>
+          }
           renderItem={({ item }) => (
             <Card>
               <View style={styles.cardRow}>
                 <View style={[styles.locationIconBox, { backgroundColor: colors.primary + '15' }]}>
-                  <MapPin size={24} color={colors.primary} />
+                  <Building2 size={24} color={colors.primary} />
                 </View>
 
                 <View style={{ flex: 1, paddingHorizontal: 12 }}>
@@ -242,8 +252,8 @@ export default function LocationsScreen() {
           )}
         />
 
-        {/* ── Modal: Add Workplace ─────────────────────────────────────────── */}
-        <Modal visible={showCreate} onClose={() => setShowCreate(false)} title="Add New Workplace">
+        {/* ── Modal: Add Unit / Sub-Brand ─────────────────────────────────── */}
+        <Modal visible={showCreate} onClose={() => setShowCreate(false)} title="Add Unit / Sub-Brand">
           <ScrollView style={{ maxHeight: 500 }}>
             <View style={{ gap: 14 }}>
               {formError ? (
@@ -254,14 +264,14 @@ export default function LocationsScreen() {
               ) : null}
 
               <Input
-                label="Location Name *"
-                placeholder="e.g. Shanti Memorial Main Campus"
+                label="Unit / Sub-Brand Name *"
+                placeholder="e.g. Headquarters Campus or Branch Office"
                 value={name}
                 onChangeText={setName}
               />
               <Input
                 label="Street Address"
-                placeholder="e.g. Plot No 12, Unit 4, Hospital Road"
+                placeholder="e.g. Plot No 12, Tech Park, Main Road"
                 value={address}
                 onChangeText={setAddress}
               />
@@ -314,7 +324,7 @@ export default function LocationsScreen() {
                   style={{ flex: 1, borderRadius: 8 }}
                 />
                 <Button
-                  title="Create Workplace"
+                  title="Create Unit / Sub-Brand"
                   onPress={handleCreate}
                   loading={creating}
                   style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 8 }}
@@ -324,8 +334,8 @@ export default function LocationsScreen() {
           </ScrollView>
         </Modal>
 
-        {/* ── Modal: Edit Workplace ─────────────────────────────────────────── */}
-        <Modal visible={!!editingWp} onClose={() => setEditingWp(null)} title="Edit Workplace Location">
+        {/* ── Modal: Edit Unit / Sub-Brand ─────────────────────────────────── */}
+        <Modal visible={!!editingWp} onClose={() => setEditingWp(null)} title="Edit Unit / Sub-Brand">
           <ScrollView style={{ maxHeight: 500 }}>
             <View style={{ gap: 14 }}>
               {formError ? (
@@ -336,8 +346,8 @@ export default function LocationsScreen() {
               ) : null}
 
               <Input
-                label="Location Name *"
-                placeholder="Workplace name"
+                label="Unit / Sub-Brand Name *"
+                placeholder="Unit or Sub-Brand Name"
                 value={editName}
                 onChangeText={setEditName}
               />

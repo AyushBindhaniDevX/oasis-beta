@@ -61,14 +61,14 @@ export function AppointmentLetterModal({
   const empProfile = employee?.profile || profile;
   const empName = empProfile?.full_name || 'Staff Member';
   const defaultEmail = empProfile?.email || (employee as any)?.email || '';
-  const empCode = employee?.employee_code || 'SMH-000';
+  const empCode = employee?.employee_code || 'EMP-001';
   const designation = employee?.designation || (empProfile?.role === 'admin' ? 'Administrator' : empProfile?.role === 'hr' ? 'HR Manager' : 'Staff');
   const departmentName = employee?.department?.name || 'General Operations';
-  const orgName = organization?.name || 'Shanti Memorial Hospital';
+  const orgName = organization?.name || 'Workplace Organization';
   const isSMH = !organization || organization.id === 'smh' || organization.id === 'shanti-memorial-hospital' || orgName.toLowerCase().includes('shanti');
-  const unit = employee?.hospital_unit || (isSMH ? 'Shanti Memorial Hospital & Chikitsa Unit' : `${orgName} Campus`);
+  const unit = employee?.hospital_unit || `${orgName} - Main Unit`;
   const currentYear = new Date().getFullYear();
-  const refPrefix = isSMH ? 'SMH' : orgName.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || 'HR';
+  const refPrefix = orgName.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || 'HR';
   const refNo = `${refPrefix}/HR/APT/${currentYear}/${empCode}`;
 
   // Form & UI States
@@ -398,12 +398,12 @@ export function AppointmentLetterModal({
 
           {showPreview ? (
             <View style={[styles.previewBox, { backgroundColor: colors.background, borderColor: colors.border }]}>
-              {/* Hospital Header */}
+              {/* Workplace Header */}
               <View style={styles.previewHeader}>
                 <View>
                   <Text style={[styles.prevHospitalName, { color: '#0D7377' }]}>{orgName}</Text>
                   <Text style={styles.prevHospitalUnit}>{unit}</Text>
-                  <Text style={styles.prevHospitalSubtitle}>Multi-Super Specialty Healthcare Center · NABH Accredited</Text>
+                  <Text style={styles.prevHospitalSubtitle}>Workforce & Human Capital Management</Text>
                 </View>
                 <Badge label="OFFICIAL APPOINTMENT" variant="success" />
               </View>

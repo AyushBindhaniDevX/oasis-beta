@@ -177,9 +177,9 @@ export default function ShiftsScreen() {
       setLoading(true);
       const activeDeptName = selectedDeptId
         ? departments.find(d => d.id === selectedDeptId)?.name || 'Department'
-        : 'All Hospital Departments';
+        : 'All Departments';
 
-      const unitName = (tenantOrg as any)?.name || 'Shanti Memorial Hospital & Chikitsa Unit';
+      const unitName = (tenantOrg as any)?.name || 'Main Organization';
       const hodName = profile?.full_name || 'Department HOD';
 
       const htmlContent = `
@@ -419,19 +419,19 @@ export default function ShiftsScreen() {
                 <span class="sign-sub">${activeDeptName}</span>
               </div>
               <div class="sign-box">
-                Medical Superintendent<br/>
-                <span class="sign-sub">Clinical Administration</span>
+                Operations & Management<br/>
+                <span class="sign-sub">Operational Administration</span>
               </div>
               <div class="sign-box">
                 HR & Payroll Department<br/>
-                <span class="sign-sub">Shanti Memorial Hospital</span>
+                <span class="sign-sub">${unitName}</span>
               </div>
             </div>
           </body>
         </html>
       `;
       
-      const fileName = `SMH_Duty_Roster_${weekDates[0].dateStr}_${weekDates[6].dateStr}.pdf`;
+      const fileName = `Duty_Roster_${weekDates[0].dateStr}_${weekDates[6].dateStr}.pdf`;
       await exportOrPrintPdf(htmlContent, fileName);
     } catch (error) {
       console.error('Failed to generate PDF:', error);
@@ -564,7 +564,7 @@ export default function ShiftsScreen() {
                         HOD Duty Roster Assignment
                       </Text>
                       <Text style={{ fontSize: 11, color: '#115E59' }}>
-                        Hospital Policy: Duty rosters must be assigned by respective immediate HODs for scheduled 8-hour shifts.
+                        Workplace Policy: Duty rosters must be assigned by respective immediate HODs / managers for scheduled shifts.
                       </Text>
                     </View>
                   </View>

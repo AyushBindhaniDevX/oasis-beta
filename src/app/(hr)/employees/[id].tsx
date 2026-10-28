@@ -142,7 +142,7 @@ export default function EmployeeDetailScreen() {
   const [status, setStatus] = useState<string>('active');
   const [isHhcEnabled, setIsHhcEnabled] = useState(false);
   const [joiningDate, setJoiningDate] = useState('');
-  const [hospitalUnit, setHospitalUnit] = useState<string>('Shanti Memorial Hospital');
+  const [hospitalUnit, setHospitalUnit] = useState<string>('Headquarters');
   const [employmentType, setEmploymentType] = useState<string>('Regular');
   const [grade, setGrade] = useState<string>('');
 
@@ -243,7 +243,8 @@ export default function EmployeeDetailScreen() {
     setStatus(emp.employment_status || 'active');
     setIsHhcEnabled(!!emp.is_hhc_enabled || !!emp.profile?.is_hhc_enabled);
     setJoiningDate(emp.joining_date || '');
-    setHospitalUnit(emp.hospital_unit || 'Shanti Memorial Hospital');
+    setHospitalUnit(emp.hospital_unit || 'Headquarters');
+    setWorkplaceId(emp.workplace_id || null);
     setEmploymentType(emp.employment_type || 'Regular');
     setGrade(emp.grade || '');
 
@@ -301,7 +302,7 @@ export default function EmployeeDetailScreen() {
         employee_code: empCode.trim(),
         designation: designation.trim() || null,
         department_id: deptId || null,
-        workplace_id: workplaceId || null,
+        workplace_id: workplaceId || (workplaces.find(w => w.name.toLowerCase() === hospitalUnit.toLowerCase())?.id) || null,
         default_shift_id: shiftId || null,
         manager_id: l1ManagerId || null,
         l1_manager_id: l1ManagerId || null,
@@ -409,10 +410,9 @@ export default function EmployeeDetailScreen() {
             <Row label="Work Email" value={emp.profile?.email || 'N/A'} colors={colors} />
             <Row label="Phone Number" value={emp.profile?.phone || 'N/A'} colors={colors} />
             <Row label="Department" value={emp.department?.name || 'Unassigned'} colors={colors} />
-            <Row label="Hospital Unit / Brand" value={emp.hospital_unit || 'Shanti Memorial Hospital'} colors={colors} />
+            <Row label="Unit / Sub-Brand" value={`${emp.hospital_unit || emp.workplace?.name || 'Headquarters'}${emp.workplace?.radius_meters ? ` (${emp.workplace.radius_meters}m geofence)` : ''}`} colors={colors} />
             <Row label="Employment Category" value={emp.employment_type || 'Regular'} colors={colors} />
             <Row label="Pay Grade" value={emp.grade || 'N/A'} colors={colors} />
-            <Row label="Workplace Location" value={emp.workplace?.name || 'Unassigned'} colors={colors} />
             <Row label="L1 Manager (Supervisor)" value={l1Manager?.profile?.full_name || l1Manager?.employee_code || 'None / Not Assigned'} colors={colors} />
             <Row label="L2 Manager (HOD)" value={l2Manager?.profile?.full_name ? `${l2Manager.profile.full_name} (${l2Manager.employee_code || 'HOD'})` : 'None / Not Assigned'} colors={colors} />
             <Row label="L3 Manager (HR Head)" value={l3Manager?.profile?.full_name ? `${l3Manager.profile.full_name} (${l3Manager.employee_code || 'HR'})` : 'None / Not Assigned'} colors={colors} />
@@ -677,10 +677,22 @@ export default function EmployeeDetailScreen() {
               placeholder="e.g. Senior Software Engineer"
             />
             <Select
-              label="Hospital Unit / Sub-Brand *"
+              label="Unit / Sub-Brand *"
               value={hospitalUnit}
-              onValueChange={(val) => setHospitalUnit(val || 'Shanti Memorial Hospital')}
-              options={HOSPITAL_UNITS.map(u => ({ label: u, value: u }))}
+              onValueChange={(val) => {
+                const chosen = val || 'Headquarters';
+                setHospitalUnit(chosen);
+                const matchedWp = workplaces.find(w => w.name.toLowerCase() === chosen.toLowerCase());
+                if (matchedWp) {
+                  setWorkplaceId(matchedWp.id);
+                }
+              }}
+              options={(() => {
+                const wpOptions = workplaces.map(w => ({ label: w.name, value: w.name }));
+                const builtIn = HOSPITAL_UNITS.filter(u => !workplaces.some(w => w.name.toLowerCase() === u.toLowerCase())).map(u => ({ label: u, value: u }));
+                const combined = [...wpOptions, ...builtIn];
+                return combined.length > 0 ? combined : [{ label: 'Headquarters', value: 'Headquarters' }];
+              })()}
             />
             <Select
               label="Employment Category *"

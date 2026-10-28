@@ -78,6 +78,36 @@ async function getEmployeeData(profileId?: string): Promise<{ emp: Employee; wp:
     }
   }
 
+  // Fallback: If workplace_id is missing, resolve workplace (Unit / Sub-Brand) by unit name or organization
+  if (!wp) {
+    const orgId = emp.organization_id;
+    const unitName = emp.hospital_unit || (emp as any).unit;
+
+    if (unitName) {
+      try {
+        const qByName = query(collection(db, 'workplaces'), where('name', '==', unitName), limit(1));
+        const snap = await getDocs(qByName);
+        if (!snap.empty) {
+          wp = { id: snap.docs[0].id, ...snap.docs[0].data() } as Workplace;
+        }
+      } catch (e) {
+        // Continue
+      }
+    }
+
+    if (!wp && orgId) {
+      try {
+        const qByOrg = query(collection(db, 'workplaces'), where('organization_id', '==', orgId), limit(1));
+        const snap = await getDocs(qByOrg);
+        if (!snap.empty) {
+          wp = { id: snap.docs[0].id, ...snap.docs[0].data() } as Workplace;
+        }
+      } catch (e) {
+        // Continue
+      }
+    }
+  }
+
   return { emp, wp };
 }
 
@@ -104,24 +134,58 @@ export async function clockIn(
 
   let distance: number | undefined = undefined;
   let isWithinGeofence = true;
+  let clockedUnitName = wp?.name || emp.hospital_unit || 'Headquarters';
 
   if (wp && wp.latitude && wp.longitude) {
     if (latitude && longitude && (latitude !== 0 || longitude !== 0)) {
-      distance = calculateDistance(latitude, longitude, wp.latitude, wp.longitude);
+      const assignedDist = calculateDistance(latitude, longitude, wp.latitude, wp.longitude);
       const allowedRadius = wp.radius_meters || 200;
-      isWithinGeofence = distance <= allowedRadius;
+
+      if (assignedDist <= allowedRadius) {
+        distance = assignedDist;
+        isWithinGeofence = true;
+      } else {
+        // Multi-unit check: See if employee is within any other valid active unit/sub-brand of their organization
+        let matchedOtherUnit: Workplace | null = null;
+        if (emp.organization_id) {
+          try {
+            const orgWpQ = query(collection(db, 'workplaces'), where('organization_id', '==', emp.organization_id));
+            const orgWpSnap = await getDocs(orgWpQ);
+            for (const docSnap of orgWpSnap.docs) {
+              const otherWp = { id: docSnap.id, ...docSnap.data() } as Workplace;
+              if (otherWp.id !== wp.id && otherWp.latitude && otherWp.longitude && otherWp.is_active !== false) {
+                const otherDist = calculateDistance(latitude, longitude, otherWp.latitude, otherWp.longitude);
+                if (otherDist <= (otherWp.radius_meters || 200)) {
+                  matchedOtherUnit = otherWp;
+                  distance = otherDist;
+                  isWithinGeofence = true;
+                  clockedUnitName = otherWp.name;
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            // Ignore
+          }
+        }
+
+        if (!matchedOtherUnit) {
+          distance = assignedDist;
+          isWithinGeofence = false;
+        }
+      }
     } else {
       isWithinGeofence = false;
     }
 
     if (!isRemote) {
       if (!latitude || !longitude || (latitude === 0 && longitude === 0)) {
-        throw new Error('Valid GPS location is required to clock in for your workplace. Please enable location permissions or use Remote Clock-In.');
+        throw new Error('Valid GPS location is required to clock in for your unit. Please enable location permissions or use Remote Clock-In.');
       }
       if (!isWithinGeofence) {
         const dStr = distance !== undefined ? `${Math.round(distance)}m` : 'unknown distance';
         const radStr = `${wp.radius_meters || 200}m`;
-        throw new Error(`Outside workplace geofence (${dStr} away from ${wp.name || 'office'}). You must be within ${radStr} to clock in, or switch to Remote Clock-In.`);
+        throw new Error(`Outside unit geofence (${dStr} away from ${wp.name || 'designated unit'}). You must be within ${radStr} to clock in, or switch to Remote Clock-In.`);
       }
     }
   }

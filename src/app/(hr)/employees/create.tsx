@@ -381,7 +381,7 @@ export default function CreateEmployeeScreen() {
             <View>
               <Text style={{ fontSize: 10, fontWeight: '700', color: colors.textSecondary, letterSpacing: 0.5 }}>PARENT ORGANIZATION</Text>
               <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text, marginTop: 2 }}>
-                {tenantOrg?.name || 'Shanti Memorial Hospital'}
+                {tenantOrg?.name || 'Headquarters'}
               </Text>
             </View>
             <View style={{ backgroundColor: '#E2E8F0', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 }}>
@@ -391,10 +391,22 @@ export default function CreateEmployeeScreen() {
 
           {/* Unit / Sub-Brand Selector */}
           <Select
-            label="Hospital Unit / Sub-Brand *"
-            options={HOSPITAL_UNITS.map((u) => ({ label: u, value: u }))}
+            label="Unit / Sub-Brand *"
+            options={(() => {
+              const wpOptions = workplaces.map((w) => ({ label: w.name, value: w.name }));
+              const builtIn = HOSPITAL_UNITS.filter((u) => !workplaces.some((w) => w.name.toLowerCase() === u.toLowerCase())).map((u) => ({ label: u, value: u }));
+              const combined = [...wpOptions, ...builtIn];
+              return combined.length > 0 ? combined : [{ label: 'Headquarters', value: 'Headquarters' }];
+            })()}
             value={hospitalUnit}
-            onValueChange={(val) => setHospitalUnit(val || 'Shanti Memorial Hospital')}
+            onValueChange={(val) => {
+              const chosen = val || 'Headquarters';
+              setHospitalUnit(chosen);
+              const matchedWp = workplaces.find((w) => w.name.toLowerCase() === chosen.toLowerCase());
+              if (matchedWp) {
+                setWorkplaceId(matchedWp.id);
+              }
+            }}
           />
 
           {/* Employment Category */}

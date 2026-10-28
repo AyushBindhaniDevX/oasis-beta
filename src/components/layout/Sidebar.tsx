@@ -67,7 +67,7 @@ export function getRouteFeature(pathname: string): { feature: string; name: stri
   if (pathname.includes('/payroll') || pathname.includes('/payslips')) return { feature: 'payroll', name: 'Payroll & Compensation' };
   if (pathname.includes('/users') || pathname.includes('/directory')) return { feature: 'users', name: 'Staff & User Directory' };
   if (pathname.includes('/departments')) return { feature: 'departments', name: 'Department Management' };
-  if (pathname.includes('/locations')) return { feature: 'locations', name: 'Office Locations' };
+  if (pathname.includes('/locations')) return { feature: 'locations', name: 'Units / Sub-Brands' };
   if (pathname.includes('/audit-logs')) return { feature: 'audit_logs', name: 'Audit & Compliance Logs' };
   if (pathname.includes('/expenses')) return { feature: 'expenses', name: 'Expense Management' };
   if (pathname.includes('/helpdesk')) return { feature: 'helpdesk', name: 'Helpdesk & Support' };

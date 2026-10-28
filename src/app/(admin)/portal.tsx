@@ -82,7 +82,7 @@ const FEATURE_CATALOG = [
   {
     key: 'shifts',
     name: 'Shifts & Roster Planning',
-    desc: 'Multi-shift healthcare rosters, rotational schedules, night shifts, and shift assignment.',
+    desc: 'Multi-shift operational rosters, rotational schedules, night shifts, and shift assignment.',
     icon: Clock,
     tier: 'starter',
   },
@@ -393,7 +393,7 @@ export default function CentralPortalScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.activeTenantLabel}>ACTIVE WORKSPACE CONTEXT</Text>
               <Text style={styles.activeTenantName} numberOfLines={1}>
-                {organization?.name || 'Shanti Memorial Hospital'}
+                {organization?.name || 'All Organizations'}
               </Text>
             </View>
           </View>

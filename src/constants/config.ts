@@ -23,14 +23,14 @@ export const BUSINESS_UNITS = [
   'Branch Office',
   'Operations Unit',
   'Corporate Campus',
-  'Shanti Memorial Hospital',
-  'Gopal Trust',
-  'Chikitsa',
+  'Main Branch',
 ] as const;
 
+export const ORGANIZATION_UNITS = BUSINESS_UNITS;
 export const HOSPITAL_UNITS = BUSINESS_UNITS;
 
-export type HospitalUnit = (typeof BUSINESS_UNITS)[number] | string;
+export type BusinessUnit = (typeof BUSINESS_UNITS)[number] | string;
+export type HospitalUnit = BusinessUnit;
 
 export const EMPLOYMENT_TYPES = [
   { label: 'Regular', value: 'Regular' },
@@ -39,14 +39,14 @@ export const EMPLOYMENT_TYPES = [
 
 export type EmploymentTypeCategory = 'Regular' | 'Contractual';
 
-export function normalizeHospitalUnit(raw?: string | null, defaultUnit = 'Main Office'): string {
+export function normalizeBusinessUnit(raw?: string | null, defaultUnit = 'Main Branch'): string {
   if (!raw) return defaultUnit;
-  const l = raw.toLowerCase().trim();
-  if (l.includes('gopal')) return 'Gopal Trust';
-  if (l.includes('chikitsa')) return 'Chikitsa';
-  if (l.includes('shanti')) return 'Shanti Memorial Hospital';
-  return raw;
+  const trimmed = raw.trim();
+  if (!trimmed) return defaultUnit;
+  return trimmed;
 }
+
+export const normalizeHospitalUnit = normalizeBusinessUnit;
 
 export function normalizeEmploymentType(raw?: string | null): 'Regular' | 'Contractual' {
   if (!raw) return 'Regular';

@@ -13,16 +13,16 @@ export const IMPORT_MODULES = [
 export async function downloadTemplate(moduleId: string) {
   if (moduleId === 'employees') {
     const instructions = [
-      ['Instructions for Employee Import - Shanti Memorial Hospital & Chikitsa Unit'],
+      ['Instructions for Employee Import - Organization Multi-Unit Template'],
       [''],
       ['Column', 'Required', 'Data Type', 'Description/Valid Values'],
-      ['Employee Code', 'Yes', 'Text', 'Unique identifier (e.g. SMH-1502)'],
+      ['Employee Code', 'Yes', 'Text', 'Unique identifier (e.g. EMP-1502)'],
       ['Full Name', 'Yes', 'Text', 'First and Last name'],
       ['Email', 'Yes', 'Text', 'Unique valid email address'],
       ['Phone', 'No', 'Text', '10-digit mobile number'],
-      ['Department', 'No', 'Text', 'Name of department (e.g. Security & Safety, Nursing, Pharmacy)'],
+      ['Department', 'No', 'Text', 'Name of department (e.g. Operations, IT, Finance, HR)'],
       ['Designation', 'No', 'Text', 'Job title'],
-      ['Hospital Unit', 'No', 'Text', 'Shanti Memorial Hospital OR Chikitsa Unit of Shanti Memorial Hospital'],
+      ['Hospital Unit', 'No', 'Text', 'Headquarters, Branch Office, Operations Unit, or Custom Unit'],
       ['Date of Joining', 'Yes', 'Date', 'Format: YYYY-MM-DD or DD/MM/YYYY'],
       ['Date of Birth', 'No', 'Date', 'Format: YYYY-MM-DD or DD/MM/YYYY'],
       ['Basic Salary', 'Yes', 'Number', 'Monthly gross/basic salary in digits'],
@@ -43,11 +43,11 @@ export async function downloadTemplate(moduleId: string) {
       'ESI Number', 'UAN Number', 'PF Number'
     ];
     const rows = [
-      ['SMH-1502', 'Abhiram Hatua', 'abhiram.hatua@shantimemorial.in', '9861015021', 'Security & Safety', 'Security Guard', 'Shanti Memorial Hospital', '2021-04-01', '1988-05-15', 13000, 'YES', 'YES', 'SMH-023', 'SMH-1021', 'SMH-HR', 'SMH-DIR', '2100015021', '101502100001', 'OR/CTC/1502'],
-      ['SMH-023', 'Ajay Swain', 'ajay.swain@shantimemorial.in', '9861002301', 'Housekeeping & Support', 'Hospital Attendant', 'Shanti Memorial Hospital', '2019-06-15', '1992-10-20', 12000, 'YES', 'NO', 'SMH-1021', '', 'SMH-HR', 'SMH-DIR', '2100002301', '100023100002', 'OR/CTC/0023'],
-      ['SMH-1021', 'Abhijit Chakrabarty', 'abhijit.c@shantimemorial.in', '9861010211', 'Medical Consulting & Surgery', 'Consultant Surgeon', 'Chikitsa Unit of Shanti Memorial Hospital', '2018-01-01', '1978-06-25', 29000, 'NO', 'YES', '', '', 'SMH-HR', 'SMH-DIR', '', '', '']
+      ['EMP-1502', 'Alex Morgan', 'alex.m@company.com', '9861015021', 'Operations', 'Operations Officer', 'Headquarters', '2021-04-01', '1988-05-15', 24000, 'YES', 'YES', 'EMP-023', 'EMP-1021', 'EMP-HR', 'EMP-DIR', '2100015021', '101502100001', 'OR/CTC/1502'],
+      ['EMP-023', 'Samira Khan', 'samira.k@company.com', '9861002301', 'Facilities & Support', 'Support Specialist', 'Branch Office', '2019-06-15', '1992-10-20', 18000, 'YES', 'NO', 'EMP-1021', '', 'EMP-HR', 'EMP-DIR', '2100002301', '100023100002', 'OR/CTC/0023'],
+      ['EMP-1021', 'David Chen', 'david.c@company.com', '9861010211', 'Management Consulting', 'Consultant', 'Operations Unit', '2018-01-01', '1978-06-25', 45000, 'NO', 'NO', '', '', 'EMP-HR', 'EMP-DIR', '', '', '']
     ];
-    await exportExcel('SMH_Employee_Import_Template', [
+    await exportExcel('Employee_Import_Template', [
       { name: 'Instructions', rows: instructions },
       { name: 'Import Data', headers, rows }
     ]);
