@@ -100,7 +100,7 @@ export function calculateEmployeeGratuity(
   };
 }
 
-export function generateGratuityStatementHtml(result: GratuityCalculationResult, unitName = 'Shanti Memorial Hospital & Chikitsa Unit'): string {
+export function generateGratuityStatementHtml(result: GratuityCalculationResult, unitName = 'Corporate Headquarters'): string {
   return `
 <!DOCTYPE html>
 <html>
@@ -167,7 +167,7 @@ export function generateGratuityStatementHtml(result: GratuityCalculationResult,
 `;
 }
 
-export async function exportGratuityStatementPdf(result: GratuityCalculationResult, unitName = 'Shanti Memorial Hospital & Chikitsa Unit'): Promise<string | null> {
+export async function exportGratuityStatementPdf(result: GratuityCalculationResult, unitName = 'Corporate Headquarters'): Promise<string | null> {
   const html = generateGratuityStatementHtml(result, unitName);
   const fileName = `Gratuity_Statement_${result.employee_code}.pdf`;
   return await exportOrPrintPdf(html, fileName);

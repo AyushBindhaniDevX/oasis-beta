@@ -57,20 +57,20 @@ export function prepareRegisterRows(entries: Payroll[]): FormattedRegisterRow[] 
     const offDay = entry.off_days ?? 4;
     const pl = entry.pl_days ?? 0;
     const cl = entry.cl_days ?? 0;
-    const paidDays = entry.paid_days ?? 26;
-    const sl = entry.sl_days ?? Math.max(0, 30 - paidDays);
+    const sl = entry.sl_days ?? 0;
     const holiday = entry.holiday_days ?? 0;
+    const paidDays = entry.paid_days ?? (presentDay + offDay + pl + cl + sl + holiday);
 
     const grossSalary = Math.round(entry.gross_salary ?? 0);
     const basicSalary = Math.round(entry.basic ?? (entry.basic_salary || Math.round(grossSalary * 0.5)));
     const hra = Math.round(entry.hra ?? (entry.allowances?.['HRA'] || entry.allowances?.hra || Math.round(grossSalary * 0.2)));
-    const convAll = Math.round(entry.conveyance ?? (entry.allowances?.['Conveyance Allowance'] || 1200));
-    const washAll = Math.round(entry.washing ?? (entry.allowances?.['Washing Allowance'] || 500));
+    const convAll = Math.round(entry.conveyance ?? (entry.allowances?.['Conveyance Allowance'] || 2000));
+    const washAll = Math.round(entry.washing ?? (entry.allowances?.['Washing Allowance'] || 1000));
     const specialAll = Math.round(entry.special_allowance ?? (entry.allowances?.['Special Allowance'] || 0));
 
     const epf = Math.round(entry.pf ?? (entry.deductions?.['EPF'] || entry.deductions?.pf || 0));
     const esic = Math.round(entry.esi ?? (entry.deductions?.['ESIC'] || entry.deductions?.esi || 0));
-    const tds = Math.round(entry.pt_tds ?? (entry.deductions?.['TDS'] || entry.deductions?.tax || 0));
+    const tds = Math.round(entry.tds ?? entry.pt_tds ?? (entry.deductions?.['TDS'] || entry.deductions?.tax || 0));
     const otherDed = Math.round(entry.ot_ded ?? (entry.deductions?.['Miscellaneous Deductions'] || 0));
     const grossDed = Math.round(entry.total_deductions ?? entry.gross_deductions ?? (epf + esic + tds + otherDed));
 
@@ -442,7 +442,7 @@ export async function exportSalaryRegisterPdf(opts: SalaryRegisterExportOptions)
   const filteredRows = filterRegisterRows(allRows, targetUnit, category);
 
   const monthName = MONTHS[opts.period.month - 1] || 'Current';
-  const unitTitle = targetUnit === 'All Units' ? (opts.organization?.name || 'Shanti Memorial Hospital') : targetUnit;
+  const unitTitle = targetUnit === 'All Units' ? (opts.organization?.name || 'Company Register') : targetUnit;
   const docTitle = `${unitTitle} - Salary Register - ${monthName} ${opts.period.year}`;
 
   const html = generateSalaryRegisterHtml(filteredRows, opts.period, unitTitle, category);
@@ -636,13 +636,16 @@ export async function exportSalaryRegisterExcel(opts: SalaryRegisterExportOption
       rows: buildSheetRows(allRows),
     });
 
-    const units = ['Shanti Memorial Hospital', 'Gopal Trust', 'Chikitsa'];
+    // Dynamically derive all company units present in the salary register entries
+    const presentUnits = Array.from(new Set(allRows.map((r) => r.unit).filter(Boolean)));
+    const units = presentUnits.length > 0 ? presentUnits : ['Main Branch'];
+
     for (const unit of units) {
       const regRows = filterRegisterRows(allRows, unit, 'Regular');
       if (regRows.length > 0) {
-        const shortName = unit === 'Shanti Memorial Hospital' ? 'SMH' : unit;
+        const shortName = unit.length > 15 ? unit.slice(0, 15) : unit;
         sheets.push({
-          name: `${shortName} Regular`.slice(0, 31),
+          name: `${shortName} Reg`.slice(0, 31),
           headers,
           rows: buildSheetRows(regRows),
         });
@@ -650,9 +653,9 @@ export async function exportSalaryRegisterExcel(opts: SalaryRegisterExportOption
 
       const contRows = filterRegisterRows(allRows, unit, 'Contractual');
       if (contRows.length > 0) {
-        const shortName = unit === 'Shanti Memorial Hospital' ? 'SMH' : unit;
+        const shortName = unit.length > 15 ? unit.slice(0, 15) : unit;
         sheets.push({
-          name: `${shortName} Contractual`.slice(0, 31),
+          name: `${shortName} Cont`.slice(0, 31),
           headers,
           rows: buildSheetRows(contRows),
         });

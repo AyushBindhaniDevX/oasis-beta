@@ -18,13 +18,19 @@ export const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-export const HOSPITAL_UNITS = [
+export const BUSINESS_UNITS = [
+  'Headquarters',
+  'Branch Office',
+  'Operations Unit',
+  'Corporate Campus',
   'Shanti Memorial Hospital',
   'Gopal Trust',
   'Chikitsa',
 ] as const;
 
-export type HospitalUnit = (typeof HOSPITAL_UNITS)[number];
+export const HOSPITAL_UNITS = BUSINESS_UNITS;
+
+export type HospitalUnit = (typeof BUSINESS_UNITS)[number] | string;
 
 export const EMPLOYMENT_TYPES = [
   { label: 'Regular', value: 'Regular' },
@@ -33,8 +39,8 @@ export const EMPLOYMENT_TYPES = [
 
 export type EmploymentTypeCategory = 'Regular' | 'Contractual';
 
-export function normalizeHospitalUnit(raw?: string | null): string {
-  if (!raw) return 'Shanti Memorial Hospital';
+export function normalizeHospitalUnit(raw?: string | null, defaultUnit = 'Main Office'): string {
+  if (!raw) return defaultUnit;
   const l = raw.toLowerCase().trim();
   if (l.includes('gopal')) return 'Gopal Trust';
   if (l.includes('chikitsa')) return 'Chikitsa';

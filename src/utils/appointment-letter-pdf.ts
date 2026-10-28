@@ -17,21 +17,21 @@ export function generateAppointmentLetterHtml(data: AppointmentLetterData): stri
   const emp = data.employee;
   const prof = emp.profile;
   const org = data.organization;
-  const orgName = org?.name || 'Shanti Memorial Hospital';
-  const isSMH = !org || org.id === 'smh' || org.id === 'shanti-memorial-hospital' || orgName.toLowerCase().includes('shanti');
+  const orgName = org?.name || 'Enterprise Workplace';
+  const isSMH = !!(org && (org.id === 'smh' || org.id === 'shanti-memorial-hospital' || orgName.toLowerCase().includes('shanti')));
   const empName = prof?.full_name || 'Candidate';
   const empCode = emp.employee_code || (isSMH ? 'SMH-000' : 'EMP-000');
-  const designation = emp.designation || 'Healthcare Professional';
-  const department = emp.department?.name || 'Medical Services';
+  const designation = emp.designation || 'Professional Staff';
+  const department = emp.department?.name || 'Operations';
   const unit = emp.hospital_unit || (isSMH ? 'Chikitsa Unit of Shanti Memorial Hospital' : `${orgName} Campus`);
-  const subtitle = isSMH ? 'Multi-Super Specialty Healthcare Center · NABH Accredited' : 'Enterprise Workplace & Healthcare Systems';
+  const subtitle = isSMH ? 'Multi-Super Specialty Healthcare Center · NABH Accredited' : 'Workforce & Human Capital Management';
   const joiningDate = emp.joining_date ? formatDate(emp.joining_date) : formatDate(new Date().toISOString());
   const issueDate = data.issueDate ? formatDate(data.issueDate) : formatDate(new Date().toISOString());
   const refPrefix = isSMH ? 'SMH' : orgName.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || 'HR';
   const refNo = data.refNumber || `${refPrefix}/HR/APT/${new Date().getFullYear()}/${empCode}`;
   const probationMonths = data.probationMonths || 6;
-  const signatoryName = data.signatoryName || 'Dr. Authorized Signatory';
-  const signatoryTitle = data.signatoryTitle || 'Medical Superintendent / HR Director';
+  const signatoryName = data.signatoryName || 'Authorized Signatory';
+  const signatoryTitle = data.signatoryTitle || 'Human Resources Director';
 
   // Calculate Salary Components as per Hospital / Enterprise Formula
   const grossMonthly = emp.basic_salary ? (emp.basic_salary > 20000 ? emp.basic_salary : emp.basic_salary * 2) : 25000;

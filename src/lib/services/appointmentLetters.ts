@@ -41,8 +41,8 @@ export async function createAndStoreAppointmentLetter(
 ): Promise<StoredAppointmentLetter> {
   const now = new Date().toISOString();
   const year = new Date().getFullYear();
-  const orgName = organization?.name || 'Shanti Memorial Hospital';
-  const isSMH = !organization || orgId === 'smh' || orgId === 'shanti-memorial-hospital' || orgName.toLowerCase().includes('shanti');
+  const orgName = organization?.name || 'Enterprise Workplace';
+  const isSMH = !!(organization && (orgId === 'smh' || orgId === 'shanti-memorial-hospital' || orgName.toLowerCase().includes('shanti')));
   const empCode = employee.employee_code || (isSMH ? 'SMH-000' : 'EMP-000');
   const refPrefix = isSMH ? 'SMH' : orgName.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || 'HR';
   const refNo = `${refPrefix}/HR/APT/${year}/${empCode}`;

@@ -236,7 +236,7 @@ export async function getEmployees(params?: {
     if (hospital_unit && hospital_unit !== 'all') {
       const huLower = hospital_unit.toLowerCase();
       results = results.filter((e) => {
-        const u = (e.hospital_unit || 'Shanti Memorial Hospital').toLowerCase();
+        const u = (e.hospital_unit || 'Main Branch').toLowerCase();
         return u.includes(huLower) || huLower.includes(u);
       });
     }
@@ -382,7 +382,7 @@ export async function createEmployee(params: {
     default_shift_id: params.default_shift_id || null,
     employment_status: 'active',
     employment_type: params.employment_type || 'Regular',
-    hospital_unit: params.hospital_unit || 'Shanti Memorial Hospital',
+    hospital_unit: params.hospital_unit || 'Main Branch',
     grade: params.grade || null,
     joining_date: now.split('T')[0],
     date_of_birth: params.date_of_birth || null,

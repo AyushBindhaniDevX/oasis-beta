@@ -154,8 +154,9 @@ export interface Employee {
   onboarding_completed: boolean;
   is_hhc_enabled?: boolean;
   is_pf_eligible?: boolean; // PF vs Non-PF categorization
+  is_esi_eligible?: boolean; // ESI eligibility
   is_overtime_eligible?: boolean; // Overtime calculation designated staff
-  hospital_unit?: 'Shanti Memorial Hospital' | 'Gopal Trust' | 'Chikitsa' | string;
+  hospital_unit?: string; // Company Branch, Unit or Location
   employment_type?: 'Regular' | 'Contractual' | 'full_time' | 'contract' | string;
   grade?: string | null;
   conveyance_allowance?: number;
@@ -364,8 +365,9 @@ export interface Payroll {
   hospital_unit?: string;
   employment_type?: string;
   is_pf_eligible?: boolean;
+  is_overtime_eligible?: boolean;
   salary_details?: number; // Base monthly scale / Offer Salary
-  payable_days?: number; // Standard 30 days
+  payable_days?: number; // Calendar days in month (30, 31, 28/29)
   present_days?: number;
   off_days?: number;
   leave_days?: number;
@@ -374,19 +376,23 @@ export interface Payroll {
   pl_days?: number;
   cl_days?: number;
   sl_days?: number;
-  basic?: number; // 50% of G. Salary
-  hra?: number; // 20% of G. Salary
+  lwp_days?: number;
+  basic?: number; // 50% of Offer Salary (proportioned)
+  hra?: number; // 20% of Offer Salary (proportioned)
   conveyance?: number;
   washing?: number;
   special_allowance?: number;
   pt_tds?: number;
   esi?: number;
   pf?: number;
+  tds?: number;
+  late_coming?: number;
   ot_ded?: number; // miscellaneous deductions
   gross_deductions?: number;
   total_deductions?: number;
   total_salary?: number; // Gross - Total Deductions
   ot_hours_or_days?: number;
+  ot_hours?: number;
   ot_amount?: number;
   other_allowances?: number;
   created_at: string;

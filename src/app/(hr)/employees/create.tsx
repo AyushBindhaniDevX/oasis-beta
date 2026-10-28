@@ -34,7 +34,7 @@ export default function CreateEmployeeScreen() {
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
   const [empCode, setEmpCode] = useState('');
-  const [hospitalUnit, setHospitalUnit] = useState<string>('Shanti Memorial Hospital');
+  const [hospitalUnit, setHospitalUnit] = useState<string>('Headquarters');
   const [employmentType, setEmploymentType] = useState<string>('Regular');
   const [grade, setGrade] = useState<string>('M1');
   const [password, setPassword] = useState('Welcome@123');
@@ -67,12 +67,12 @@ export default function CreateEmployeeScreen() {
   const [specialAllowance, setSpecialAllowance] = useState('');
   const [customItems, setCustomItems] = useState<CustomPayrollItem[]>([]);
 
-  const tenantDomain = (tenantOrg?.settings as any)?.domain || (typeof window !== 'undefined' && window.location.hostname.includes('shanti') ? 'shantimemorialhospital.com' : 'subedge.com');
+  const tenantDomain = (tenantOrg?.settings as any)?.domain || (tenantOrg?.slug ? `${tenantOrg.slug}.com` : 'company.com');
 
   const generateRandomCode = () => {
-    const prefix = tenantDomain.includes('shanti') ? 'SMH' : 'EMP';
+    const orgPrefix = tenantOrg?.slug ? tenantOrg.slug.slice(0, 3).toUpperCase() : 'EMP';
     const randomDigits = Math.floor(1000 + Math.random() * 9000);
-    return `${prefix}-${randomDigits}`;
+    return `${orgPrefix}-${randomDigits}`;
   };
 
   useEffect(() => {

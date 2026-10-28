@@ -17,19 +17,69 @@ export default function ForgotPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Send reset password email via Firebase Auth
+  // Send reset password email via Firebase Auth and Resend
   const handleSendResetEmail = async () => {
     if (!email) {
       setError('Please enter your work email address.');
       return;
     }
 
+    const cleanEmail = email.trim().toLowerCase();
     setError('');
     setLoading(true);
 
     try {
-      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
-      setSuccess(true);
+      let sentSuccess = false;
+
+      // 1. Send via Firebase Auth standard reset
+      try {
+        await sendPasswordResetEmail(auth, cleanEmail);
+        sentSuccess = true;
+      } catch (fbErr: any) {
+        console.warn('Firebase Auth sendPasswordResetEmail notice:', fbErr?.code || fbErr?.message);
+      }
+
+      // 2. Lookup user profile/employee in Firestore to find name and organization
+      let recipientName = cleanEmail.split('@')[0];
+      let orgId: string | null = null;
+      try {
+        const { collection, query, where, getDocs, limit } = await import('firebase/firestore');
+        const { db } = await import('@/lib/firebase');
+        const profQ = query(collection(db, 'profiles'), where('email', '==', cleanEmail), limit(1));
+        const profSnap = await getDocs(profQ);
+        if (!profSnap.empty) {
+          const p = profSnap.docs[0].data();
+          recipientName = p.full_name || recipientName;
+          orgId = p.organization_id || null;
+        } else {
+          const empQ = query(collection(db, 'employees'), where('email', '==', cleanEmail), limit(1));
+          const empSnap = await getDocs(empQ);
+          if (!empSnap.empty) {
+            const e = empSnap.docs[0].data();
+            recipientName = e.name || e.full_name || recipientName;
+            orgId = e.organization_id || null;
+          }
+        }
+      } catch (lookupErr) {
+        console.warn('User lookup note during password reset:', lookupErr);
+      }
+
+      // 3. Dispatch branded transactional email via Resend
+      try {
+        const { sendPasswordResetNotificationEmail } = await import('@/lib/services/resend');
+        await sendPasswordResetNotificationEmail(cleanEmail, recipientName, undefined, {
+          organizationId: orgId,
+        });
+        sentSuccess = true;
+      } catch (resendErr) {
+        console.warn('Resend password reset notice:', resendErr);
+      }
+
+      if (sentSuccess) {
+        setSuccess(true);
+      } else {
+        throw new Error('Unable to send password reset email. Please verify your email or contact HR support.');
+      }
     } catch (err: any) {
       console.error('Reset password error:', err);
       const msg = err?.message || 'Failed to send password reset email. Please verify your email address.';

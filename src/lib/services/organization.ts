@@ -218,14 +218,23 @@ export async function createSystemUser(params: {
       await secondaryAuth.signOut();
     }
   } catch (authErr: any) {
-    try {
-      await sendPasswordResetEmail(secondaryAuth, cleanEmail);
-    } catch (e) {
-      console.warn('Could not send password reset email', e);
+    if (authErr.code === 'auth/email-already-in-use') {
+      // User account already exists in Firebase Authentication; link profile and employee records
+      console.log('Firebase Auth account already exists, linking profile/employee records:', cleanEmail);
+      const existingProfQ = query(collection(db, 'profiles'), where('email', '==', cleanEmail), limit(1));
+      const profSnap = await getDocs(existingProfQ);
+      if (!profSnap.empty) {
+        uid = profSnap.docs[0].id;
+      }
+    } else {
+      try {
+        await sendPasswordResetEmail(secondaryAuth, cleanEmail);
+      } catch (e) {
+        console.warn('Could not send password reset email', e);
+      }
+      console.warn('Firebase Auth user creation notice:', authErr?.message || authErr);
+      throw authErr;
     }
-    // If account exists in Firebase Auth or admin context
-    console.warn('Firebase Auth user creation notice:', authErr?.message || authErr);
-    throw authErr; // Important: prevent creating orphaned firestore records with a random UID
   }
 
   const now = new Date().toISOString();
@@ -281,7 +290,7 @@ export async function createSystemUser(params: {
       special_allowance: (params as any).special_allowance != null && (params as any).special_allowance !== '' ? Number((params as any).special_allowance) : null,
       employment_status: 'active',
       employment_type: params.employment_type || 'Regular',
-      hospital_unit: params.hospital_unit || 'Shanti Memorial Hospital',
+      hospital_unit: params.hospital_unit || 'Main Branch',
       grade: params.grade || null,
       onboarding_completed: true,
       tax_config: {

@@ -106,7 +106,7 @@ export default function UserManagementScreen() {
 
   // Add User Form State
   const [newOrgId, setNewOrgId] = useState<string>('');
-  const [newHospitalUnit, setNewHospitalUnit] = useState<string>('Shanti Memorial Hospital');
+  const [newHospitalUnit, setNewHospitalUnit] = useState<string>('Headquarters');
   const [newFullName, setNewFullName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
@@ -144,7 +144,7 @@ export default function UserManagementScreen() {
   const [editPhone, setEditPhone] = useState('');
   const [editRole, setEditRole] = useState<'admin' | 'hr' | 'employee'>('employee');
   const [editEmploymentType, setEditEmploymentType] = useState('Regular');
-  const [editHospitalUnit, setEditHospitalUnit] = useState('Shanti Memorial Hospital');
+  const [editHospitalUnit, setEditHospitalUnit] = useState('Headquarters');
   const [editGrade, setEditGrade] = useState('M1');
   const [editEmpId, setEditEmpId] = useState<string | null>(null);
   const [editEmpCode, setEditEmpCode] = useState('');
@@ -228,9 +228,9 @@ export default function UserManagementScreen() {
   };
 
   const openAddModal = () => {
-    const defaultOrgId = tenantOrg?.id || currentAdmin?.organization_id || 'shanti-memorial-hospital';
+    const defaultOrgId = tenantOrg?.id || currentAdmin?.organization_id || '00000000-0000-0000-0000-000000000001';
     setNewOrgId(defaultOrgId);
-    setNewHospitalUnit('Shanti Memorial Hospital');
+    setNewHospitalUnit('Headquarters');
     setNewFullName('');
     setNewEmail('');
     setNewPhone('');
@@ -319,7 +319,7 @@ export default function UserManagementScreen() {
     setSavingUser(true);
     try {
       // Strictly scope to current tenant organization to prevent cross-organization employee creation
-      const orgId = tenantOrg?.id || currentAdmin?.organization_id || 'shanti-memorial-hospital';
+      const orgId = tenantOrg?.id || currentAdmin?.organization_id || '00000000-0000-0000-0000-000000000001';
       const fullEmail = newEmail.trim().toLowerCase();
 
       const uid = await createSystemUser({
@@ -728,12 +728,27 @@ export default function UserManagementScreen() {
 
   const handleResetPassword = async (userEmail: string) => {
     try {
-      const { sendPasswordResetEmail } = await import('firebase/auth');
-      const { auth } = await import('@/lib/firebase');
-      await sendPasswordResetEmail(auth, userEmail.trim().toLowerCase());
+      const cleanEmail = userEmail.trim().toLowerCase();
+      try {
+        const { sendPasswordResetEmail } = await import('firebase/auth');
+        const { auth } = await import('@/lib/firebase');
+        await sendPasswordResetEmail(auth, cleanEmail);
+      } catch (fbErr) {
+        console.warn('Firebase reset email notice:', fbErr);
+      }
+
+      try {
+        const { sendPasswordResetNotificationEmail } = await import('@/lib/services/resend');
+        await sendPasswordResetNotificationEmail(cleanEmail, cleanEmail.split('@')[0], undefined, {
+          organizationId: tenantOrg?.id || currentAdmin?.organization_id,
+        });
+      } catch (rErr) {
+        console.warn('Resend reset email notice:', rErr);
+      }
+
       setInfoBanner({
         type: 'success',
-        message: `Password reset email has been sent to ${userEmail}.`,
+        message: `Password reset instructions have been sent to ${cleanEmail}.`,
       });
       setTimeout(() => setInfoBanner(null), 4000);
     } catch (err: any) {
@@ -1227,7 +1242,7 @@ export default function UserManagementScreen() {
                   <View>
                     <Text style={{ fontSize: 10, fontWeight: '700', color: colors.textSecondary, letterSpacing: 0.5 }}>ACTIVE ORGANIZATION</Text>
                     <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text, marginTop: 2 }}>
-                      {tenantOrg?.name || 'Shanti Memorial Hospital'}
+                      {tenantOrg?.name || 'Company Workspace'}
                     </Text>
                   </View>
                   <View style={{ backgroundColor: '#E2E8F0', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 }}>
@@ -1235,12 +1250,12 @@ export default function UserManagementScreen() {
                   </View>
                 </View>
 
-                {/* Unit / Sub-Brand Selector */}
+                {/* Unit / Location Selector */}
                 <Select
-                  label="Hospital Unit / Sub-Brand *"
+                  label="Branch / Location / Unit *"
                   options={HOSPITAL_UNITS.map((u) => ({ label: u, value: u }))}
                   value={newHospitalUnit}
-                  onValueChange={(val) => setNewHospitalUnit(val || 'Shanti Memorial Hospital')}
+                  onValueChange={(val) => setNewHospitalUnit(val || 'Headquarters')}
                 />
 
                 {/* Employment Category */}
@@ -1673,12 +1688,12 @@ export default function UserManagementScreen() {
                   onChangeText={setEditDob}
                 />
 
-                {/* Unit / Sub-Brand */}
+                {/* Unit / Location Selector */}
                 <Select
-                  label="Hospital Unit / Sub-Brand *"
+                  label="Branch / Location / Unit *"
                   options={HOSPITAL_UNITS.map((u) => ({ label: u, value: u }))}
                   value={editHospitalUnit}
-                  onValueChange={(val) => setEditHospitalUnit(val || 'Shanti Memorial Hospital')}
+                  onValueChange={(val) => setEditHospitalUnit(val || 'Headquarters')}
                 />
 
                 <Select

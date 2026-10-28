@@ -24,7 +24,6 @@ import { LoadingState } from '@/components/ui/States';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import {
   getPayrollEntries,
-  createPayrollEntry,
   processPayrollPeriod,
   distributePayroll,
   updatePayrollEntry,
@@ -34,7 +33,7 @@ import {
 } from '@/lib/services/payroll';
 import { getAllEmployees } from '@/lib/services/employee';
 import { db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { formatCurrency } from '@/utils/format';
 import {
   MONTHS,
@@ -73,6 +72,7 @@ import {
   exportSalaryRegisterPdf,
   exportSalaryRegisterExcel,
 } from '@/utils/salary-register-export';
+import { exportPayslipPdf } from '@/utils/payslip-pdf';
 
 export default function PayrollDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -103,14 +103,38 @@ export default function PayrollDetailScreen() {
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
 
-  // Form state
+  // Detailed Entry Form state (Matches 9 User Requirements & Hospital Slip)
   const [selEmpId, setSelEmpId] = useState<string | null>(null);
-  const [basicSalary, setBasicSalary] = useState('');
-  const [hra, setHra] = useState('0');
-  const [ta, setTa] = useState('0');
-  const [pf, setPf] = useState('0');
-  const [tax, setTax] = useState('0');
-  const [lopDays, setLopDays] = useState('0');
+  const [formOfferSalary, setFormOfferSalary] = useState('37400');
+  const [formPresentDays, setFormPresentDays] = useState('26');
+  const [formOffDays, setFormOffDays] = useState('4');
+  const [formPlDays, setFormPlDays] = useState('0');
+  const [formSlDays, setFormSlDays] = useState('0');
+  const [formClDays, setFormClDays] = useState('0');
+  const [formHolidayDays, setFormHolidayDays] = useState('0');
+  const [formPaidDays, setFormPaidDays] = useState('30');
+  const [formLwpDays, setFormLwpDays] = useState('0');
+
+  const [formBasic, setFormBasic] = useState('18700');
+  const [formHra, setFormHra] = useState('7480');
+  const [formConv, setFormConv] = useState('2000');
+  const [formWash, setFormWash] = useState('1000');
+  const [formSpecial, setFormSpecial] = useState('7098');
+  const [formGross, setFormGross] = useState('37400');
+
+  const [formPf, setFormPf] = useState('2244');
+  const [formEsi, setFormEsi] = useState('273');
+  const [formTds, setFormTds] = useState('0'); // Manual TDS (Requirement 7)
+  const [formOtherDed, setFormOtherDed] = useState('0');
+  const [formTotalDed, setFormTotalDed] = useState('2517');
+
+  const [formOtHours, setFormOtHours] = useState('0'); // Requirement 8: 4h = 0.5d, 7h = 1d
+  const [formOtDays, setFormOtDays] = useState('0');
+  const [formOtAmount, setFormOtAmount] = useState('0');
+  const [formOtherAllowances, setFormOtherAllowances] = useState('0'); // Manual Other Allowances (Requirement 9)
+
+  const [formTotalSalary, setFormTotalSalary] = useState('34883');
+  const [formNetSalary, setFormNetSalary] = useState('34883');
   const [entryCustomItems, setEntryCustomItems] = useState<CustomPayrollItem[]>([]);
   const [adding, setAdding] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Payroll | null>(null);
@@ -151,18 +175,140 @@ export default function PayrollDetailScreen() {
     await load();
   };
 
+  // Helper to recompute entire earnings, deductions, and net pay in proportion to paid days
+  const applyFormRecalculation = (
+    offerSal: number,
+    present: number,
+    off: number,
+    pl: number,
+    sl: number,
+    cl: number,
+    hol: number,
+    manualTds: number,
+    otHrs: number,
+    otherAll: number,
+    otherDed: number,
+    emp?: Employee | null
+  ) => {
+    const payableDays = period ? new Date(period.year, period.month, 0).getDate() : 30;
+    // Rule 1: Paid days = sum of Present Days, Weekly Offs, PL, SL, CL and Holidays
+    const paid = present + off + pl + sl + cl + hol;
+    const lwp = Math.max(0, payableDays - paid);
+    // Rule 2: Proportionate based on paid days against total calendar days of the month
+    const ratio = payableDays > 0 ? paid / payableDays : 0;
+
+    const gross = Math.round(offerSal * ratio);
+    // Rule 3: Basic (50%), HRA (20%), Conv, Wash, Special calculated in proportion to paid days
+    const fullBasic = Math.round(offerSal * 0.50);
+    const fullHra = Math.round(offerSal * 0.20);
+    const fullConv = emp?.conveyance_allowance ?? (offerSal >= 25000 ? 1200 : offerSal >= 18000 ? 800 : 350);
+    const fullWash = emp?.washing_allowance ?? (offerSal >= 25000 ? 500 : 300);
+    const fullSpecial = Math.max(0, offerSal - (fullBasic + fullHra + fullConv + fullWash));
+
+    const basic = Math.round(fullBasic * ratio);
+    const hraVal = Math.round(fullHra * ratio);
+    const convVal = Math.round(fullConv * ratio);
+    const washVal = Math.round(fullWash * ratio);
+    const specialVal = Math.max(0, gross - (basic + hraVal + convVal + washVal));
+
+    // Rule 4 & 5: EPF Calculation & Applicability
+    // 12% of Basic, base capped at 25,000 (maximum of Rs. 3,000), regular employees only
+    const empType = (emp?.employment_type || '').toLowerCase();
+    const isRegular = empType !== 'contractual' && empType !== 'contract';
+    const taxCfg = (emp as any)?.tax_config || {};
+    const isPf = isRegular && emp?.is_pf_eligible === true && !taxCfg.epf_exempt;
+    const pfVal = isPf ? Math.round(Math.min(basic, 25000) * 0.12) : 0;
+
+    // Rule 6: ESIC = 0.75% of (Gross - Washing Allowance)
+    const esicSal = Math.max(0, gross - washVal);
+    const isEsiExempt = taxCfg.esi_exempt === true || emp?.is_esi_eligible === false;
+    const esiVal = !isEsiExempt ? Math.round(esicSal * 0.0075) : 0;
+
+    // Rule 8: Overtime (OT)
+    // Only for authorized staff. After 8h shift: 4h approved OT = 0.5d, 7h approved OT = 1.0d
+    const isOtEligible = emp?.is_overtime_eligible === true || taxCfg.is_overtime_eligible === true;
+    let otDaysVal = 0;
+    let otAmtVal = 0;
+    if (isOtEligible && otHrs > 0) {
+      const fullDays = Math.floor(otHrs / 7);
+      const rem = otHrs % 7;
+      otDaysVal = fullDays + (rem >= 4 ? 0.5 : 0);
+      otAmtVal = Math.round((offerSal / payableDays) * otDaysVal);
+    }
+
+    const totDed = pfVal + esiVal + manualTds + otherDed;
+    const totSal = Math.max(0, gross - totDed);
+    const net = Math.max(0, totSal + otAmtVal + otherAll);
+
+    setFormOfferSalary(String(offerSal));
+    setFormPresentDays(String(present));
+    setFormOffDays(String(off));
+    setFormPlDays(String(pl));
+    setFormSlDays(String(sl));
+    setFormClDays(String(cl));
+    setFormHolidayDays(String(hol));
+    setFormPaidDays(String(paid));
+    setFormLwpDays(String(lwp));
+
+    setFormBasic(String(basic));
+    setFormHra(String(hraVal));
+    setFormConv(String(convVal));
+    setFormWash(String(washVal));
+    setFormSpecial(String(specialVal));
+    setFormGross(String(gross));
+
+    setFormPf(String(pfVal));
+    setFormEsi(String(esiVal));
+    setFormTds(String(manualTds));
+    setFormOtherDed(String(otherDed));
+    setFormTotalDed(String(totDed));
+
+    setFormOtHours(String(otHrs));
+    setFormOtDays(String(otDaysVal));
+    setFormOtAmount(String(otAmtVal));
+    setFormOtherAllowances(String(otherAll));
+
+    setFormTotalSalary(String(totSal));
+    setFormNetSalary(String(net));
+  };
+
   const handleSelectEmployee = async (empId: string | null) => {
     setSelEmpId(empId);
     if (!empId || !period) return;
     const emp = employees.find((e) => e.id === empId);
     if (emp) {
       const breakdown = await calculateStatutoryForEmployee(emp, period.month, period.year);
-      setBasicSalary(String(breakdown.basic_salary));
-      setHra(String(breakdown.allowances?.['HRA'] || 0));
-      setTa(String(breakdown.allowances?.['Special Allowance'] || 0));
-      setPf(String(breakdown.deductions?.['EPF'] || 0));
-      setTax(String(breakdown.deductions?.['TDS'] || 0));
-      setLopDays(String(breakdown.lop_days || 0));
+      setFormOfferSalary(String(breakdown.salary_details));
+      setFormPresentDays(String(breakdown.present_days));
+      setFormOffDays(String(breakdown.off_days));
+      setFormPlDays(String(breakdown.pl_days));
+      setFormSlDays(String(breakdown.sl_days));
+      setFormClDays(String(breakdown.cl_days));
+      setFormHolidayDays(String(breakdown.holiday_days));
+      setFormPaidDays(String(breakdown.paid_days));
+      setFormLwpDays(String(breakdown.lwp_days));
+
+      setFormBasic(String(breakdown.basic));
+      setFormHra(String(breakdown.hra));
+      setFormConv(String(breakdown.conveyance));
+      setFormWash(String(breakdown.washing));
+      setFormSpecial(String(breakdown.special_allowance));
+      setFormGross(String(breakdown.gross_salary));
+
+      setFormPf(String(breakdown.pf));
+      setFormEsi(String(breakdown.esi));
+      setFormTds(String(breakdown.tds));
+      setFormOtherDed(String(breakdown.ot_ded));
+      setFormTotalDed(String(breakdown.gross_deductions));
+
+      setFormOtHours(String(breakdown.ot_hours));
+      setFormOtDays(String(breakdown.ot_hours_or_days));
+      setFormOtAmount(String(breakdown.ot_amount));
+      setFormOtherAllowances(String(breakdown.other_allowances));
+
+      setFormTotalSalary(String(breakdown.total_salary));
+      setFormNetSalary(String(breakdown.net_salary));
+
       const tc = (emp as any).tax_config || {};
       setEntryCustomItems(Array.isArray(tc.custom_items) ? tc.custom_items : []);
     }
@@ -170,13 +316,69 @@ export default function PayrollDetailScreen() {
 
   const openEdit = (entry: Payroll) => {
     setEditingEntry(entry);
-    setBasicSalary(String(entry.basic_salary));
-    setHra(String(entry.allowances?.hra || entry.allowances?.HRA || 0));
-    setTa(String(entry.allowances?.ta || entry.allowances?.['Special Allowance'] || 0));
-    setPf(String(entry.deductions?.pf || entry.deductions?.EPF || 0));
-    setTax(String(entry.deductions?.tax || entry.deductions?.TDS || 0));
-    setLopDays(String(entry.lop_days || 0));
     const emp = entry.employee as any;
+    const offerSal = Math.round(entry.salary_details ?? entry.basic_salary ?? 25000);
+    const pres = entry.present_days ?? 26;
+    const off = entry.off_days ?? 4;
+    const pl = entry.pl_days ?? 0;
+    const sl = entry.sl_days ?? 0;
+    const cl = entry.cl_days ?? 0;
+    const hol = entry.holiday_days ?? 0;
+    const paid = entry.paid_days ?? (pres + off + pl + sl + cl + hol);
+    const lwp = entry.lwp_days ?? entry.lop_days ?? 0;
+
+    const basicVal = Math.round(entry.basic ?? Math.round(offerSal * 0.5));
+    const hraVal = Math.round(entry.hra ?? Math.round(offerSal * 0.2));
+    const convVal = Math.round(entry.conveyance ?? (entry.allowances?.['Conveyance Allowance'] || 2000));
+    const washVal = Math.round(entry.washing ?? (entry.allowances?.['Washing Allowance'] || 1000));
+    const specialVal = Math.round(entry.special_allowance ?? (entry.allowances?.['Special Allowance'] || 0));
+    const grossVal = Math.round(entry.gross_salary ?? (basicVal + hraVal + convVal + washVal + specialVal));
+
+    const pfVal = Math.round(entry.pf ?? (entry.deductions?.['PF'] || entry.deductions?.['EPF'] || 0));
+    const esiVal = Math.round(entry.esi ?? (entry.deductions?.['ESIC'] || 0));
+    const tdsVal = Math.round(entry.tds ?? entry.pt_tds ?? (entry.deductions?.['TDS'] || 0));
+    const otherDedVal = Math.round(entry.ot_ded ?? (entry.deductions?.['Miscellaneous Deductions'] || 0));
+    const totalDedVal = Math.round(entry.total_deductions ?? entry.gross_deductions ?? (pfVal + esiVal + tdsVal + otherDedVal));
+
+    const otH = entry.ot_hours ?? 0;
+    const otD = entry.ot_hours_or_days ?? 0;
+    const otAmt = Math.round(entry.ot_amount ?? (entry.allowances?.['Overtime Pay'] || 0));
+    const otherAll = Math.round(entry.other_allowances ?? (entry.allowances?.['Other Allowances'] || 0));
+
+    const totSal = Math.round(entry.total_salary ?? Math.max(0, grossVal - totalDedVal));
+    const net = Math.round(entry.net_salary ?? Math.max(0, totSal + otAmt + otherAll));
+
+    setFormOfferSalary(String(offerSal));
+    setFormPresentDays(String(pres));
+    setFormOffDays(String(off));
+    setFormPlDays(String(pl));
+    setFormSlDays(String(sl));
+    setFormClDays(String(cl));
+    setFormHolidayDays(String(hol));
+    setFormPaidDays(String(paid));
+    setFormLwpDays(String(lwp));
+
+    setFormBasic(String(basicVal));
+    setFormHra(String(hraVal));
+    setFormConv(String(convVal));
+    setFormWash(String(washVal));
+    setFormSpecial(String(specialVal));
+    setFormGross(String(grossVal));
+
+    setFormPf(String(pfVal));
+    setFormEsi(String(esiVal));
+    setFormTds(String(tdsVal));
+    setFormOtherDed(String(otherDedVal));
+    setFormTotalDed(String(totalDedVal));
+
+    setFormOtHours(String(otH));
+    setFormOtDays(String(otD));
+    setFormOtAmount(String(otAmt));
+    setFormOtherAllowances(String(otherAll));
+
+    setFormTotalSalary(String(totSal));
+    setFormNetSalary(String(net));
+
     const tc = emp?.tax_config || {};
     setEntryCustomItems(Array.isArray(tc.custom_items) ? tc.custom_items : []);
   };
@@ -186,111 +388,251 @@ export default function PayrollDetailScreen() {
     const emp = editingEntry.employee as any;
     if (emp) {
       const breakdown = await calculateStatutoryForEmployee(emp, period.month, period.year);
-      setBasicSalary(String(breakdown.basic_salary));
-      setHra(String(breakdown.allowances?.['HRA'] || 0));
-      setTa(String(breakdown.allowances?.['Special Allowance'] || 0));
-      setPf(String(breakdown.deductions?.['EPF'] || 0));
-      setTax(String(breakdown.deductions?.['TDS'] || 0));
-      setLopDays(String(breakdown.lop_days || 0));
+      setFormOfferSalary(String(breakdown.salary_details));
+      setFormPresentDays(String(breakdown.present_days));
+      setFormOffDays(String(breakdown.off_days));
+      setFormPlDays(String(breakdown.pl_days));
+      setFormSlDays(String(breakdown.sl_days));
+      setFormClDays(String(breakdown.cl_days));
+      setFormHolidayDays(String(breakdown.holiday_days));
+      setFormPaidDays(String(breakdown.paid_days));
+      setFormLwpDays(String(breakdown.lwp_days));
+
+      setFormBasic(String(breakdown.basic));
+      setFormHra(String(breakdown.hra));
+      setFormConv(String(breakdown.conveyance));
+      setFormWash(String(breakdown.washing));
+      setFormSpecial(String(breakdown.special_allowance));
+      setFormGross(String(breakdown.gross_salary));
+
+      setFormPf(String(breakdown.pf));
+      setFormEsi(String(breakdown.esi));
+      setFormTds(String(breakdown.tds));
+      setFormOtherDed(String(breakdown.ot_ded));
+      setFormTotalDed(String(breakdown.gross_deductions));
+
+      setFormOtHours(String(breakdown.ot_hours));
+      setFormOtDays(String(breakdown.ot_hours_or_days));
+      setFormOtAmount(String(breakdown.ot_amount));
+      setFormOtherAllowances(String(breakdown.other_allowances));
+
+      setFormTotalSalary(String(breakdown.total_salary));
+      setFormNetSalary(String(breakdown.net_salary));
+
       const tc = (emp as any).tax_config || {};
       setEntryCustomItems(Array.isArray(tc.custom_items) ? tc.custom_items : []);
     }
   };
 
   const handleUpdate = async () => {
-    if (!editingEntry) return;
+    if (!editingEntry || !period) return;
     setAdding(true);
     try {
-      const basic = parseFloat(basicSalary) || 0;
-      const lopd = parseFloat(lopDays) || 0;
-      const lopa = Math.round((basic / 26) * lopd);
+      const payableDays = new Date(period.year, period.month, 0).getDate();
+      const offerSal = parseFloat(formOfferSalary) || 0;
+      const pres = parseFloat(formPresentDays) || 0;
+      const off = parseFloat(formOffDays) || 0;
+      const pl = parseFloat(formPlDays) || 0;
+      const sl = parseFloat(formSlDays) || 0;
+      const cl = parseFloat(formClDays) || 0;
+      const hol = parseFloat(formHolidayDays) || 0;
+      const paid = parseFloat(formPaidDays) || (pres + off + pl + sl + cl + hol);
+      const lwp = parseFloat(formLwpDays) || Math.max(0, payableDays - paid);
 
-      const aHra = parseFloat(hra) || 0;
-      const aTa = parseFloat(ta) || 0;
-      const dPf = parseFloat(pf) || 0;
-      const dTax = parseFloat(tax) || 0;
+      const basic = parseFloat(formBasic) || 0;
+      const hraVal = parseFloat(formHra) || 0;
+      const convVal = parseFloat(formConv) || 0;
+      const washVal = parseFloat(formWash) || 0;
+      const specialVal = parseFloat(formSpecial) || 0;
+      const grossVal = parseFloat(formGross) || (basic + hraVal + convVal + washVal + specialVal);
 
-      const allowances: Record<string, number> = { 'HRA': aHra, 'Special Allowance': aTa };
-      const deductions: Record<string, number> = { 'EPF': dPf, 'TDS': dTax };
+      const pfVal = parseFloat(formPf) || 0;
+      const esiVal = parseFloat(formEsi) || 0;
+      const tdsVal = parseFloat(formTds) || 0; // Manual TDS (Requirement 7)
+      const otherDedVal = parseFloat(formOtherDed) || 0;
+      const grossDedVal = pfVal + esiVal + tdsVal + otherDedVal;
 
-      entryCustomItems.forEach((item) => {
-        if (!item.name || !item.value) return;
-        const computedVal = item.amount_type === 'percentage'
-          ? Math.round((basic * Number(item.value)) / 100)
-          : Math.round(Number(item.value));
-        if (item.type === 'deduction') {
-          deductions[item.name] = computedVal;
-        } else {
-          allowances[item.name] = computedVal;
-        }
-      });
+      const otHVal = parseFloat(formOtHours) || 0;
+      const otDVal = parseFloat(formOtDays) || 0;
+      const otAmtVal = parseFloat(formOtAmount) || 0;
+      const otherAllVal = parseFloat(formOtherAllowances) || 0; // Manual Other Allowances (Requirement 9)
 
-      const totalAllowances = Object.values(allowances).reduce((sum, v) => sum + v, 0);
-      const totalDeductions = Object.values(deductions).reduce((sum, v) => sum + v, 0);
-      const gross = basic + totalAllowances - lopa;
-      const net = Math.max(0, gross - totalDeductions);
+      const totSalVal = Math.max(0, grossVal - grossDedVal);
+      const netVal = Math.max(0, totSalVal + otAmtVal + otherAllVal);
+
+      const allowances: Record<string, number> = {
+        'Basic': basic,
+        'HRA': hraVal,
+        'Conveyance Allowance': convVal,
+        'Washing Allowance': washVal,
+        'Special Allowance': specialVal,
+      };
+      if (otAmtVal > 0) allowances['Overtime Pay'] = otAmtVal;
+      if (otherAllVal > 0) allowances['Other Allowances'] = otherAllVal;
+
+      const deductions: Record<string, number> = {
+        'PF': pfVal,
+        'ESIC': esiVal,
+        'TDS': tdsVal,
+      };
+      if (otherDedVal > 0) deductions['Miscellaneous Deductions'] = otherDedVal;
 
       await updatePayrollEntry(editingEntry.id, {
         basic_salary: basic,
         allowances,
         deductions,
-        lop_days: lopd,
-        lop_amount: lopa,
-        gross_salary: gross,
-        net_salary: net,
+        lop_days: lwp,
+        lop_amount: Math.round((offerSal / payableDays) * lwp),
+        gross_salary: grossVal,
+        net_salary: netVal,
+        salary_details: offerSal,
+        payable_days: payableDays,
+        present_days: pres,
+        off_days: off,
+        pl_days: pl,
+        sl_days: sl,
+        cl_days: cl,
+        holiday_days: hol,
+        paid_days: paid,
+        lwp_days: lwp,
+        basic,
+        hra: hraVal,
+        conveyance: convVal,
+        washing: washVal,
+        special_allowance: specialVal,
+        pt_tds: tdsVal,
+        esi: esiVal,
+        pf: pfVal,
+        tds: tdsVal,
+        ot_ded: otherDedVal,
+        gross_deductions: grossDedVal,
+        total_deductions: grossDedVal,
+        total_salary: totSalVal,
+        ot_hours_or_days: otDVal,
+        ot_hours: otHVal,
+        ot_amount: otAmtVal,
+        other_allowances: otherAllVal,
       });
       setEditingEntry(null);
       await load();
     } catch (e: any) {
       setError(e?.message || 'Could not save changes to this payroll entry.');
+    } finally {
+      setAdding(false);
     }
-    setAdding(false);
   };
 
   const handleAddEntry = async () => {
-    if (!selEmpId || !basicSalary || !period) return;
+    if (!selEmpId || !period) return;
     setAdding(true);
-    const basic = parseFloat(basicSalary) || 0;
-    const allowances: Record<string, number> = { 'HRA': parseFloat(hra) || 0, 'Special Allowance': parseFloat(ta) || 0 };
-    const deductions: Record<string, number> = { 'EPF': parseFloat(pf) || 0, 'TDS': parseFloat(tax) || 0 };
-
-    entryCustomItems.forEach((item) => {
-      if (!item.name || !item.value) return;
-      const computedVal = item.amount_type === 'percentage'
-        ? Math.round((basic * Number(item.value)) / 100)
-        : Math.round(Number(item.value));
-      if (item.type === 'deduction') {
-        deductions[item.name] = computedVal;
-      } else {
-        allowances[item.name] = computedVal;
-      }
-    });
-
-    const totalAllowances = Object.values(allowances).reduce((a, b) => a + b, 0);
-    const totalDeductions = Object.values(deductions).reduce((a, b) => a + b, 0);
-    const lDays = parseFloat(lopDays) || 0;
-    const lopAmount = lDays > 0 ? Math.round((basic / 26) * lDays) : 0;
-    const gross = basic + totalAllowances - lopAmount;
-    const net = Math.max(0, gross - totalDeductions);
-
     try {
-      await createPayrollEntry({
+      const payableDays = new Date(period.year, period.month, 0).getDate();
+      const offerSal = parseFloat(formOfferSalary) || 0;
+      const pres = parseFloat(formPresentDays) || 0;
+      const off = parseFloat(formOffDays) || 0;
+      const pl = parseFloat(formPlDays) || 0;
+      const sl = parseFloat(formSlDays) || 0;
+      const cl = parseFloat(formClDays) || 0;
+      const hol = parseFloat(formHolidayDays) || 0;
+      const paid = parseFloat(formPaidDays) || (pres + off + pl + sl + cl + hol);
+      const lwp = parseFloat(formLwpDays) || Math.max(0, payableDays - paid);
+
+      const basic = parseFloat(formBasic) || 0;
+      const hraVal = parseFloat(formHra) || 0;
+      const convVal = parseFloat(formConv) || 0;
+      const washVal = parseFloat(formWash) || 0;
+      const specialVal = parseFloat(formSpecial) || 0;
+      const grossVal = parseFloat(formGross) || (basic + hraVal + convVal + washVal + specialVal);
+
+      const pfVal = parseFloat(formPf) || 0;
+      const esiVal = parseFloat(formEsi) || 0;
+      const tdsVal = parseFloat(formTds) || 0;
+      const otherDedVal = parseFloat(formOtherDed) || 0;
+      const grossDedVal = pfVal + esiVal + tdsVal + otherDedVal;
+
+      const otHVal = parseFloat(formOtHours) || 0;
+      const otDVal = parseFloat(formOtDays) || 0;
+      const otAmtVal = parseFloat(formOtAmount) || 0;
+      const otherAllVal = parseFloat(formOtherAllowances) || 0;
+
+      const totSalVal = Math.max(0, grossVal - grossDedVal);
+      const netVal = Math.max(0, totSalVal + otAmtVal + otherAllVal);
+
+      const allowances: Record<string, number> = {
+        'Basic': basic,
+        'HRA': hraVal,
+        'Conveyance Allowance': convVal,
+        'Washing Allowance': washVal,
+        'Special Allowance': specialVal,
+      };
+      if (otAmtVal > 0) allowances['Overtime Pay'] = otAmtVal;
+      if (otherAllVal > 0) allowances['Other Allowances'] = otherAllVal;
+
+      const deductions: Record<string, number> = {
+        'PF': pfVal,
+        'ESIC': esiVal,
+        'TDS': tdsVal,
+      };
+      if (otherDedVal > 0) deductions['Miscellaneous Deductions'] = otherDedVal;
+
+      const emp = employees.find((e) => e.id === selEmpId);
+      const entryId = `payroll_${selEmpId}_${period.year}_${period.month}_${Date.now()}`;
+      const now = new Date().toISOString();
+
+      await setDoc(doc(db, 'payroll', entryId), {
+        id: entryId,
         payroll_period_id: id!,
         employee_id: selEmpId,
         basic_salary: basic,
         allowances,
         deductions,
-        lop_days: lDays,
-        lop_amount: lopAmount,
-        gross_salary: gross,
-        net_salary: net,
+        lop_days: lwp,
+        lop_amount: Math.round((offerSal / payableDays) * lwp),
+        gross_salary: grossVal,
+        net_salary: netVal,
+        salary_details: offerSal,
+        payable_days: payableDays,
+        present_days: pres,
+        off_days: off,
+        pl_days: pl,
+        sl_days: sl,
+        cl_days: cl,
+        holiday_days: hol,
+        paid_days: paid,
+        lwp_days: lwp,
+        basic,
+        hra: hraVal,
+        conveyance: convVal,
+        washing: washVal,
+        special_allowance: specialVal,
+        pt_tds: tdsVal,
+        esi: esiVal,
+        pf: pfVal,
+        tds: tdsVal,
+        ot_ded: otherDedVal,
+        gross_deductions: grossDedVal,
+        total_deductions: grossDedVal,
+        total_salary: totSalVal,
+        ot_hours_or_days: otDVal,
+        ot_hours: otHVal,
+        ot_amount: otAmtVal,
+        other_allowances: otherAllVal,
+        is_pf_eligible: emp?.is_pf_eligible === true,
+        is_overtime_eligible: emp?.is_overtime_eligible === true,
+        hospital_unit: emp?.hospital_unit || tenantOrg?.name || 'Main Branch',
+        employment_type: emp?.employment_type || 'Regular',
+        status: 'draft',
+        created_at: now,
+        updated_at: now,
       });
+
       setShowAdd(false);
       await load();
     } catch (e: any) {
       setError(e?.message || 'Could not add this payroll entry.');
+    } finally {
+      setAdding(false);
     }
-    setAdding(false);
   };
 
   const handleSyncRecalculate = async () => {
@@ -330,14 +672,16 @@ export default function PayrollDetailScreen() {
     setDistributing(false);
   };
 
-  const handleGenerateSlip = async (entry: Payroll) => {
+  const handleDownloadSlip = async (entry: Payroll) => {
     if (!period) return;
     setGeneratingSlip(entry.id);
     try {
-      await generatePayslipForEntry(entry, period.month, period.year);
+      const payslip = await generatePayslipForEntry(entry, period.month, period.year);
       setGeneratedSlips((prev) => new Set([...prev, entry.id]));
-    } catch (e) {
-      console.error('Generate slip error:', e);
+      await exportPayslipPdf(payslip, entry.employee, tenantOrg);
+    } catch (e: any) {
+      console.error('Download slip error:', e);
+      Alert.alert('Download Error', e?.message || 'Could not download payslip PDF.');
     } finally {
       setGeneratingSlip(null);
     }
@@ -871,20 +1215,24 @@ export default function PayrollDetailScreen() {
                             style={[
                               styles.smallActionBtn,
                               {
-                                backgroundColor: slipGenerated ? '#DCFCE7' : colors.primary,
-                                borderColor: slipGenerated ? '#86EFAC' : colors.primary,
+                                backgroundColor: colors.primary,
+                                borderColor: colors.primary,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 4,
                               },
                             ]}
-                            onPress={() => handleGenerateSlip(entry)}
+                            onPress={() => handleDownloadSlip(entry)}
                             disabled={generatingSlip === entry.id}
                           >
+                            <Download size={12} color="#FFF" />
                             <Text
                               style={[
                                 styles.smallActionBtnText,
-                                { color: slipGenerated ? '#166534' : '#FFF' },
+                                { color: '#FFF' },
                               ]}
                             >
-                              {slipGenerated ? 'Slip Ready' : generatingSlip === entry.id ? '...' : 'PDF Slip'}
+                              {generatingSlip === entry.id ? 'Preparing...' : 'Download Slip'}
                             </Text>
                           </TouchableOpacity>
                         </View>
@@ -945,31 +1293,369 @@ export default function PayrollDetailScreen() {
 
         {/* ── Add Custom Entry Modal ──────────────────────────────────────── */}
         <Modal visible={showAdd} onClose={() => setShowAdd(false)} title="Add Custom Payroll Entry">
-          <ScrollView style={{ maxHeight: 500 }} showsVerticalScrollIndicator={false}>
+          <ScrollView style={{ maxHeight: 650 }} showsVerticalScrollIndicator={false}>
             <View style={{ gap: 14 }}>
               <Select
                 label="Select Employee"
                 options={employees.map((e) => ({
-                  label: `${e.profile?.full_name || e.employee_code || 'Employee'} (${e.designation || 'Staff'})`,
+                  label: `${e.profile?.full_name || e.employee_code || 'Employee'} (${e.designation || 'Staff'} • ${e.hospital_unit || 'Unit'})`,
                   value: e.id,
                 }))}
                 value={selEmpId}
                 onValueChange={(v) => handleSelectEmployee(v)}
               />
 
-              <Input label="Basic Salary" value={basicSalary} onChangeText={setBasicSalary} keyboardType="numeric" />
-              <Input label="HRA (House Rent Allowance)" value={hra} onChangeText={setHra} keyboardType="numeric" />
-              <Input label="Special Allowance / Transport" value={ta} onChangeText={setTa} keyboardType="numeric" />
-              <Input label="EPF Deduction (Provident Fund)" value={pf} onChangeText={setPf} keyboardType="numeric" />
-              <Input label="TDS (Income Tax Deduction)" value={tax} onChangeText={setTax} keyboardType="numeric" />
-              <Input label="Loss of Pay (LOP Days)" value={lopDays} onChangeText={setLopDays} keyboardType="numeric" />
-
-              {/* Custom Bonuses and Deductions Manager */}
-              <CustomPayrollItemsManager
-                items={entryCustomItems}
-                onChange={setEntryCustomItems}
-                basicSalary={parseFloat(basicSalary) || 0}
+              {/* Offer Salary */}
+              <Input
+                label="Offer Salary (Monthly CTC / Scale)"
+                value={formOfferSalary}
+                onChangeText={(v) => {
+                  setFormOfferSalary(v);
+                  const emp = employees.find((e) => e.id === selEmpId);
+                  applyFormRecalculation(
+                    parseFloat(v) || 0,
+                    parseFloat(formPresentDays) || 0,
+                    parseFloat(formOffDays) || 0,
+                    parseFloat(formPlDays) || 0,
+                    parseFloat(formSlDays) || 0,
+                    parseFloat(formClDays) || 0,
+                    parseFloat(formHolidayDays) || 0,
+                    parseFloat(formTds) || 0,
+                    parseFloat(formOtHours) || 0,
+                    parseFloat(formOtherAllowances) || 0,
+                    parseFloat(formOtherDed) || 0,
+                    emp
+                  );
+                }}
+                keyboardType="numeric"
               />
+
+              {/* Attendance & Paid Days (Rule 1 & 2) */}
+              <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
+                  Attendance Breakdown (Rule 1: Paid Days Sum)
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="Present Days"
+                      value={formPresentDays}
+                      onChangeText={(v) => {
+                        setFormPresentDays(v);
+                        const emp = employees.find((e) => e.id === selEmpId);
+                        applyFormRecalculation(
+                          parseFloat(formOfferSalary) || 0,
+                          parseFloat(v) || 0,
+                          parseFloat(formOffDays) || 0,
+                          parseFloat(formPlDays) || 0,
+                          parseFloat(formSlDays) || 0,
+                          parseFloat(formClDays) || 0,
+                          parseFloat(formHolidayDays) || 0,
+                          parseFloat(formTds) || 0,
+                          parseFloat(formOtHours) || 0,
+                          parseFloat(formOtherAllowances) || 0,
+                          parseFloat(formOtherDed) || 0,
+                          emp
+                        );
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="Weekly Off"
+                      value={formOffDays}
+                      onChangeText={(v) => {
+                        setFormOffDays(v);
+                        const emp = employees.find((e) => e.id === selEmpId);
+                        applyFormRecalculation(
+                          parseFloat(formOfferSalary) || 0,
+                          parseFloat(formPresentDays) || 0,
+                          parseFloat(v) || 0,
+                          parseFloat(formPlDays) || 0,
+                          parseFloat(formSlDays) || 0,
+                          parseFloat(formClDays) || 0,
+                          parseFloat(formHolidayDays) || 0,
+                          parseFloat(formTds) || 0,
+                          parseFloat(formOtHours) || 0,
+                          parseFloat(formOtherAllowances) || 0,
+                          parseFloat(formOtherDed) || 0,
+                          emp
+                        );
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="Holidays"
+                      value={formHolidayDays}
+                      onChangeText={(v) => {
+                        setFormHolidayDays(v);
+                        const emp = employees.find((e) => e.id === selEmpId);
+                        applyFormRecalculation(
+                          parseFloat(formOfferSalary) || 0,
+                          parseFloat(formPresentDays) || 0,
+                          parseFloat(formOffDays) || 0,
+                          parseFloat(formPlDays) || 0,
+                          parseFloat(formSlDays) || 0,
+                          parseFloat(formClDays) || 0,
+                          parseFloat(v) || 0,
+                          parseFloat(formTds) || 0,
+                          parseFloat(formOtHours) || 0,
+                          parseFloat(formOtherAllowances) || 0,
+                          parseFloat(formOtherDed) || 0,
+                          emp
+                        );
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="PL (Paid Leave)"
+                      value={formPlDays}
+                      onChangeText={(v) => {
+                        setFormPlDays(v);
+                        const emp = employees.find((e) => e.id === selEmpId);
+                        applyFormRecalculation(
+                          parseFloat(formOfferSalary) || 0,
+                          parseFloat(formPresentDays) || 0,
+                          parseFloat(formOffDays) || 0,
+                          parseFloat(v) || 0,
+                          parseFloat(formSlDays) || 0,
+                          parseFloat(formClDays) || 0,
+                          parseFloat(formHolidayDays) || 0,
+                          parseFloat(formTds) || 0,
+                          parseFloat(formOtHours) || 0,
+                          parseFloat(formOtherAllowances) || 0,
+                          parseFloat(formOtherDed) || 0,
+                          emp
+                        );
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="SL (Sick Leave)"
+                      value={formSlDays}
+                      onChangeText={(v) => {
+                        setFormSlDays(v);
+                        const emp = employees.find((e) => e.id === selEmpId);
+                        applyFormRecalculation(
+                          parseFloat(formOfferSalary) || 0,
+                          parseFloat(formPresentDays) || 0,
+                          parseFloat(formOffDays) || 0,
+                          parseFloat(formPlDays) || 0,
+                          parseFloat(v) || 0,
+                          parseFloat(formClDays) || 0,
+                          parseFloat(formHolidayDays) || 0,
+                          parseFloat(formTds) || 0,
+                          parseFloat(formOtHours) || 0,
+                          parseFloat(formOtherAllowances) || 0,
+                          parseFloat(formOtherDed) || 0,
+                          emp
+                        );
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="CL (Casual Leave)"
+                      value={formClDays}
+                      onChangeText={(v) => {
+                        setFormClDays(v);
+                        const emp = employees.find((e) => e.id === selEmpId);
+                        applyFormRecalculation(
+                          parseFloat(formOfferSalary) || 0,
+                          parseFloat(formPresentDays) || 0,
+                          parseFloat(formOffDays) || 0,
+                          parseFloat(formPlDays) || 0,
+                          parseFloat(formSlDays) || 0,
+                          parseFloat(v) || 0,
+                          parseFloat(formHolidayDays) || 0,
+                          parseFloat(formTds) || 0,
+                          parseFloat(formOtHours) || 0,
+                          parseFloat(formOtherAllowances) || 0,
+                          parseFloat(formOtherDed) || 0,
+                          emp
+                        );
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#F0FDFA', padding: 8, borderRadius: 6 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#0F766E' }}>
+                    Calculated Paid Days: {formPaidDays}
+                  </Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#B45309' }}>
+                    LWP: {formLwpDays}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Earnings Breakup (Rule 3) */}
+              <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
+                  Earnings Breakup (Rule 3: Proportioned to Paid Days)
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input label="Basic (50%)" value={formBasic} onChangeText={setFormBasic} keyboardType="numeric" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input label="HRA (20%)" value={formHra} onChangeText={setFormHra} keyboardType="numeric" />
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input label="Conv. Allowance" value={formConv} onChangeText={setFormConv} keyboardType="numeric" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input label="Washing Allowance" value={formWash} onChangeText={setFormWash} keyboardType="numeric" />
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input label="Special Allowance" value={formSpecial} onChangeText={setFormSpecial} keyboardType="numeric" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input label="Gross Earnings" value={formGross} onChangeText={setFormGross} keyboardType="numeric" />
+                  </View>
+                </View>
+              </View>
+
+              {/* Deductions & Statutory (Rule 4, 5, 6, 7) */}
+              <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
+                  Deductions (Rule 4-7: EPF, ESIC, Manual TDS)
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input label="EPF (Max ₹3000 / 12%)" value={formPf} onChangeText={setFormPf} keyboardType="numeric" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input label="ESIC (0.75% of Gross-Wash)" value={formEsi} onChangeText={setFormEsi} keyboardType="numeric" />
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="TDS (Manual Input - Rule 7)"
+                      value={formTds}
+                      onChangeText={(v) => {
+                        setFormTds(v);
+                        const pfVal = parseFloat(formPf) || 0;
+                        const esiVal = parseFloat(formEsi) || 0;
+                        const tdsVal = parseFloat(v) || 0;
+                        const otherDedVal = parseFloat(formOtherDed) || 0;
+                        const totDed = pfVal + esiVal + tdsVal + otherDedVal;
+                        setFormTotalDed(String(totDed));
+                        const grossVal = parseFloat(formGross) || 0;
+                        const totSal = Math.max(0, grossVal - totDed);
+                        setFormTotalSalary(String(totSal));
+                        const otAmt = parseFloat(formOtAmount) || 0;
+                        const otherAll = parseFloat(formOtherAllowances) || 0;
+                        setFormNetSalary(String(totSal + otAmt + otherAll));
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input label="Other Deductions" value={formOtherDed} onChangeText={setFormOtherDed} keyboardType="numeric" />
+                  </View>
+                </View>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#DC2626' }}>
+                  Total Deductions: ₹{formTotalDed}
+                </Text>
+              </View>
+
+              {/* Overtime & Other Allowances (Rule 8 & 9) */}
+              <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
+                  Overtime & Other Allowances (Rule 8 & 9)
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="Approved OT Hours"
+                      placeholder="4h = 0.5d, 7h = 1d"
+                      value={formOtHours}
+                      onChangeText={(v) => {
+                        setFormOtHours(v);
+                        const emp = employees.find((e) => e.id === selEmpId);
+                        applyFormRecalculation(
+                          parseFloat(formOfferSalary) || 0,
+                          parseFloat(formPresentDays) || 0,
+                          parseFloat(formOffDays) || 0,
+                          parseFloat(formPlDays) || 0,
+                          parseFloat(formSlDays) || 0,
+                          parseFloat(formClDays) || 0,
+                          parseFloat(formHolidayDays) || 0,
+                          parseFloat(formTds) || 0,
+                          parseFloat(v) || 0,
+                          parseFloat(formOtherAllowances) || 0,
+                          parseFloat(formOtherDed) || 0,
+                          emp
+                        );
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input label="OT Pay Amount" value={formOtAmount} onChangeText={setFormOtAmount} keyboardType="numeric" />
+                  </View>
+                </View>
+
+                <Input
+                  label="Other Allowances (Manual Input - Rule 9)"
+                  value={formOtherAllowances}
+                  onChangeText={(v) => {
+                    setFormOtherAllowances(v);
+                    const totSal = parseFloat(formTotalSalary) || 0;
+                    const otAmt = parseFloat(formOtAmount) || 0;
+                    const otherAll = parseFloat(v) || 0;
+                    setFormNetSalary(String(totSal + otAmt + otherAll));
+                  }}
+                  keyboardType="numeric"
+                />
+              </View>
+
+              {/* Net Payout Summary Card */}
+              <View style={{ backgroundColor: '#0B1C30', padding: 14, borderRadius: 10, gap: 4 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>Gross Salary:</Text>
+                  <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 12 }}>₹{formGross}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>Total Deductions:</Text>
+                  <Text style={{ color: '#FCA5A5', fontWeight: '700', fontSize: 12 }}>-₹{formTotalDed}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>Total Salary:</Text>
+                  <Text style={{ color: '#93C5FD', fontWeight: '700', fontSize: 12 }}>₹{formTotalSalary}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>Overtime Pay:</Text>
+                  <Text style={{ color: '#86EFAC', fontWeight: '700', fontSize: 12 }}>+₹{formOtAmount}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>Other Allowance:</Text>
+                  <Text style={{ color: '#86EFAC', fontWeight: '700', fontSize: 12 }}>+₹{formOtherAllowances}</Text>
+                </View>
+                <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.2)', marginVertical: 4 }} />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ color: '#86F2E4', fontWeight: '800', fontSize: 14 }}>NET TAKE-HOME:</Text>
+                  <Text style={{ color: '#86F2E4', fontWeight: '800', fontSize: 20 }}>₹{formNetSalary}</Text>
+                </View>
+              </View>
 
               <View style={{ gap: 8, marginTop: 8 }}>
                 <Button title="Add Entry to Period" onPress={handleAddEntry} loading={adding} />
@@ -980,8 +1666,8 @@ export default function PayrollDetailScreen() {
         </Modal>
 
         {/* ── Edit Entry Modal ────────────────────────────────────────────── */}
-        <Modal visible={!!editingEntry} onClose={() => setEditingEntry(null)} title="Edit Employee Payroll">
-          <ScrollView style={{ maxHeight: 500 }} showsVerticalScrollIndicator={false}>
+        <Modal visible={!!editingEntry} onClose={() => setEditingEntry(null)} title={`Edit Payroll: ${editingEntry?.employee?.profile?.full_name || 'Staff'}`}>
+          <ScrollView style={{ maxHeight: 650 }} showsVerticalScrollIndicator={false}>
             <View style={{ gap: 14 }}>
               <TouchableOpacity
                 style={[styles.syncBtn, { borderColor: colors.primary, alignSelf: 'flex-start' }]}
@@ -989,23 +1675,361 @@ export default function PayrollDetailScreen() {
               >
                 <Calculator size={14} color={colors.primary} />
                 <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
-                  Reset to Enrolled Tax Defaults
+                  Reset to Enrolled Defaults
                 </Text>
               </TouchableOpacity>
 
-              <Input label="Basic Salary" value={basicSalary} onChangeText={setBasicSalary} keyboardType="numeric" />
-              <Input label="HRA" value={hra} onChangeText={setHra} keyboardType="numeric" />
-              <Input label="Special Allowance" value={ta} onChangeText={setTa} keyboardType="numeric" />
-              <Input label="EPF Deduction" value={pf} onChangeText={setPf} keyboardType="numeric" />
-              <Input label="TDS Deduction" value={tax} onChangeText={setTax} keyboardType="numeric" />
-              <Input label="Loss of Pay (LOP Days)" value={lopDays} onChangeText={setLopDays} keyboardType="numeric" />
-
-              {/* Custom Bonuses and Deductions Manager */}
-              <CustomPayrollItemsManager
-                items={entryCustomItems}
-                onChange={setEntryCustomItems}
-                basicSalary={parseFloat(basicSalary) || 0}
+              {/* Offer Salary */}
+              <Input
+                label="Offer Salary (Base Scale)"
+                value={formOfferSalary}
+                onChangeText={(v) => {
+                  setFormOfferSalary(v);
+                  const emp = editingEntry?.employee as any;
+                  applyFormRecalculation(
+                    parseFloat(v) || 0,
+                    parseFloat(formPresentDays) || 0,
+                    parseFloat(formOffDays) || 0,
+                    parseFloat(formPlDays) || 0,
+                    parseFloat(formSlDays) || 0,
+                    parseFloat(formClDays) || 0,
+                    parseFloat(formHolidayDays) || 0,
+                    parseFloat(formTds) || 0,
+                    parseFloat(formOtHours) || 0,
+                    parseFloat(formOtherAllowances) || 0,
+                    parseFloat(formOtherDed) || 0,
+                    emp
+                  );
+                }}
+                keyboardType="numeric"
               />
+
+              {/* Attendance & Paid Days (Rule 1 & 2) */}
+              <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
+                  Attendance Breakdown (Rule 1: Paid Days Sum)
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="Present Days"
+                      value={formPresentDays}
+                      onChangeText={(v) => {
+                        setFormPresentDays(v);
+                        const emp = editingEntry?.employee as any;
+                        applyFormRecalculation(
+                          parseFloat(formOfferSalary) || 0,
+                          parseFloat(v) || 0,
+                          parseFloat(formOffDays) || 0,
+                          parseFloat(formPlDays) || 0,
+                          parseFloat(formSlDays) || 0,
+                          parseFloat(formClDays) || 0,
+                          parseFloat(formHolidayDays) || 0,
+                          parseFloat(formTds) || 0,
+                          parseFloat(formOtHours) || 0,
+                          parseFloat(formOtherAllowances) || 0,
+                          parseFloat(formOtherDed) || 0,
+                          emp
+                        );
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="Weekly Off"
+                      value={formOffDays}
+                      onChangeText={(v) => {
+                        setFormOffDays(v);
+                        const emp = editingEntry?.employee as any;
+                        applyFormRecalculation(
+                          parseFloat(formOfferSalary) || 0,
+                          parseFloat(formPresentDays) || 0,
+                          parseFloat(v) || 0,
+                          parseFloat(formPlDays) || 0,
+                          parseFloat(formSlDays) || 0,
+                          parseFloat(formClDays) || 0,
+                          parseFloat(formHolidayDays) || 0,
+                          parseFloat(formTds) || 0,
+                          parseFloat(formOtHours) || 0,
+                          parseFloat(formOtherAllowances) || 0,
+                          parseFloat(formOtherDed) || 0,
+                          emp
+                        );
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="Holidays"
+                      value={formHolidayDays}
+                      onChangeText={(v) => {
+                        setFormHolidayDays(v);
+                        const emp = editingEntry?.employee as any;
+                        applyFormRecalculation(
+                          parseFloat(formOfferSalary) || 0,
+                          parseFloat(formPresentDays) || 0,
+                          parseFloat(formOffDays) || 0,
+                          parseFloat(formPlDays) || 0,
+                          parseFloat(formSlDays) || 0,
+                          parseFloat(formClDays) || 0,
+                          parseFloat(v) || 0,
+                          parseFloat(formTds) || 0,
+                          parseFloat(formOtHours) || 0,
+                          parseFloat(formOtherAllowances) || 0,
+                          parseFloat(formOtherDed) || 0,
+                          emp
+                        );
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="PL"
+                      value={formPlDays}
+                      onChangeText={(v) => {
+                        setFormPlDays(v);
+                        const emp = editingEntry?.employee as any;
+                        applyFormRecalculation(
+                          parseFloat(formOfferSalary) || 0,
+                          parseFloat(formPresentDays) || 0,
+                          parseFloat(formOffDays) || 0,
+                          parseFloat(v) || 0,
+                          parseFloat(formSlDays) || 0,
+                          parseFloat(formClDays) || 0,
+                          parseFloat(formHolidayDays) || 0,
+                          parseFloat(formTds) || 0,
+                          parseFloat(formOtHours) || 0,
+                          parseFloat(formOtherAllowances) || 0,
+                          parseFloat(formOtherDed) || 0,
+                          emp
+                        );
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="SL"
+                      value={formSlDays}
+                      onChangeText={(v) => {
+                        setFormSlDays(v);
+                        const emp = editingEntry?.employee as any;
+                        applyFormRecalculation(
+                          parseFloat(formOfferSalary) || 0,
+                          parseFloat(formPresentDays) || 0,
+                          parseFloat(formOffDays) || 0,
+                          parseFloat(formPlDays) || 0,
+                          parseFloat(v) || 0,
+                          parseFloat(formClDays) || 0,
+                          parseFloat(formHolidayDays) || 0,
+                          parseFloat(formTds) || 0,
+                          parseFloat(formOtHours) || 0,
+                          parseFloat(formOtherAllowances) || 0,
+                          parseFloat(formOtherDed) || 0,
+                          emp
+                        );
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="CL"
+                      value={formClDays}
+                      onChangeText={(v) => {
+                        setFormClDays(v);
+                        const emp = editingEntry?.employee as any;
+                        applyFormRecalculation(
+                          parseFloat(formOfferSalary) || 0,
+                          parseFloat(formPresentDays) || 0,
+                          parseFloat(formOffDays) || 0,
+                          parseFloat(formPlDays) || 0,
+                          parseFloat(formSlDays) || 0,
+                          parseFloat(v) || 0,
+                          parseFloat(formHolidayDays) || 0,
+                          parseFloat(formTds) || 0,
+                          parseFloat(formOtHours) || 0,
+                          parseFloat(formOtherAllowances) || 0,
+                          parseFloat(formOtherDed) || 0,
+                          emp
+                        );
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#F0FDFA', padding: 8, borderRadius: 6 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#0F766E' }}>
+                    Paid Days: {formPaidDays}
+                  </Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#B45309' }}>
+                    LWP: {formLwpDays}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Earnings Breakup (Rule 3) */}
+              <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
+                  Earnings Breakup (Rule 3: Proportioned to Paid Days)
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input label="Basic (50%)" value={formBasic} onChangeText={setFormBasic} keyboardType="numeric" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input label="HRA (20%)" value={formHra} onChangeText={setFormHra} keyboardType="numeric" />
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input label="Conv. Allowance" value={formConv} onChangeText={setFormConv} keyboardType="numeric" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input label="Washing Allowance" value={formWash} onChangeText={setFormWash} keyboardType="numeric" />
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input label="Special Allowance" value={formSpecial} onChangeText={setFormSpecial} keyboardType="numeric" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input label="Gross Earnings" value={formGross} onChangeText={setFormGross} keyboardType="numeric" />
+                  </View>
+                </View>
+              </View>
+
+              {/* Deductions & Statutory (Rule 4, 5, 6, 7) */}
+              <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
+                  Deductions (Rule 4-7: EPF, ESIC, Manual TDS)
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input label="EPF (Max ₹3000 / 12%)" value={formPf} onChangeText={setFormPf} keyboardType="numeric" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input label="ESIC (0.75% of Gross-Wash)" value={formEsi} onChangeText={setFormEsi} keyboardType="numeric" />
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="TDS (Manual Input - Rule 7)"
+                      value={formTds}
+                      onChangeText={(v) => {
+                        setFormTds(v);
+                        const pfVal = parseFloat(formPf) || 0;
+                        const esiVal = parseFloat(formEsi) || 0;
+                        const tdsVal = parseFloat(v) || 0;
+                        const otherDedVal = parseFloat(formOtherDed) || 0;
+                        const totDed = pfVal + esiVal + tdsVal + otherDedVal;
+                        setFormTotalDed(String(totDed));
+                        const grossVal = parseFloat(formGross) || 0;
+                        const totSal = Math.max(0, grossVal - totDed);
+                        setFormTotalSalary(String(totSal));
+                        const otAmt = parseFloat(formOtAmount) || 0;
+                        const otherAll = parseFloat(formOtherAllowances) || 0;
+                        setFormNetSalary(String(totSal + otAmt + otherAll));
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input label="Other Deductions" value={formOtherDed} onChangeText={setFormOtherDed} keyboardType="numeric" />
+                  </View>
+                </View>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#DC2626' }}>
+                  Total Deductions: ₹{formTotalDed}
+                </Text>
+              </View>
+
+              {/* Overtime & Other Allowances (Rule 8 & 9) */}
+              <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
+                  Overtime & Other Allowances (Rule 8 & 9)
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      label="Approved OT Hours"
+                      placeholder="4h = 0.5d, 7h = 1d"
+                      value={formOtHours}
+                      onChangeText={(v) => {
+                        setFormOtHours(v);
+                        const emp = editingEntry?.employee as any;
+                        applyFormRecalculation(
+                          parseFloat(formOfferSalary) || 0,
+                          parseFloat(formPresentDays) || 0,
+                          parseFloat(formOffDays) || 0,
+                          parseFloat(formPlDays) || 0,
+                          parseFloat(formSlDays) || 0,
+                          parseFloat(formClDays) || 0,
+                          parseFloat(formHolidayDays) || 0,
+                          parseFloat(formTds) || 0,
+                          parseFloat(v) || 0,
+                          parseFloat(formOtherAllowances) || 0,
+                          parseFloat(formOtherDed) || 0,
+                          emp
+                        );
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Input label="OT Pay Amount" value={formOtAmount} onChangeText={setFormOtAmount} keyboardType="numeric" />
+                  </View>
+                </View>
+
+                <Input
+                  label="Other Allowances (Manual Input - Rule 9)"
+                  value={formOtherAllowances}
+                  onChangeText={(v) => {
+                    setFormOtherAllowances(v);
+                    const totSal = parseFloat(formTotalSalary) || 0;
+                    const otAmt = parseFloat(formOtAmount) || 0;
+                    const otherAll = parseFloat(v) || 0;
+                    setFormNetSalary(String(totSal + otAmt + otherAll));
+                  }}
+                  keyboardType="numeric"
+                />
+              </View>
+
+              {/* Net Payout Summary Card */}
+              <View style={{ backgroundColor: '#0B1C30', padding: 14, borderRadius: 10, gap: 4 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>Gross Salary:</Text>
+                  <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 12 }}>₹{formGross}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>Total Deductions:</Text>
+                  <Text style={{ color: '#FCA5A5', fontWeight: '700', fontSize: 12 }}>-₹{formTotalDed}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>Total Salary:</Text>
+                  <Text style={{ color: '#93C5FD', fontWeight: '700', fontSize: 12 }}>₹{formTotalSalary}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>Overtime Pay:</Text>
+                  <Text style={{ color: '#86EFAC', fontWeight: '700', fontSize: 12 }}>+₹{formOtAmount}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>Other Allowance:</Text>
+                  <Text style={{ color: '#86EFAC', fontWeight: '700', fontSize: 12 }}>+₹{formOtherAllowances}</Text>
+                </View>
+                <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.2)', marginVertical: 4 }} />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ color: '#86F2E4', fontWeight: '800', fontSize: 14 }}>NET TAKE-HOME:</Text>
+                  <Text style={{ color: '#86F2E4', fontWeight: '800', fontSize: 20 }}>₹{formNetSalary}</Text>
+                </View>
+              </View>
 
               <View style={{ gap: 8, marginTop: 8 }}>
                 <Button title="Save Changes" onPress={handleUpdate} loading={adding} />

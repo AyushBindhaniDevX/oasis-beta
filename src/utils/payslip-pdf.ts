@@ -24,50 +24,64 @@ function numberToWords(num: number): string {
 
 export function generatePayslipHtml(payslip: Payslip, employee?: Employee | null, organization?: Organization | null): string {
   const p = payslip.payroll;
-  const monthName = MONTHS[payslip.period_month - 1] || 'Current Month';
+  const monthName = (MONTHS[payslip.period_month - 1] || 'Current Month').toUpperCase();
   const year = payslip.period_year;
-  const orgName = organization?.name || 'SHANTI MEMORIAL HOSPITAL';
-  const hospitalUnit = (p as any)?.hospital_unit || employee?.hospital_unit || 'Chikitsa Unit of Shanti Memorial Hospital';
+  const orgName = (organization?.name || (p as any)?.hospital_unit || 'COMPANY NAME').toUpperCase();
 
-  const empName = employee?.profile?.full_name || payslip.employee?.profile?.full_name || 'Healthcare Staff';
-  const empCode = employee?.employee_code || payslip.employee?.employee_code || payslip.payslip_number || 'SMH-000';
-  const designation = employee?.designation || payslip.employee?.designation || 'Staff Member';
-  const department = employee?.department?.name || payslip.employee?.department?.name || 'Hospital Operations';
-  const doj = employee?.joining_date ? formatDate(employee.joining_date) : 'N/A';
-  const bankAcc = employee?.bank_details?.account_number ? `****${employee.bank_details.account_number.slice(-4)}` : 'Bank Transfer';
-  const uan = (employee as any)?.tax_config?.uan_number || 'N/A';
-  const pfNo = (employee as any)?.tax_config?.pf_number || 'N/A';
-  const esiNo = (employee as any)?.tax_config?.esi_number || 'N/A';
+  const empName = (employee?.profile?.full_name || payslip.employee?.profile?.full_name || (p?.employee as any)?.profile?.full_name || 'Staff Member').toUpperCase();
+  const empCode = employee?.employee_code || payslip.employee?.employee_code || (p?.employee as any)?.employee_code || payslip.payslip_number || 'EMP001';
+  const empType = ((p as any)?.employment_type || employee?.employment_type || ((p as any)?.is_pf_eligible ? 'CONFIRMED' : 'CONTRACTUAL')).toUpperCase();
+
+  // Date formatting (DD/MM/YYYY)
+  let slipDate = '05/10/2026';
+  try {
+    const rawDate = payslip.created_at || (p as any)?.created_at || new Date().toISOString();
+    const d = new Date(rawDate);
+    if (!isNaN(d.getTime())) {
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      slipDate = `${dd}/${mm}/${yyyy}`;
+    }
+  } catch {}
 
   // Attendance Metrics
   const payableDays = (p as any)?.payable_days ?? 30;
-  const presentDays = (p as any)?.present_days ?? 26;
-  const offDays = (p as any)?.off_days ?? 4;
-  const leaveDays = (p as any)?.leave_days ?? 0;
   const holidayDays = (p as any)?.holiday_days ?? 0;
-  const paidDays = (p as any)?.paid_days ?? (presentDays + offDays + leaveDays + holidayDays);
-  const otUnits = (p as any)?.ot_hours_or_days ?? 0;
+  const clDays = (p as any)?.cl_days ?? 0;
+  const slDays = (p as any)?.sl_days ?? 0;
+  const plDays = (p as any)?.pl_days ?? 0;
+  const offDays = (p as any)?.off_days ?? 4;
+  const lwpDays = (p as any)?.lwp_days ?? (p as any)?.lop_days ?? Math.max(0, payableDays - ((p as any)?.paid_days ?? payableDays));
+  const paidDays = (p as any)?.paid_days ?? Math.max(0, payableDays - lwpDays);
+  const offerSalary = Math.round((p as any)?.salary_details ?? employee?.basic_salary ?? p?.basic_salary ?? 37400);
 
   // Earnings Breakdown
-  const basic = (p as any)?.basic ?? p?.basic_salary ?? Math.round(((p?.gross_salary || 0) * 0.5));
-  const hra = (p as any)?.hra ?? Math.round(((p?.gross_salary || 0) * 0.2));
-  const conveyance = (p as any)?.conveyance ?? p?.allowances?.['Conveyance Allowance'] ?? 1200;
-  const washing = (p as any)?.washing ?? p?.allowances?.['Washing Allowance'] ?? 500;
-  const specialAllowance = (p as any)?.special_allowance ?? p?.allowances?.['Special Allowance'] ?? Math.max(0, (p?.gross_salary || 0) - (basic + hra + conveyance + washing));
-  const otAmount = (p as any)?.ot_amount ?? p?.allowances?.['Overtime Pay'] ?? 0;
-  const otherAllowances = (p as any)?.other_allowances ?? p?.allowances?.['Other Allowances'] ?? 0;
-  const grossSalary = (p as any)?.gross_salary ?? (basic + hra + conveyance + washing + specialAllowance);
+  const basic = Math.round((p as any)?.basic ?? p?.basic_salary ?? Math.round(offerSalary * 0.5));
+  const hra = (p as any)?.hra ?? Math.round(offerSalary * 0.2);
+  const conveyance = (p as any)?.conveyance ?? p?.allowances?.['Conveyance Allowance'] ?? 2000;
+  const washing = (p as any)?.washing ?? p?.allowances?.['Washing Allowance'] ?? 1000;
+  const specialAllowance = (p as any)?.special_allowance ?? p?.allowances?.['Special Allowance'] ?? 0;
+  const grossSalary = (p as any)?.gross_salary ?? p?.gross_salary ?? (basic + hra + conveyance + washing + specialAllowance);
 
   // Deductions Breakdown
   const pf = (p as any)?.pf ?? p?.deductions?.['PF'] ?? p?.deductions?.['EPF'] ?? 0;
+  const pt = (p as any)?.deductions?.['Professional Tax'] ?? 0;
   const esi = (p as any)?.esi ?? p?.deductions?.['ESIC'] ?? 0;
-  const ptTds = (p as any)?.pt_tds ?? ((p?.deductions?.['Professional Tax'] || 0) + (p?.deductions?.['TDS'] || 0));
-  const otDed = (p as any)?.ot_ded ?? p?.deductions?.['Miscellaneous Deductions'] ?? 0;
-  const totalDeductions = (p as any)?.gross_deductions ?? (pf + esi + ptTds + otDed);
+  const tds = (p as any)?.tds ?? p?.deductions?.['TDS'] ?? 0;
+  const lateComing = (p as any)?.late_coming ?? 0;
+  const otherDed = (p as any)?.ot_ded ?? p?.deductions?.['Miscellaneous Deductions'] ?? 0;
+  const totalDeductions = (p as any)?.total_deductions ?? (p as any)?.gross_deductions ?? (pf + pt + esi + tds + lateComing + otherDed);
 
-  // Net Salary
-  const netSalary = (p as any)?.net_salary ?? Math.max(0, grossSalary - totalDeductions + otAmount + otherAllowances);
-  const netInWords = numberToWords(Math.round(netSalary));
+  // Summary / Bottom Row
+  const totalSalary = (p as any)?.total_salary ?? Math.max(0, grossSalary - totalDeductions);
+  const otAmount = (p as any)?.ot_amount ?? p?.allowances?.['Overtime Pay'] ?? 0;
+  const otherAllowances = (p as any)?.other_allowances ?? p?.allowances?.['Other Allowances'] ?? 0;
+  const netSalary = (p as any)?.net_salary ?? Math.max(0, totalSalary + otAmount + otherAllowances);
+
+  const fmtCurrency = (n: number) => {
+    return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
 
   return `
 <!DOCTYPE html>
@@ -76,380 +90,294 @@ export function generatePayslipHtml(payslip: Payslip, employee?: Employee | null
   <meta charset="utf-8">
   <title>Salary Slip - ${monthName} ${year} - ${empName} (${empCode})</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    @page {
+      size: A4 portrait;
+      margin: 10mm;
+    }
     body {
-      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
       margin: 0;
-      padding: 24px;
-      color: #0B1C30;
+      padding: 12px;
+      color: #000000;
       background: #FFFFFF;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
-    .payslip-container {
-      max-width: 820px;
+    .slip-container {
+      border: 1.5px solid #000000;
+      padding: 16px 20px;
+      max-width: 900px;
       margin: 0 auto;
-      border: 1.5px solid #0D7377;
-      border-radius: 12px;
-      padding: 28px;
-      box-shadow: 0 4px 18px rgba(0,0,0,0.04);
+      background: #FFFFFF;
+      box-sizing: border-box;
     }
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      border-bottom: 2px solid #0D7377;
-      padding-bottom: 16px;
-      margin-bottom: 20px;
+    .slip-header {
+      text-align: center;
+      padding-bottom: 8px;
+      border-bottom: 1.5px solid #000000;
+      margin-bottom: 12px;
     }
     .hospital-title {
-      font-size: 20px;
-      font-weight: 800;
-      color: #0D7377;
-      text-transform: uppercase;
-      letter-spacing: -0.3px;
-    }
-    .hospital-subtitle {
-      font-size: 13px;
-      font-weight: 700;
-      color: #D97706;
-      text-transform: uppercase;
-      margin-top: 2px;
-    }
-    .hospital-subtext {
-      font-size: 11px;
-      color: #64748B;
-      margin-top: 2px;
-    }
-    .payslip-tag {
-      text-align: right;
-    }
-    .payslip-tag h2 {
-      margin: 0;
-      font-size: 20px;
-      font-weight: 800;
-      color: #0D7377;
-    }
-    .payslip-tag p {
-      margin: 2px 0 0;
-      font-size: 12px;
-      color: #64748B;
-      font-weight: 600;
-    }
-    .meta-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 12px;
-      background: #F8FAFC;
-      border: 1px solid #E2E8F0;
-      border-radius: 8px;
-      padding: 14px 16px;
-      margin-bottom: 16px;
-    }
-    .meta-item label {
-      display: block;
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      color: #64748B;
-      margin-bottom: 2px;
-    }
-    .meta-item span {
-      font-size: 13px;
-      font-weight: 700;
-      color: #0F172A;
-    }
-    .attendance-bar {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 8px;
-      background: #F0FDFA;
-      border: 1px solid #99F6E4;
-      border-radius: 8px;
-      padding: 10px 14px;
-      margin-bottom: 20px;
-      text-align: center;
-    }
-    .att-cell label {
-      display: block;
-      font-size: 10px;
-      font-weight: 700;
-      color: #0F766E;
-      text-transform: uppercase;
-    }
-    .att-cell span {
-      font-size: 13px;
-      font-weight: 800;
-      color: #0D7377;
-    }
-    .salary-tables {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 20px;
-    }
-    .table-card {
-      border: 1px solid #E2E8F0;
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    .table-header {
-      background: #F8FAFC;
-      padding: 8px 14px;
-      font-weight: 800;
-      font-size: 12px;
-      text-transform: uppercase;
-      color: #0D7377;
-      border-bottom: 1px solid #E2E8F0;
+      font-size: 18px;
+      font-weight: bold;
       letter-spacing: 0.5px;
+      margin: 0 0 4px 0;
+      text-transform: uppercase;
     }
-    table {
+    .payslip-period {
+      font-size: 13px;
+      font-weight: bold;
+      letter-spacing: 0.3px;
+      margin: 0;
+      text-transform: uppercase;
+    }
+    .meta-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 12.5px;
+      font-size: 11px;
+      margin-bottom: 14px;
     }
-    table td {
-      padding: 7px 12px;
-      border-bottom: 1px solid #F1F5F9;
+    .meta-table td {
+      padding: 3px 2px;
+      vertical-align: middle;
+      white-space: nowrap;
     }
-    .total-row td {
-      background: #F8FAFC;
-      font-weight: 800;
-      color: #0D7377;
-      border-top: 1.5px solid #CBD5E1;
-      padding: 9px 12px;
+    .meta-lbl {
+      width: 115px;
+      font-weight: 500;
     }
-    .net-banner {
-      background: #0D7377;
-      color: #FFFFFF;
-      border-radius: 8px;
-      padding: 16px 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
+    .meta-sep {
+      width: 12px;
+      text-align: center;
+      font-weight: 500;
     }
-    .net-label {
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      opacity: 0.9;
+    .meta-val {
       font-weight: 600;
+      padding-right: 14px;
     }
-    .net-value {
-      font-size: 26px;
-      font-weight: 800;
-      color: #FFFFFF;
+    .grid-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-bottom: -1px;
+      table-layout: fixed;
     }
-    .net-words {
-      font-size: 11.5px;
-      color: #475569;
-      font-style: italic;
-      margin-bottom: 24px;
-      padding: 6px 12px;
-      background: #F8FAFC;
-      border-left: 3px solid #0D7377;
-      border-radius: 4px;
+    .grid-table th, .grid-table td {
+      border: 1px solid #000000;
+      padding: 6px 8px;
+      text-align: center;
+      vertical-align: middle;
+      box-sizing: border-box;
     }
-    .signatures {
-      display: flex;
-      justify-content: space-between;
-      padding-top: 36px;
-      border-top: 1px dashed #CBD5E1;
-      font-size: 11.5px;
+    .grid-table th {
+      font-weight: bold;
+      background: #FFFFFF;
     }
-    .sig-block {
-      width: 220px;
+    .side-cell {
+      font-weight: bold;
+      letter-spacing: 0.5px;
+      width: 120px;
+      background: #FFFFFF;
       text-align: center;
     }
-    .sig-line {
-      border-top: 1px solid #334155;
-      padding-top: 4px;
-      font-weight: 700;
-      color: #0F172A;
+    .val-cell {
+      font-weight: 500;
+      text-align: center;
+    }
+    .val-cell-bold {
+      font-weight: bold;
+      text-align: center;
+    }
+    .footer-section {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      font-size: 11px;
+    }
+    .footer-section td {
+      vertical-align: top;
+      padding: 0;
+    }
+    .disclaimer {
+      font-size: 10.5px;
+      font-style: italic;
+      color: #111111;
+      padding-top: 8px;
+      max-width: 55%;
+    }
+    .summary-box {
+      border-collapse: collapse;
+      margin-left: auto;
+      font-size: 11.5px;
+    }
+    .summary-box td {
+      padding: 2.5px 3px;
+      white-space: nowrap;
+    }
+    .sum-lbl {
+      width: 120px;
+      font-weight: 500;
+    }
+    .sum-sep {
+      width: 14px;
+      text-align: center;
+    }
+    .sum-val {
+      text-align: right;
+      font-weight: 600;
+      min-width: 70px;
+    }
+    .sum-val-bold {
+      font-weight: bold;
     }
     @media print {
       body { padding: 0; }
-      .payslip-container { border: none; box-shadow: none; padding: 10px; }
+      .slip-container { border: 1.5px solid #000000; margin: 0; max-width: 100%; }
     }
   </style>
 </head>
 <body>
-  <div class="payslip-container">
-    <div class="header">
-      <div>
-        <div class="hospital-title">${orgName}</div>
-        <div class="hospital-subtitle">${hospitalUnit}</div>
-        <div class="hospital-subtext">NABH Accredited Multi-Specialty Hospital & Healthcare Institute</div>
-      </div>
-      <div class="payslip-tag">
-        <h2>PAYSLIP</h2>
-        <p>${monthName.toUpperCase()} ${year}</p>
-        <p style="font-family: monospace; font-size: 11px;">#${payslip.payslip_number || 'SMH-PAY-' + payslip.id.slice(0, 6).toUpperCase()}</p>
-      </div>
+  <div class="slip-container">
+    <!-- Header -->
+    <div class="slip-header">
+      <div class="hospital-title">${orgName}</div>
+      <div class="payslip-period">PAYSLIP ${monthName} ${year}</div>
     </div>
 
-    <!-- Employee Details Grid -->
-    <div class="meta-grid">
-      <div class="meta-item">
-        <label>Employee Name</label>
-        <span>${empName}</span>
-      </div>
-      <div class="meta-item">
-        <label>Employee Code</label>
-        <span>${empCode}</span>
-      </div>
-      <div class="meta-item">
-        <label>Department</label>
-        <span>${department}</span>
-      </div>
-      <div class="meta-item">
-        <label>Designation</label>
-        <span>${designation}</span>
-      </div>
-      <div class="meta-item">
-        <label>Date of Joining</label>
-        <span>${doj}</span>
-      </div>
-      <div class="meta-item">
-        <label>Bank Account</label>
-        <span>${bankAcc}</span>
-      </div>
-      <div class="meta-item">
-        <label>PF / UAN No.</label>
-        <span>${uan !== 'N/A' ? uan : pfNo}</span>
-      </div>
-      <div class="meta-item">
-        <label>ESIC IP No.</label>
-        <span>${esiNo}</span>
-      </div>
-    </div>
+    <!-- Employee & Attendance Info Grid -->
+    <table class="meta-table">
+      <tr>
+        <td class="meta-lbl">Employee Name</td>
+        <td class="meta-sep">:</td>
+        <td class="meta-val" style="width: 28%;">${empName}</td>
 
-    <!-- Attendance Summary Bar -->
-    <div class="attendance-bar">
-      <div class="att-cell">
-        <label>Payable</label>
-        <span>${payableDays}</span>
-      </div>
-      <div class="att-cell">
-        <label>Present</label>
-        <span>${presentDays}</span>
-      </div>
-      <div class="att-cell">
-        <label>Weekly Off</label>
-        <span>${offDays}</span>
-      </div>
-      <div class="att-cell">
-        <label>Leave</label>
-        <span>${leaveDays}</span>
-      </div>
-      <div class="att-cell">
-        <label>Holiday</label>
-        <span>${holidayDays}</span>
-      </div>
-      <div class="att-cell">
-        <label>Paid Days</label>
-        <span>${paidDays}</span>
-      </div>
-      <div class="att-cell">
-        <label>OT Units</label>
-        <span>${otUnits}</span>
-      </div>
-    </div>
+        <td class="meta-lbl">Payable Days</td>
+        <td class="meta-sep">:</td>
+        <td class="meta-val">${payableDays.toFixed(2)}</td>
 
-    <!-- Earnings & Deductions Tables -->
-    <div class="salary-tables">
-      <!-- Earnings -->
-      <div class="table-card">
-        <div class="table-header">Earnings (Gross Salary)</div>
-        <table>
-          <tr>
-            <td>Basic Salary (50%)</td>
-            <td style="text-align: right; font-weight: 600;">${formatCurrency(basic)}</td>
-          </tr>
-          <tr>
-            <td>HRA (20%)</td>
-            <td style="text-align: right; font-weight: 600;">${formatCurrency(hra)}</td>
-          </tr>
-          <tr>
-            <td>Conveyance Allowance</td>
-            <td style="text-align: right; font-weight: 600;">${formatCurrency(conveyance)}</td>
-          </tr>
-          <tr>
-            <td>Washing Allowance</td>
-            <td style="text-align: right; font-weight: 600;">${formatCurrency(washing)}</td>
-          </tr>
-          <tr>
-            <td>Special Allowance</td>
-            <td style="text-align: right; font-weight: 600;">${formatCurrency(specialAllowance)}</td>
-          </tr>
-          ${otAmount > 0 ? `
-          <tr>
-            <td style="color: #0D7377; font-weight: 600;">Overtime Pay (${otUnits} units)</td>
-            <td style="text-align: right; font-weight: 700; color: #0D7377;">+${formatCurrency(otAmount)}</td>
-          </tr>` : ''}
-          ${otherAllowances > 0 ? `
-          <tr>
-            <td style="color: #0D7377; font-weight: 600;">Other Allowances</td>
-            <td style="text-align: right; font-weight: 700; color: #0D7377;">+${formatCurrency(otherAllowances)}</td>
-          </tr>` : ''}
-          <tr class="total-row">
-            <td>GROSS EARNINGS</td>
-            <td style="text-align: right;">${formatCurrency(grossSalary)}</td>
-          </tr>
-        </table>
-      </div>
+        <td class="meta-lbl">Week Off</td>
+        <td class="meta-sep">:</td>
+        <td class="meta-val">${offDays.toFixed(2)}</td>
+      </tr>
+      <tr>
+        <td class="meta-lbl">Employee Code</td>
+        <td class="meta-sep">:</td>
+        <td class="meta-val">${empCode}</td>
 
-      <!-- Deductions -->
-      <div class="table-card">
-        <div class="table-header">Deductions</div>
-        <table>
-          <tr>
-            <td>Provident Fund (PF)</td>
-            <td style="text-align: right; font-weight: 600; color: #BA1A1A;">${pf > 0 ? '-' + formatCurrency(pf) : '₹0'}</td>
-          </tr>
-          <tr>
-            <td>ESIC Contribution</td>
-            <td style="text-align: right; font-weight: 600; color: #BA1A1A;">${esi > 0 ? '-' + formatCurrency(esi) : '₹0'}</td>
-          </tr>
-          <tr>
-            <td>PT / TDS Deductions</td>
-            <td style="text-align: right; font-weight: 600; color: #BA1A1A;">${ptTds > 0 ? '-' + formatCurrency(ptTds) : '₹0'}</td>
-          </tr>
-          <tr>
-            <td>Miscellaneous Deductions</td>
-            <td style="text-align: right; font-weight: 600; color: #BA1A1A;">${otDed > 0 ? '-' + formatCurrency(otDed) : '₹0'}</td>
-          </tr>
-          <tr class="total-row">
-            <td style="color: #BA1A1A;">TOTAL DEDUCTIONS</td>
-            <td style="text-align: right; color: #BA1A1A;">-${formatCurrency(totalDeductions)}</td>
-          </tr>
-        </table>
-      </div>
-    </div>
+        <td class="meta-lbl">Paid Holiday</td>
+        <td class="meta-sep">:</td>
+        <td class="meta-val">${holidayDays.toFixed(2)}</td>
 
-    <!-- Net Pay Banner -->
-    <div class="net-banner">
-      <div>
-        <div class="net-label">Net Take-Home Salary</div>
-        <div style="font-size: 11px; opacity: 0.85;">Formula: Gross Earnings − Gross Deductions + OT Pay + Other Allowances</div>
-      </div>
-      <div class="net-value">${formatCurrency(netSalary)}</div>
-    </div>
+        <td class="meta-lbl">PL</td>
+        <td class="meta-sep">:</td>
+        <td class="meta-val">${plDays.toFixed(2)}</td>
+      </tr>
+      <tr>
+        <td class="meta-lbl">Date</td>
+        <td class="meta-sep">:</td>
+        <td class="meta-val">${slipDate}</td>
 
-    <div class="net-words">
-      <strong>Amount in Words:</strong> ${netInWords}
-    </div>
+        <td class="meta-lbl">CL</td>
+        <td class="meta-sep">:</td>
+        <td class="meta-val">${clDays.toFixed(2)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; SL : ${slDays.toFixed(2)}</td>
 
-    <!-- Footer Signatures -->
-    <div class="signatures">
-      <div class="sig-block">
-        <div class="sig-line">Employee Signature</div>
-        <div style="color: #64748B; font-size: 10px; margin-top: 2px;">Acknowledged by ${empName}</div>
-      </div>
-      <div class="sig-block">
-        <div class="sig-line">Authorized Signatory</div>
-        <div style="color: #64748B; font-size: 10px; margin-top: 2px;">Shanti Memorial Hospital · Accounts & HR</div>
-      </div>
-    </div>
+        <td class="meta-lbl">LWP</td>
+        <td class="meta-sep">:</td>
+        <td class="meta-val">${lwpDays.toFixed(2)}</td>
+      </tr>
+      <tr>
+        <td class="meta-lbl">Employee Type</td>
+        <td class="meta-sep">:</td>
+        <td class="meta-val">${empType}</td>
+
+        <td class="meta-lbl">Offer Salary</td>
+        <td class="meta-sep">:</td>
+        <td class="meta-val">${offerSalary}</td>
+
+        <td class="meta-lbl">Paid Days</td>
+        <td class="meta-sep">:</td>
+        <td class="meta-val">${paidDays}</td>
+      </tr>
+    </table>
+
+    <!-- Earnings Grid -->
+    <table class="grid-table">
+      <tr>
+        <td class="side-cell" rowspan="2">EARNINGS</td>
+        <th>Basic</th>
+        <th>HRA</th>
+        <th>Conv Allow</th>
+        <th>Washing Allow</th>
+        <th>Special Allow</th>
+        <th></th>
+        <th>Total Earning</th>
+      </tr>
+      <tr>
+        <td class="val-cell">${basic}</td>
+        <td class="val-cell">${fmtCurrency(hra)}</td>
+        <td class="val-cell">${fmtCurrency(conveyance)}</td>
+        <td class="val-cell">${fmtCurrency(washing)}</td>
+        <td class="val-cell">${fmtCurrency(specialAllowance)}</td>
+        <td class="val-cell"></td>
+        <td class="val-cell-bold">${fmtCurrency(grossSalary)}</td>
+      </tr>
+    </table>
+
+    <!-- Deductions Grid -->
+    <table class="grid-table" style="border-top: none;">
+      <tr>
+        <td class="side-cell" rowspan="2">DEDUCTION</td>
+        <th>Provident Fund</th>
+        <th>ProfessionlTax</th>
+        <th>ESIC</th>
+        <th>TDS</th>
+        <th>Late Coming</th>
+        <th>Other Deduction</th>
+        <th>Total Deduction</th>
+      </tr>
+      <tr>
+        <td class="val-cell">${fmtCurrency(pf)}</td>
+        <td class="val-cell">${fmtCurrency(pt)}</td>
+        <td class="val-cell">${fmtCurrency(esi)}</td>
+        <td class="val-cell">${fmtCurrency(tds)}</td>
+        <td class="val-cell">${lateComing > 0 ? fmtCurrency(lateComing) : ''}</td>
+        <td class="val-cell">${fmtCurrency(otherDed)}</td>
+        <td class="val-cell-bold">${fmtCurrency(totalDeductions)}</td>
+      </tr>
+    </table>
+
+    <!-- Bottom Summary & Disclaimer -->
+    <table class="footer-section">
+      <tr>
+        <td class="disclaimer">
+          This is a computer generated document and does not require signature.
+        </td>
+        <td>
+          <table class="summary-box">
+            <tr>
+              <td class="sum-lbl">Total Salary</td>
+              <td class="sum-sep">:</td>
+              <td class="sum-val">${Math.round(totalSalary)}</td>
+            </tr>
+            <tr>
+              <td class="sum-lbl">Overtime</td>
+              <td class="sum-sep">:</td>
+              <td class="sum-val">${fmtCurrency(otAmount)}</td>
+            </tr>
+            <tr>
+              <td class="sum-lbl">Other Allowance</td>
+              <td class="sum-sep">:</td>
+              <td class="sum-val">${fmtCurrency(otherAllowances)}</td>
+            </tr>
+            <tr>
+              <td class="sum-lbl sum-val-bold">Net Pay</td>
+              <td class="sum-sep sum-val-bold">:</td>
+              <td class="sum-val sum-val-bold">${Math.round(netSalary)}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   </div>
 </body>
 </html>

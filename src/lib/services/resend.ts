@@ -514,6 +514,59 @@ export async function sendWelcomeEmail(
 }
 
 /**
+ * 1b. Password Reset Request Notification
+ */
+export async function sendPasswordResetNotificationEmail(
+  to: string,
+  name?: string,
+  resetUrl?: string,
+  extra?: {
+    organizationId?: string | null;
+    organizationName?: string | null;
+  }
+) {
+  const orgCtx = await resolveOrgContext(
+    extra?.organizationId || extra?.organizationName
+      ? {
+          organizationId: extra?.organizationId || undefined,
+          organizationName: extra?.organizationName || undefined,
+        }
+      : undefined
+  );
+
+  const orgName = orgCtx.organizationName || 'Oasis HRMS';
+  const portalUrl = orgCtx.portalUrl || 'https://hrms-ayushbindhanidevxs-projects.vercel.app';
+  const targetLink = resetUrl || `${portalUrl}/(auth)/login`;
+
+  const htmlContent = `
+    <h2 style="font-size: 20px; font-weight: 800; color: #0F172A; margin: 0 0 14px;">Password Reset Request</h2>
+    <p style="font-size: 14px; color: #334155; line-height: 1.6; margin: 0 0 16px;">
+      Hello <strong>${name || 'Colleague'}</strong>,
+    </p>
+    <p style="font-size: 14px; color: #334155; line-height: 1.6; margin: 0 0 20px;">
+      We received a request to reset your password for your <strong>${orgName}</strong> account on Oasis HRMS.
+    </p>
+    <div style="text-align: center; margin: 26px 0;">
+      <a href="${targetLink}" style="display: inline-block; background-color: ${orgCtx.brandColor || '#0D7377'}; color: #FFFFFF !important; padding: 14px 34px; font-weight: 700; font-size: 14px; text-decoration: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.12);">
+        Reset Password →
+      </a>
+    </div>
+    <div style="margin: 20px 0; padding: 14px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; font-size: 12px; color: #64748B;">
+      If you did not request a password reset, you can safely disregard this email. Your account remains protected.
+    </div>
+  `;
+
+  return sendResendEmail({
+    to,
+    subject: `Password Reset Request — ${orgName}`,
+    category: 'general',
+    htmlContent,
+    orgContext: orgCtx,
+    organizationId: orgCtx.organizationId,
+  });
+}
+
+/**
  * 2a. New Leave Request Notification (To Manager)
  */
 export async function sendLeaveApplicationEmail(

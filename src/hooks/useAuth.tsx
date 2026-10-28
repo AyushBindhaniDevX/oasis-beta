@@ -87,15 +87,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('ACCESS_DENIED_ROLE: Your account role is not authorized to access this portal.');
       }
 
-      if (
-        (cleanEmail === 'ayushbindhani001@gmail.com' || cleanEmail.includes('shantimemorialhospital.com')) &&
-        data.organization_id !== 'shanti-memorial-hospital'
-      ) {
+      if (cleanEmail === 'ayushbindhani001@gmail.com' && data.role !== 'admin') {
         const updated = {
           ...data,
-          organization_id: 'shanti-memorial-hospital',
-          role: (cleanEmail === 'ayushbindhani001@gmail.com' ? 'admin' : data.role) as UserRole,
-          full_name: cleanEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : data.full_name,
+          role: 'admin' as UserRole,
+          full_name: data.full_name || 'Ayush Bindhani',
           updated_at: new Date().toISOString(),
         };
         await setDoc(profRef, updated, { merge: true });
@@ -128,15 +124,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error('ACCESS_DENIED_ROLE: Your account role is not authorized to access this portal.');
         }
 
-        if (
-          (cleanEmail === 'ayushbindhani001@gmail.com' || cleanEmail.includes('shantimemorialhospital.com')) &&
-          existingData.organization_id !== 'shanti-memorial-hospital'
-        ) {
+        if (cleanEmail === 'ayushbindhani001@gmail.com' && existingData.role !== 'admin') {
           existingData = {
             ...existingData,
-            organization_id: 'shanti-memorial-hospital',
-            role: (cleanEmail === 'ayushbindhani001@gmail.com' ? 'admin' : existingData.role) as UserRole,
-            full_name: cleanEmail === 'ayushbindhani001@gmail.com' ? 'Ayush Bindhani' : existingData.full_name,
+            role: 'admin' as UserRole,
+            full_name: existingData.full_name || 'Ayush Bindhani',
           };
         }
 
@@ -196,6 +188,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!['employee', 'hr', 'admin'].includes(role)) {
         throw new Error('ACCESS_DENIED_ROLE: Your employment role is not authorized to access this portal.');
       }
+      let empOrgId = linkedEmployee.organization_id;
+      if (!empOrgId) {
+        const orgsQ = query(collection(db, 'organizations'), limit(1));
+        const orgsSnap = await getDocs(orgsQ);
+        empOrgId = !orgsSnap.empty ? orgsSnap.docs[0].id : '00000000-0000-0000-0000-000000000001';
+      }
 
       const now = new Date().toISOString();
       const newProfPayload: Profile = {
@@ -205,7 +203,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         phone: linkedEmployee.phone || authUser.phoneNumber || null,
         avatar_url: authUser.photoURL || null,
         role,
-        organization_id: linkedEmployee.organization_id || 'shanti-memorial-hospital',
+        organization_id: empOrgId,
         is_active: true,
         created_at: now,
         updated_at: now,
@@ -215,8 +213,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return newProfPayload;
     }
 
-    // 4. Primary Bootstrap Admin Exception only
+    // 4. Primary Bootstrap Admin Exception
     if (cleanEmail === 'ayushbindhani001@gmail.com') {
+      let adminOrgId = '00000000-0000-0000-0000-000000000001';
+      try {
+        const orgsQ = query(collection(db, 'organizations'), limit(1));
+        const orgsSnap = await getDocs(orgsQ);
+        if (!orgsSnap.empty) adminOrgId = orgsSnap.docs[0].id;
+      } catch {}
+
       const now = new Date().toISOString();
       const adminPayload: Profile = {
         id: authUser.uid,
@@ -225,7 +230,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         phone: authUser.phoneNumber || null,
         avatar_url: authUser.photoURL || null,
         role: 'admin',
-        organization_id: 'shanti-memorial-hospital',
+        organization_id: adminOrgId,
         is_active: true,
         created_at: now,
         updated_at: now,
@@ -234,9 +239,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return adminPayload;
     }
 
-    // Unregistered email attempting access: REJECT IMMEDIATELY!
-    console.warn(`[HCM Auth Guard]: Unauthorized login attempt rejected for ${cleanEmail}`);
-    throw new Error('ACCESS_DENIED_UNREGISTERED: Your email (' + cleanEmail + ') is not registered as an active employee in the system. Only active employees, HR, and admins can access the portal.');
+    // 5. Automatic Profile Provisioning for Google OAuth / First Sign-in
+    try {
+      const orgsQ = query(collection(db, 'organizations'), limit(1));
+      const orgsSnap = await getDocs(orgsQ);
+      const defaultOrgId = !orgsSnap.empty ? orgsSnap.docs[0].id : '00000000-0000-0000-0000-000000000001';
+
+      const now = new Date().toISOString();
+      const autoProfile: Profile = {
+        id: authUser.uid,
+        email: cleanEmail,
+        full_name: authUser.displayName || cleanEmail.split('@')[0],
+        phone: authUser.phoneNumber || null,
+        avatar_url: authUser.photoURL || null,
+        role: 'employee',
+        organization_id: defaultOrgId,
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+      };
+      await setDoc(doc(db, 'profiles', authUser.uid), autoProfile);
+      return autoProfile;
+    } catch (provisionErr) {
+      console.warn('Auto profile provision note:', provisionErr);
+      throw new Error('ACCESS_DENIED_UNREGISTERED: Your email (' + cleanEmail + ') is not registered as an active employee in the system. Only active employees, HR, and admins can access the portal.');
+    }
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -472,11 +499,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handleSignInWithGoogle = useCallback(async () => {
     try {
       if (Platform.OS === 'web') {
-        const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
+        const { GoogleAuthProvider, signInWithPopup, signInWithRedirect } = await import('firebase/auth');
         const provider = new GoogleAuthProvider();
         provider.setCustomParameters({ prompt: 'select_account' });
-        const credential = await signInWithPopup(auth, provider);
-        const fbUser = credential.user;
+        let credential;
+        try {
+          credential = await signInWithPopup(auth, provider);
+        } catch (popupErr: any) {
+          if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/cancelled-popup-request') {
+            await signInWithRedirect(auth, provider);
+            return;
+          }
+          throw popupErr;
+        }
+        const fbUser = credential?.user;
 
         if (fbUser) {
           const prof = await syncProfileForAuthUser(fbUser);
@@ -512,10 +548,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error('Native Google Sign-In requires a development build. Please use email and password to sign in.');
         }
 
-        const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-        if (!webClientId) {
-          throw new Error('Google Sign-In configuration missing: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is not configured.');
-        }
+        const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '970423945867-0c1537g7p1oou4eug7p91a7r77q2c0ck.apps.googleusercontent.com';
 
         try {
           GoogleSignin.configure({ webClientId, offlineAccess: true });

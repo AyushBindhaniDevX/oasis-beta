@@ -88,10 +88,56 @@ export default function PayslipDetailScreen() {
   }
 
   const p = payslip.payroll;
-  const monthName = MONTHS[payslip.period_month - 1] || 'Month';
+  const monthName = (MONTHS[payslip.period_month - 1] || 'Month').toUpperCase();
   const year = payslip.period_year;
-  const totalAllowances = Object.values(p.allowances || {}).reduce((a, b) => a + b, 0);
-  const totalDeductions = Object.values(p.deductions || {}).reduce((a, b) => a + b, 0) + (p.lop_amount || 0);
+
+  const empName = (employee?.profile?.full_name || (p.employee as any)?.profile?.full_name || 'Staff Member').toUpperCase();
+  const empCode = employee?.employee_code || (p.employee as any)?.employee_code || payslip.payslip_number || 'SMH1352';
+  const empType = ((p as any)?.employment_type || employee?.employment_type || ((p as any)?.is_pf_eligible ? 'CONFIRMED' : 'CONTRACTUAL')).toUpperCase();
+
+  let slipDate = '05/10/2026';
+  try {
+    const rawDate = payslip.created_at || (p as any)?.created_at || new Date().toISOString();
+    const d = new Date(rawDate);
+    if (!isNaN(d.getTime())) {
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      slipDate = `${dd}/${mm}/${yyyy}`;
+    }
+  } catch {}
+
+  const payableDays = (p as any)?.payable_days ?? 30;
+  const holidayDays = (p as any)?.holiday_days ?? 0;
+  const clDays = (p as any)?.cl_days ?? 0;
+  const slDays = (p as any)?.sl_days ?? 0;
+  const plDays = (p as any)?.pl_days ?? 0;
+  const offDays = (p as any)?.off_days ?? 4;
+  const lwpDays = (p as any)?.lwp_days ?? (p as any)?.lop_days ?? Math.max(0, payableDays - ((p as any)?.paid_days ?? payableDays));
+  const paidDays = (p as any)?.paid_days ?? Math.max(0, payableDays - lwpDays);
+  const offerSalary = Math.round((p as any)?.salary_details ?? employee?.basic_salary ?? p.basic_salary ?? 37400);
+
+  const basic = Math.round((p as any)?.basic ?? p.basic_salary ?? Math.round(offerSalary * 0.5));
+  const hra = Math.round((p as any)?.hra ?? p.allowances?.['HRA'] ?? Math.round(offerSalary * 0.2));
+  const conv = Math.round((p as any)?.conveyance ?? p.allowances?.['Conveyance Allowance'] ?? 2000);
+  const wash = Math.round((p as any)?.washing ?? p.allowances?.['Washing Allowance'] ?? 1000);
+  const special = Math.round((p as any)?.special_allowance ?? p.allowances?.['Special Allowance'] ?? 0);
+  const gross = Math.round((p as any)?.gross_salary ?? p.gross_salary ?? (basic + hra + conv + wash + special));
+
+  const pf = Math.round((p as any)?.pf ?? p.deductions?.['PF'] ?? p.deductions?.['EPF'] ?? 0);
+  const pt = Math.round((p as any)?.deductions?.['Professional Tax'] ?? 0);
+  const esi = Math.round((p as any)?.esi ?? p.deductions?.['ESIC'] ?? 0);
+  const tds = Math.round((p as any)?.tds ?? p.deductions?.['TDS'] ?? 0);
+  const lateComing = Math.round((p as any)?.late_coming ?? 0);
+  const otherDed = Math.round((p as any)?.ot_ded ?? p.deductions?.['Miscellaneous Deductions'] ?? 0);
+  const totalDed = Math.round((p as any)?.total_deductions ?? (p as any)?.gross_deductions ?? (pf + pt + esi + tds + otherDed));
+
+  const totalSalary = Math.round((p as any)?.total_salary ?? Math.max(0, gross - totalDed));
+  const otAmount = Math.round((p as any)?.ot_amount ?? p.allowances?.['Overtime Pay'] ?? 0);
+  const otherAllow = Math.round((p as any)?.other_allowances ?? p.allowances?.['Other Allowances'] ?? 0);
+  const netSalary = Math.round((p as any)?.net_salary ?? p.net_salary ?? Math.max(0, totalSalary + otAmount + otherAllow));
+
+  const orgName = (organization?.name || (p as any)?.hospital_unit || 'COMPANY NAME').toUpperCase();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -104,7 +150,7 @@ export default function PayslipDetailScreen() {
           <ChevronLeft size={20} color={colors.text} />
           <Text style={[styles.backText, { color: colors.text }]}>Back</Text>
         </TouchableOpacity>
-        <Text style={[styles.pageTitle, { color: colors.text }]}>Statement {payslip.payslip_number}</Text>
+        <Text style={[styles.pageTitle, { color: colors.text }]}>Salary Slip - {monthName} {year}</Text>
         <TouchableOpacity
           onPress={handleDownloadPdf}
           style={[styles.downloadHeaderBtn, { backgroundColor: colors.primary }]}
@@ -115,134 +161,140 @@ export default function PayslipDetailScreen() {
           ) : (
             <>
               <Download size={14} color="#FFF" />
-              <Text style={styles.downloadHeaderText}>Export PDF</Text>
+              <Text style={styles.downloadHeaderText}>Export PDF Slip</Text>
             </>
           )}
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}>
-        {/* Statement Header Card */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-          <View style={styles.metaRow}>
-            <View style={{ gap: 2 }}>
-              <Text style={{ fontSize: 11, fontWeight: '700', textTransform: 'uppercase', color: colors.textSecondary }}>
-                Payroll Statement
-              </Text>
-              <Text style={[styles.periodHeading, { color: colors.text }]}>
-                {monthName} {year}
-              </Text>
-              <Text style={{ fontSize: 12, color: colors.textSecondary, fontFamily: 'monospace' }}>
-                Ref: {payslip.payslip_number}
-              </Text>
-            </View>
-            <Badge label="PAID & VERIFIED" variant="successLight" />
+        {/* Exact Hospital Payslip Document Container */}
+        <View style={styles.documentSlip}>
+          {/* Header */}
+          <View style={styles.slipHeader}>
+            <Text style={styles.hospitalTitle}>{orgName}</Text>
+            <Text style={styles.payslipPeriodTitle}>PAYSLIP {monthName} {year}</Text>
           </View>
-        </View>
 
-        {/* Net Pay Highlight Banner */}
-        <View style={[styles.netPayCard, { backgroundColor: '#0b1c30' }]}>
-          <View>
-            <Text style={styles.netPayLabel}>Net Take-Home Pay</Text>
-            <Text style={styles.netPayAmount}>{formatCurrency(p.net_salary)}</Text>
-            <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, marginTop: 4 }}>
-              {monthName} {year} · {payslip.payslip_number}
+          {/* Info Grid (3 Columns) */}
+          <View style={styles.metaSection}>
+            <View style={styles.metaRow3}>
+              <View style={styles.metaCol}>
+                <Text style={styles.metaText}><Text style={styles.metaLabel}>Employee Name</Text> : {empName}</Text>
+                <Text style={styles.metaText}><Text style={styles.metaLabel}>Employee Code</Text> : {empCode}</Text>
+                <Text style={styles.metaText}><Text style={styles.metaLabel}>Date</Text> : {slipDate}</Text>
+                <Text style={styles.metaText}><Text style={styles.metaLabel}>Employee Type</Text> : {empType}</Text>
+              </View>
+
+              <View style={styles.metaCol}>
+                <Text style={styles.metaText}><Text style={styles.metaLabel}>Payable Days</Text> : {payableDays.toFixed(2)}</Text>
+                <Text style={styles.metaText}><Text style={styles.metaLabel}>Paid Holiday</Text> : {holidayDays.toFixed(2)}</Text>
+                <Text style={styles.metaText}>
+                  <Text style={styles.metaLabel}>CL</Text> : {clDays.toFixed(2)}    <Text style={styles.metaLabel}>SL</Text> : {slDays.toFixed(2)}
+                </Text>
+                <Text style={styles.metaText}><Text style={styles.metaLabel}>Offer Salary</Text> : {offerSalary}</Text>
+              </View>
+
+              <View style={styles.metaCol}>
+                <Text style={styles.metaText}><Text style={styles.metaLabel}>Week Off</Text> : {offDays.toFixed(2)}</Text>
+                <Text style={styles.metaText}><Text style={styles.metaLabel}>PL</Text> : {plDays.toFixed(2)}</Text>
+                <Text style={styles.metaText}><Text style={styles.metaLabel}>LWP</Text> : {lwpDays.toFixed(2)}</Text>
+                <Text style={styles.metaText}><Text style={styles.metaLabel}>Paid Days</Text> : {paidDays}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* EARNINGS Table */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: -1 }}>
+            <View style={styles.slipTable}>
+              {/* Header row */}
+              <View style={styles.tableRowHeader}>
+                <View style={[styles.tableCell, styles.cellSideHeader]}><Text style={styles.headerCellText}>EARNINGS</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.headerCellText}>Basic</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.headerCellText}>HRA</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.headerCellText}>Conv Allow</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.headerCellText}>Washing Allow</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.headerCellText}>Special Allow</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.headerCellText}></Text></View>
+                <View style={[styles.tableCell, styles.cellColEnd]}><Text style={styles.headerCellText}>Total Earning</Text></View>
+              </View>
+              {/* Data row */}
+              <View style={styles.tableRowData}>
+                <View style={[styles.tableCell, styles.cellSideHeader]}><Text style={styles.headerCellText}></Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.dataCellText}>{basic}</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.dataCellText}>{hra.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.dataCellText}>{conv.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.dataCellText}>{wash.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.dataCellText}>{special.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.dataCellText}></Text></View>
+                <View style={[styles.tableCell, styles.cellColEnd]}><Text style={[styles.dataCellText, { fontWeight: '800' }]}>{gross.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text></View>
+              </View>
+            </View>
+          </ScrollView>
+
+          {/* DEDUCTION Table */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+            <View style={styles.slipTable}>
+              {/* Header row */}
+              <View style={styles.tableRowHeader}>
+                <View style={[styles.tableCell, styles.cellSideHeader]}><Text style={styles.headerCellText}>DEDUCTION</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.headerCellText}>Provident Fund</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.headerCellText}>ProfessionlTax</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.headerCellText}>ESIC</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.headerCellText}>TDS</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.headerCellText}>Late Coming</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.headerCellText}>Other Deduction</Text></View>
+                <View style={[styles.tableCell, styles.cellColEnd]}><Text style={styles.headerCellText}>Total Deduction</Text></View>
+              </View>
+              {/* Data row */}
+              <View style={styles.tableRowData}>
+                <View style={[styles.tableCell, styles.cellSideHeader]}><Text style={styles.headerCellText}></Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.dataCellText}>{pf.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.dataCellText}>{pt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.dataCellText}>{esi.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.dataCellText}>{tds.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.dataCellText}>{lateComing > 0 ? lateComing.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}</Text></View>
+                <View style={[styles.tableCell, styles.cellCol]}><Text style={styles.dataCellText}>{otherDed.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text></View>
+                <View style={[styles.tableCell, styles.cellColEnd]}><Text style={[styles.dataCellText, { fontWeight: '800' }]}>{totalDed.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</Text></View>
+              </View>
+            </View>
+          </ScrollView>
+
+          {/* Footer Row */}
+          <View style={styles.slipFooter}>
+            <Text style={styles.disclaimerText}>
+              This is a computer generated document and does not require signature.
             </Text>
-          </View>
-          <CheckCircle2 size={32} color="#86f2e4" />
-        </View>
 
-        {/* Employee Info Card */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-          <Text style={[styles.cardHeading, { color: colors.text }]}>Employee Details</Text>
-          <View style={styles.infoGrid}>
-            <View style={styles.infoCell}>
-              <Text style={[styles.infoCellLabel, { color: colors.textSecondary }]}>Name</Text>
-              <Text style={[styles.infoCellVal, { color: colors.text }]}>{employee?.profile?.full_name || (p.employee as any)?.profile?.full_name || '—'}</Text>
-            </View>
-            <View style={styles.infoCell}>
-              <Text style={[styles.infoCellLabel, { color: colors.textSecondary }]}>Designation</Text>
-              <Text style={[styles.infoCellVal, { color: colors.text }]}>{employee?.designation || '—'}</Text>
-            </View>
-            <View style={styles.infoCell}>
-              <Text style={[styles.infoCellLabel, { color: colors.textSecondary }]}>Department</Text>
-              <Text style={[styles.infoCellVal, { color: colors.text }]}>{employee?.department?.name || '—'}</Text>
-            </View>
-            <View style={styles.infoCell}>
-              <Text style={[styles.infoCellLabel, { color: colors.textSecondary }]}>PF / UAN No.</Text>
-              <Text style={[styles.infoCellVal, { color: colors.text }]}>{(employee as any)?.tax_config?.pf_number || 'Not Assigned'}</Text>
-            </View>
-            <View style={styles.infoCell}>
-              <Text style={[styles.infoCellLabel, { color: colors.textSecondary }]}>Tax Regime</Text>
-              <Text style={[styles.infoCellVal, { color: colors.text }]}>{((employee as any)?.tax_config?.tax_regime || 'new').toUpperCase()} REGIME</Text>
-            </View>
-            <View style={styles.infoCell}>
-              <Text style={[styles.infoCellLabel, { color: colors.textSecondary }]}>Pay Period</Text>
-              <Text style={[styles.infoCellVal, { color: colors.text }]}>{monthName} {year}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Earnings Breakdown Card */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-          <Text style={[styles.cardHeading, { color: colors.text }]}>Gross Earnings</Text>
-          <View style={styles.row}>
-            <Text style={[styles.rowLabel, { color: colors.textSecondary }]}>Basic Salary</Text>
-            <Text style={[styles.rowVal, { color: colors.text }]}>{formatCurrency(p.basic_salary)}</Text>
-          </View>
-
-          {p.allowances &&
-            Object.entries(p.allowances).map(([k, v]) => (
-              <View key={k} style={styles.row}>
-                <Text style={[styles.rowLabel, { color: colors.textSecondary }]}>
-                  {k.replace(/_/g, ' ').toUpperCase()}
-                </Text>
-                <Text style={[styles.rowVal, { color: '#006a61' }]}>+{formatCurrency(v)}</Text>
+            <View style={styles.summaryList}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Total Salary</Text>
+                <Text style={styles.summaryVal}>: {totalSalary}</Text>
               </View>
-            ))}
-
-          <View style={[styles.row, styles.totalRow, { borderTopColor: '#f1f5f9' }]}>
-            <Text style={[styles.totalLabel, { color: colors.text }]}>Total Gross Salary</Text>
-            <Text style={[styles.totalVal, { color: '#006a61' }]}>{formatCurrency(p.gross_salary)}</Text>
-          </View>
-        </View>
-
-        {/* Deductions Breakdown Card */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-          <Text style={[styles.cardHeading, { color: colors.danger }]}>Deductions & Taxes</Text>
-          {p.deductions &&
-            Object.entries(p.deductions).map(([k, v]) => (
-              <View key={k} style={styles.row}>
-                <Text style={[styles.rowLabel, { color: colors.textSecondary }]}>
-                  {k.replace(/_/g, ' ').toUpperCase()}
-                </Text>
-                <Text style={[styles.rowVal, { color: colors.danger }]}>-{formatCurrency(v)}</Text>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Overtime</Text>
+                <Text style={styles.summaryVal}>: {otAmount.toFixed(2)}</Text>
               </View>
-            ))}
-
-          {p.lop_days > 0 && (
-            <View style={styles.row}>
-              <Text style={[styles.rowLabel, { color: colors.danger }]}>
-                Loss of Pay ({p.lop_days} days)
-              </Text>
-              <Text style={[styles.rowVal, { color: colors.danger }]}>-{formatCurrency(p.lop_amount)}</Text>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Other Allowance</Text>
+                <Text style={styles.summaryVal}>: {otherAllow.toFixed(2)}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={[styles.summaryLabel, { fontWeight: '800' }]}>Net Pay</Text>
+                <Text style={[styles.summaryVal, { fontWeight: '800' }]}>: {netSalary}</Text>
+              </View>
             </View>
-          )}
-
-          <View style={[styles.row, styles.totalRow, { borderTopColor: '#f1f5f9' }]}>
-            <Text style={[styles.totalLabel, { color: colors.danger }]}>Total Deductions</Text>
-            <Text style={[styles.totalVal, { color: colors.danger }]}>-{formatCurrency(totalDeductions)}</Text>
           </View>
         </View>
 
-        {/* Actions Button Bar */}
-        <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+        {/* Action Button */}
+        <View style={{ marginTop: 14 }}>
           <Button
-            title="Download PDF Statement"
+            title="Download / Print PDF Payslip"
             icon={<Download size={16} color="#FFF" />}
             onPress={handleDownloadPdf}
             loading={downloading}
-            style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 10 }}
+            style={{ backgroundColor: '#0D7377', borderRadius: 8 }}
           />
         </View>
       </ScrollView>
@@ -274,37 +326,155 @@ const styles = StyleSheet.create({
   downloadHeaderText: { color: '#FFF', fontWeight: '700', fontSize: 12 },
 
   content: { padding: 16, gap: 16, paddingBottom: 40 },
-  contentDesktop: { maxWidth: 680, alignSelf: 'center', width: '100%', padding: 32 },
+  contentDesktop: { maxWidth: 860, alignSelf: 'center', width: '100%', padding: 24 },
 
-  card: {
-    padding: 20,
-    borderRadius: 14,
+  /* Exact Paper Document Styling */
+  documentSlip: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#1e293b',
+    borderRadius: 4,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  slipHeader: {
+    alignItems: 'center',
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#1e293b',
+    paddingBottom: 8,
+    marginBottom: 10,
+  },
+  hospitalTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    color: '#0f172a',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  payslipPeriodTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: '#1e293b',
+    marginTop: 3,
+  },
+
+  /* 3-Column Metadata */
+  metaSection: {
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#1e293b',
+    paddingBottom: 10,
+    marginBottom: 12,
+  },
+  metaRow3: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  metaCol: {
+    flex: 1,
+    minWidth: 170,
+    gap: 3,
+  },
+  metaText: {
+    fontSize: 11,
+    color: '#0f172a',
+    fontWeight: '500',
+  },
+  metaLabel: {
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+
+  /* Grid Tables */
+  slipTable: {
     borderWidth: 1,
+    borderColor: '#1e293b',
+    minWidth: 700,
+    backgroundColor: '#FFF',
+  },
+  tableRowHeader: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e293b',
+    backgroundColor: '#f8fafc',
+  },
+  tableRowData: {
+    flexDirection: 'row',
+  },
+  tableCell: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRightWidth: 1,
+    borderRightColor: '#1e293b',
+    justifyContent: 'center',
+  },
+  cellSideHeader: {
+    width: 95,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'flex-start',
+  },
+  cellCol: {
+    width: 86,
+    alignItems: 'flex-end',
+  },
+  cellColEnd: {
+    width: 105,
+    alignItems: 'flex-end',
+    borderRightWidth: 0,
+  },
+  headerCellText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  dataCellText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0f172a',
+  },
+
+  /* Footer & Summary */
+  slipFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingTop: 10,
+    flexWrap: 'wrap',
     gap: 12,
   },
-  metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  periodHeading: { fontSize: 20, fontWeight: '800', letterSpacing: -0.4 },
-  cardHeading: { fontSize: 14, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
-
-  netPayCard: {
+  disclaimerText: {
+    fontSize: 10.5,
+    fontStyle: 'italic',
+    color: '#475569',
+    flex: 1,
+    minWidth: 200,
+    marginTop: 4,
+  },
+  summaryList: {
+    width: 200,
+    gap: 4,
+  },
+  summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 24,
-    borderRadius: 14,
   },
-  netPayLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
-  netPayAmount: { color: '#86f2e4', fontSize: 28, fontWeight: '800', letterSpacing: -0.5, marginTop: 2 },
-
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
-  rowLabel: { fontSize: 13, fontWeight: '500' },
-  rowVal: { fontSize: 13, fontWeight: '700' },
-  totalRow: { borderTopWidth: 1, paddingTop: 10, marginTop: 4 },
-  totalLabel: { fontSize: 14, fontWeight: '800' },
-  totalVal: { fontSize: 15, fontWeight: '800' },
-
-  infoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 4 },
-  infoCell: { minWidth: '45%', flex: 1 },
-  infoCellLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 2 },
-  infoCellVal: { fontSize: 13, fontWeight: '700' },
+  summaryLabel: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#1e293b',
+  },
+  summaryVal: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
 });
+

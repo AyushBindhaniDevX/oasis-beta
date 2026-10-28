@@ -221,12 +221,52 @@ export function calculateTds(annualBasic: number, taxConfig?: Record<string, any
   }
 }
 
+/**
+ * Overtime Hours to OT Days converter:
+ * After completion of regular 8-hour shift:
+ * 4 hours approved OT = 0.5 day OT (half-day OT)
+ * 7 hours approved OT = 1.0 day OT (one-day OT)
+ */
+export function calculateOtDaysFromHours(approvedHours: number): number {
+  if (approvedHours <= 0) return 0;
+  const fullDays = Math.floor(approvedHours / 7);
+  const remainder = approvedHours % 7;
+  let extra = 0;
+  if (remainder >= 4) {
+    extra = 0.5;
+  }
+  return fullDays + extra;
+}
+
 export async function calculateStatutoryForEmployee(
   emp: Employee,
   month: number,
   year: number,
   customLopDays?: number,
-  customOtUnits?: number
+  customOtUnits?: number,
+  customManualValues?: {
+    tds?: number;
+    other_allowances?: number;
+    other_deductions?: number;
+    offer_salary?: number;
+    present_days?: number;
+    off_days?: number;
+    pl_days?: number;
+    sl_days?: number;
+    cl_days?: number;
+    holiday_days?: number;
+    paid_days?: number;
+    ot_hours?: number;
+    basic?: number;
+    hra?: number;
+    conveyance?: number;
+    washing?: number;
+    special_allowance?: number;
+    gross_salary?: number;
+    pf?: number;
+    esi?: number;
+    pt?: number;
+  }
 ): Promise<{
   basic_salary: number;
   allowances: Record<string, number>;
@@ -243,6 +283,10 @@ export async function calculateStatutoryForEmployee(
   leave_days: number;
   holiday_days: number;
   paid_days: number;
+  pl_days: number;
+  cl_days: number;
+  sl_days: number;
+  lwp_days: number;
   basic: number;
   hra: number;
   conveyance: number;
@@ -251,22 +295,30 @@ export async function calculateStatutoryForEmployee(
   pt_tds: number;
   esi: number;
   pf: number;
+  tds: number;
   ot_ded: number;
   gross_deductions: number;
+  total_salary: number;
   ot_hours_or_days: number;
+  ot_hours: number;
   ot_amount: number;
   other_allowances: number;
   is_pf_eligible: boolean;
+  is_overtime_eligible: boolean;
   hospital_unit: string;
 }> {
   const taxConfig = (emp as any).tax_config || {};
-  const isPfEligible = emp.is_pf_eligible !== false && !taxConfig.epf_exempt;
+  const empType = (emp.employment_type || '').toLowerCase();
+  const isRegular = empType !== 'contractual' && empType !== 'contract';
+  const isPfEligible = isRegular && emp.is_pf_eligible === true && !taxConfig.epf_exempt;
   const isOvertimeEligible = emp.is_overtime_eligible === true || taxConfig.is_overtime_eligible === true;
-  const hospitalUnit = emp.hospital_unit || 'Shanti Memorial Hospital & Chikitsa Unit';
+  const hospitalUnit = emp.hospital_unit || 'Main Branch';
 
-  // Base monthly salary scale (SALARY DETAILS in Hospital Sheet)
-  const baseSalary = emp.basic_salary && emp.basic_salary > 0 ? emp.basic_salary : 25000;
-  const payableDays = 30;
+  // Base monthly salary scale (Offer Salary / SALARY DETAILS in Hospital Sheet)
+  const offerSalary = customManualValues?.offer_salary ?? (emp.basic_salary && emp.basic_salary > 0 ? emp.basic_salary : 25000);
+
+  // Requirement 2: Payable days = total calendar days of the respective month (30, 31, 28/29)
+  const payableDays = new Date(year, month, 0).getDate();
 
   // Compute actual attendance breakdown for the month
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
@@ -274,101 +326,184 @@ export async function calculateStatutoryForEmployee(
   const endYear = month === 12 ? year + 1 : year;
   const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
 
-  let presentDays = 26;
-  let offDays = 4;
-  let leaveDays = 0;
-  let holidayDays = 0;
+  // Holidays
+  let holidayDays = customManualValues?.holiday_days ?? 0;
+  if (customManualValues?.holiday_days === undefined) {
+    try {
+      const holidays = await getHolidaysForDateRange(startDate, endDate);
+      holidayDays = holidays.filter((h) => h.type !== 'optional').length;
+    } catch {}
+  }
 
-  try {
-    const holidays = await getHolidaysForDateRange(startDate, endDate);
-    holidayDays = holidays.filter((h) => h.type !== 'optional').length;
-
-    const attQ = query(
-      collection(db, 'attendance'),
-      where('employee_id', '==', emp.id)
-    );
-    const attSnap = await getDocs(attQ);
-    let matchedAttCount = 0;
-    attSnap.forEach((d) => {
-      const data = d.data();
-      if (data.date >= startDate && data.date < endDate) {
-        if (data.status === 'present' || data.status === 'late') {
-          matchedAttCount++;
+  // Leaves (PL, SL, CL)
+  let plDays = customManualValues?.pl_days ?? 0;
+  let slDays = customManualValues?.sl_days ?? 0;
+  let clDays = customManualValues?.cl_days ?? 0;
+  if (customManualValues?.pl_days === undefined && customManualValues?.sl_days === undefined && customManualValues?.cl_days === undefined) {
+    try {
+      const leaveQ = query(
+        collection(db, 'leave_requests'),
+        where('employee_id', '==', emp.id),
+        where('status', '==', 'approved')
+      );
+      const leaveSnap = await getDocs(leaveQ);
+      leaveSnap.forEach((d) => {
+        const data = d.data();
+        if (data.start_date >= startDate && data.start_date < endDate) {
+          const typeName = (data.leave_type_name || data.leave_type || '').toLowerCase();
+          const days = Number(data.days || 1);
+          if (typeName.includes('sick') || typeName.includes('sl') || typeName.includes('medical')) {
+            slDays += days;
+          } else if (typeName.includes('casual') || typeName.includes('cl')) {
+            clDays += days;
+          } else {
+            plDays += days;
+          }
         }
-      }
-    });
-    if (matchedAttCount > 0) {
+      });
+    } catch {}
+  }
+
+  // Weekly Offs (Standard 4 weekly offs per month)
+  const offDays = customManualValues?.off_days ?? 4;
+
+  // Present Days
+  let presentDays = customManualValues?.present_days ?? 0;
+  if (customManualValues?.present_days === undefined) {
+    let matchedAttCount = 0;
+    let attRecordsFound = false;
+    try {
+      const attQ = query(
+        collection(db, 'attendance'),
+        where('employee_id', '==', emp.id)
+      );
+      const attSnap = await getDocs(attQ);
+      attSnap.forEach((d) => {
+        const data = d.data();
+        if (data.date >= startDate && data.date < endDate) {
+          attRecordsFound = true;
+          if (data.status === 'present' || data.status === 'late') {
+            matchedAttCount += 1;
+          } else if (data.status === 'half_day') {
+            matchedAttCount += 0.5;
+          }
+        }
+      });
+    } catch {}
+
+    if (attRecordsFound) {
       presentDays = matchedAttCount;
+    } else {
+      // Default standard present days when punch log hasn't been individually created
+      presentDays = Math.max(0, payableDays - offDays - holidayDays - plDays - slDays - clDays);
     }
-  } catch {}
+  }
 
-  const paidDays = Math.min(payableDays, Math.max(0, presentDays + offDays + leaveDays + holidayDays));
-  const lopDays = customLopDays !== undefined ? customLopDays : Math.max(0, payableDays - paidDays);
-  const paidRatio = paidDays / payableDays;
+  // Requirement 1: Paid days = sum of Present Days, Weekly Offs, PL, SL, CL and Holidays
+  const calculatedPaidDays = presentDays + offDays + plDays + slDays + clDays + holidayDays;
+  const paidDays = customManualValues?.paid_days !== undefined
+    ? customManualValues.paid_days
+    : customLopDays !== undefined
+      ? Math.max(0, payableDays - customLopDays)
+      : Math.min(payableDays, Math.max(0, calculatedPaidDays));
 
-  // Gross Earnings Formula: Basic Salary + HRA + Conveyance Allowance + Washing Allowance + Special Allowance
-  const fullBasic = Math.round(baseSalary * 0.50); // 50% Basic
-  const fullHra = Math.round(baseSalary * 0.20); // 20% HRA
-  const fullConveyance = emp.conveyance_allowance ?? (baseSalary >= 25000 ? 1200 : baseSalary >= 18000 ? 800 : 350);
-  const fullWashing = emp.washing_allowance ?? (baseSalary >= 25000 ? 500 : 300);
-  const fullSpecialAllowance = Math.max(0, baseSalary - (fullBasic + fullHra + fullConveyance + fullWashing));
+  // LWP (Leave Without Pay)
+  const lwpDays = Math.max(0, payableDays - paidDays);
+  const lopDays = lwpDays;
+  const paidRatio = payableDays > 0 ? paidDays / payableDays : 0;
 
-  const basic = Math.round(fullBasic * paidRatio);
-  const hra = Math.round(fullHra * paidRatio);
-  const conveyance = Math.round(fullConveyance * paidRatio);
-  const washing = Math.round(fullWashing * paidRatio);
-  const specialAllowance = Math.round(fullSpecialAllowance * paidRatio);
+  // Requirement 2: Gross salary calculated proportionately based on paid days against total calendar days
+  const grossEarnings = customManualValues?.gross_salary ?? Math.round(offerSalary * paidRatio);
 
-  const grossEarnings = basic + hra + conveyance + washing + specialAllowance;
+  // Requirement 3: Earnings Breakup - Basic (50%), HRA (20%), Conveyance, Washing, and Special Allowance
+  // calculated automatically in proportion to paid days
+  const fullBasic = Math.round(offerSalary * 0.50); // 50% Basic
+  const fullHra = Math.round(offerSalary * 0.20); // 20% HRA
+  const fullConveyance = customManualValues?.conveyance !== undefined
+    ? customManualValues.conveyance
+    : (emp.conveyance_allowance ?? (offerSalary >= 30000 ? 2000 : offerSalary >= 20000 ? 1200 : offerSalary >= 15000 ? 800 : 350));
+  const fullWashing = customManualValues?.washing !== undefined
+    ? customManualValues.washing
+    : (emp.washing_allowance ?? (offerSalary >= 30000 ? 1000 : offerSalary >= 20000 ? 500 : 300));
+  const fullSpecialAllowance = Math.max(0, offerSalary - (fullBasic + fullHra + fullConveyance + fullWashing));
 
-  // Gross Deductions Formula: PF + ESIC + TDS/PT + Miscellaneous Deductions (OT. DED)
+  const basic = customManualValues?.basic ?? Math.round(fullBasic * paidRatio);
+  const hra = customManualValues?.hra ?? Math.round(fullHra * paidRatio);
+  const conveyance = customManualValues?.conveyance ?? Math.round(fullConveyance * paidRatio);
+  const washing = customManualValues?.washing ?? Math.round(fullWashing * paidRatio);
+  // Ensure the components sum up exactly to the proportioned Gross Earnings
+  const specialAllowance = customManualValues?.special_allowance ?? Math.max(0, grossEarnings - (basic + hra + conveyance + washing));
+
+  // Requirements 4 & 5: EPF Calculation & Applicability
+  // EPF = 12% of Basic Salary for regular employees only.
+  // For employees whose Basic Salary exceeds ₹25,000, EPF calculation base is capped at ₹25,000 (maximum of Rs. 3,000).
+  // Deduction enabled ONLY for selected regular employees. Employees with Basic > 25,000 not enrolled in EPF have 0 EPF.
   let pf = 0;
-  if (isPfEligible) {
-    // 12% of Basic, statutory ceiling capped at ₹1,800 or actual
-    const calculatedPf = Math.round(basic * 0.12);
-    pf = basic > 15000 ? Math.min(1800, calculatedPf) : calculatedPf;
+  if (customManualValues?.pf !== undefined) {
+    pf = customManualValues.pf;
+  } else if (isPfEligible) {
+    const epfWageBase = Math.min(basic, 25000);
+    pf = Math.round(epfWageBase * 0.12);
   }
 
-  // ESIC: 0.75% of Gross if Gross <= ₹21,000, 0 otherwise
+  // Requirement 6: ESIC Calculation: 0.75% of ESIC Salary, where ESIC Salary = Gross Salary - Washing Allowance
+  const esicSalary = Math.max(0, grossEarnings - washing);
   let esi = 0;
-  if (baseSalary <= 21000) {
-    esi = Math.round(grossEarnings * 0.0075);
+  const isEsiExempt = taxConfig.esi_exempt === true || emp.is_esi_eligible === false;
+  if (customManualValues?.esi !== undefined) {
+    esi = customManualValues.esi;
+  } else if (!isEsiExempt) {
+    esi = Math.round(esicSalary * 0.0075);
   }
 
-  // Professional Tax / TDS
-  let pt = 0;
-  if (taxConfig.pt_amount != null && !isNaN(Number(taxConfig.pt_amount))) {
-    pt = Number(taxConfig.pt_amount);
-  } else if (baseSalary > 20000) {
-    pt = 0; // TDS handles higher slabs or state-specific
-  } else if (baseSalary >= 18000) {
-    pt = 146;
-  } else if (baseSalary >= 15000) {
-    pt = 124;
-  } else if (baseSalary >= 10000) {
-    pt = 90;
-  }
+  // Requirement 7: TDS should be entered manually
+  const tds = customManualValues?.tds !== undefined
+    ? customManualValues.tds
+    : Number(taxConfig.manual_tds ?? taxConfig.tds_amount ?? 0);
 
-  const tds = calculateTds(basic, taxConfig);
+  // Professional Tax (PT)
+  const pt = customManualValues?.pt !== undefined ? customManualValues.pt : 0;
   const ptTds = pt + tds;
 
-  // Miscellaneous Deductions (OT. DED in Hospital Sheet)
-  const otDed = emp.ot_deduction ?? Number(taxConfig.ot_deduction ?? 0);
+  // Miscellaneous / Other Deductions
+  const otDed = customManualValues?.other_deductions !== undefined
+    ? customManualValues.other_deductions
+    : (emp.ot_deduction ?? Number(taxConfig.ot_deduction ?? 0));
   const grossDeductions = pf + esi + ptTds + otDed;
 
-  // Overtime Calculation (Requirement 5: designated employees only, after scheduled 8-hour shift)
-  const otUnits = customOtUnits !== undefined ? customOtUnits : Number((emp as any).ot_hours_or_days ?? 0);
+  // Requirement 8: Overtime (OT)
+  // Calculated ONLY for employees authorized for overtime.
+  // After completion of regular 8-hour shift:
+  // 4 hours of approved OT = 0.5 day OT, 7 hours of approved OT = 1.0 day OT.
+  let otDays = 0;
   let otAmount = 0;
-  if (isOvertimeEligible && otUnits > 0) {
-    // (Gross Salary / Payable Days) * OT units
-    otAmount = Math.round((baseSalary / payableDays) * otUnits);
+  const inputOtHours = customManualValues?.ot_hours ?? Number((emp as any).ot_hours ?? 0);
+
+  if (isOvertimeEligible) {
+    if (customOtUnits !== undefined) {
+      otDays = customOtUnits;
+    } else if (inputOtHours > 0) {
+      otDays = calculateOtDaysFromHours(inputOtHours);
+    } else {
+      otDays = Number((emp as any).ot_hours_or_days ?? 0);
+    }
+
+    if (otDays > 0) {
+      const dailyRate = payableDays > 0 ? offerSalary / payableDays : 0;
+      otAmount = Math.round(dailyRate * otDays);
+    }
   }
 
-  // Other Allowances
-  const otherAllowances = Number((emp as any).other_allowances ?? 0);
+  // Requirement 9: Other allowances should be entered manually
+  const otherAllowances = customManualValues?.other_allowances !== undefined
+    ? customManualValues.other_allowances
+    : Number((emp as any).other_allowances ?? 0);
 
-  // Net Pay Calculation: Gross Earnings - Gross Deductions + Overtime Pay + Other Allowances
-  const netSalary = Math.max(0, grossEarnings - grossDeductions + otAmount + otherAllowances);
+  // Total Salary & Net Pay
+  // Total Salary = Gross Earnings - Gross Deductions
+  // Net Pay = Total Salary + Overtime Pay + Other Allowances
+  const totalSalary = Math.max(0, grossEarnings - grossDeductions);
+  const netSalary = Math.max(0, totalSalary + otAmount + otherAllowances);
 
   const allowances: Record<string, number> = {
     'Basic': basic,
@@ -387,8 +522,11 @@ export async function calculateStatutoryForEmployee(
   const deductions: Record<string, number> = {
     'PF': pf,
     'ESIC': esi,
-    'PT/TDS': ptTds,
+    'TDS': tds,
   };
+  if (pt > 0) {
+    deductions['Professional Tax'] = pt;
+  }
   if (otDed > 0) {
     deductions['Miscellaneous Deductions'] = otDed;
   }
@@ -398,16 +536,20 @@ export async function calculateStatutoryForEmployee(
     allowances,
     deductions,
     lop_days: lopDays,
-    lop_amount: Math.round((baseSalary / payableDays) * lopDays),
+    lop_amount: Math.round((offerSalary / payableDays) * lopDays),
     gross_salary: grossEarnings,
     net_salary: netSalary,
-    salary_details: baseSalary,
+    salary_details: offerSalary,
     payable_days: payableDays,
     present_days: presentDays,
     off_days: offDays,
-    leave_days: leaveDays,
+    leave_days: plDays + slDays + clDays,
+    pl_days: plDays,
+    cl_days: clDays,
+    sl_days: slDays,
     holiday_days: holidayDays,
     paid_days: paidDays,
+    lwp_days: lwpDays,
     basic,
     hra,
     conveyance,
@@ -416,12 +558,16 @@ export async function calculateStatutoryForEmployee(
     pt_tds: ptTds,
     esi,
     pf,
+    tds,
     ot_ded: otDed,
     gross_deductions: grossDeductions,
-    ot_hours_or_days: otUnits,
+    total_salary: totalSalary,
+    ot_hours_or_days: otDays,
+    ot_hours: inputOtHours,
     ot_amount: otAmount,
     other_allowances: otherAllowances,
     is_pf_eligible: isPfEligible,
+    is_overtime_eligible: isOvertimeEligible,
     hospital_unit: hospitalUnit,
   };
 }
@@ -495,9 +641,10 @@ export async function createPayrollPeriod(month: number, year: number, orgId: st
       leave_days: breakdown.leave_days,
       holiday_days: breakdown.holiday_days,
       paid_days: breakdown.paid_days,
-      pl_days: 0,
-      cl_days: 0,
-      sl_days: Math.max(0, (breakdown.payable_days || 30) - (breakdown.paid_days || 30)),
+      pl_days: breakdown.pl_days,
+      cl_days: breakdown.cl_days,
+      sl_days: breakdown.sl_days,
+      lwp_days: breakdown.lwp_days,
       basic: breakdown.basic,
       hra: breakdown.hra,
       conveyance: breakdown.conveyance,
@@ -506,15 +653,18 @@ export async function createPayrollPeriod(month: number, year: number, orgId: st
       pt_tds: breakdown.pt_tds,
       esi: breakdown.esi,
       pf: breakdown.pf,
+      tds: breakdown.tds,
       ot_ded: breakdown.ot_ded,
       gross_deductions: breakdown.gross_deductions,
       total_deductions: breakdown.gross_deductions,
-      total_salary: Math.max(0, breakdown.gross_salary - breakdown.gross_deductions),
+      total_salary: breakdown.total_salary,
       ot_hours_or_days: breakdown.ot_hours_or_days,
+      ot_hours: breakdown.ot_hours,
       ot_amount: breakdown.ot_amount,
       other_allowances: breakdown.other_allowances,
       is_pf_eligible: breakdown.is_pf_eligible,
-      hospital_unit: emp.hospital_unit || breakdown.hospital_unit || 'Shanti Memorial Hospital',
+      is_overtime_eligible: breakdown.is_overtime_eligible,
+      hospital_unit: emp.hospital_unit || breakdown.hospital_unit || 'Main Branch',
       employment_type: emp.employment_type || (breakdown.is_pf_eligible ? 'Regular' : 'Contractual'),
       status: 'draft',
       created_at: now,
@@ -540,11 +690,32 @@ export async function recalculatePeriodEntries(periodId: string): Promise<void> 
     const empSnap = await getDoc(doc(db, 'employees', entry.employee_id));
     if (empSnap.exists()) {
       const emp = { id: empSnap.id, ...empSnap.data() } as Employee;
-      const breakdown = await calculateStatutoryForEmployee(emp, period.month, period.year, entry.lop_days, entry.ot_hours_or_days);
+      const breakdown = await calculateStatutoryForEmployee(
+        emp,
+        period.month,
+        period.year,
+        entry.lop_days,
+        entry.ot_hours_or_days,
+        {
+          tds: entry.tds ?? (entry.deductions?.['TDS'] || entry.deductions?.['tax'] || 0),
+          other_allowances: entry.other_allowances ?? (entry.allowances?.['Other Allowances'] || 0),
+          other_deductions: entry.ot_ded ?? (entry.deductions?.['Miscellaneous Deductions'] || 0),
+          offer_salary: entry.salary_details,
+          present_days: entry.present_days,
+          off_days: entry.off_days,
+          pl_days: entry.pl_days,
+          sl_days: entry.sl_days,
+          cl_days: entry.cl_days,
+          holiday_days: entry.holiday_days,
+          paid_days: entry.paid_days,
+          ot_hours: entry.ot_hours,
+        }
+      );
       await updateDoc(doc(db, 'payroll', d.id), {
         basic_salary: breakdown.basic_salary,
         allowances: breakdown.allowances,
         deductions: breakdown.deductions,
+        lop_days: breakdown.lop_days,
         lop_amount: breakdown.lop_amount,
         gross_salary: breakdown.gross_salary,
         net_salary: breakdown.net_salary,
@@ -555,6 +726,10 @@ export async function recalculatePeriodEntries(periodId: string): Promise<void> 
         leave_days: breakdown.leave_days,
         holiday_days: breakdown.holiday_days,
         paid_days: breakdown.paid_days,
+        pl_days: breakdown.pl_days,
+        cl_days: breakdown.cl_days,
+        sl_days: breakdown.sl_days,
+        lwp_days: breakdown.lwp_days,
         basic: breakdown.basic,
         hra: breakdown.hra,
         conveyance: breakdown.conveyance,
@@ -563,12 +738,17 @@ export async function recalculatePeriodEntries(periodId: string): Promise<void> 
         pt_tds: breakdown.pt_tds,
         esi: breakdown.esi,
         pf: breakdown.pf,
+        tds: breakdown.tds,
         ot_ded: breakdown.ot_ded,
         gross_deductions: breakdown.gross_deductions,
+        total_deductions: breakdown.gross_deductions,
+        total_salary: breakdown.total_salary,
         ot_hours_or_days: breakdown.ot_hours_or_days,
+        ot_hours: breakdown.ot_hours,
         ot_amount: breakdown.ot_amount,
         other_allowances: breakdown.other_allowances,
         is_pf_eligible: breakdown.is_pf_eligible,
+        is_overtime_eligible: breakdown.is_overtime_eligible,
         hospital_unit: breakdown.hospital_unit,
         updated_at: now,
       });
