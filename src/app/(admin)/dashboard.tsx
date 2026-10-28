@@ -162,15 +162,16 @@ export default function AdminDashboard() {
 
   // ── Compute Visual Analytics Data ──────────────────────────────────────────
   const unitBreakdown = useMemo(() => {
+    const defaultUnitName = workplaces[0]?.name || 'Unassigned';
     const counts: Record<string, number> = {};
     employees.forEach((e) => {
-      const u = (e.hospital_unit || (e as any).unit || 'Headquarters').trim();
+      const u = (e.hospital_unit || (e as any).unit || e.workplace?.name || defaultUnitName).trim();
       counts[u] = (counts[u] || 0) + 1;
     });
     const total = Math.max(1, employees.length);
     const wpNames = workplaces.map((w) => w.name.trim()).filter(Boolean);
     const discoveredUnits = Array.from(new Set([...wpNames, ...Object.keys(counts)])).filter(Boolean);
-    const unitList = discoveredUnits.length > 0 ? discoveredUnits : ['Headquarters', 'Branch Office'];
+    const unitList = discoveredUnits.length > 0 ? discoveredUnits : wpNames;
     const palette = [
       { color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },
       { color: '#0D9488', bg: '#F0FDFA', border: '#99F6E4' },
@@ -215,11 +216,11 @@ export default function AdminDashboard() {
   const [selectedDeptMetric, setSelectedDeptMetric] = useState<'headcount' | 'payroll'>('headcount');
   const [selectedDeptName, setSelectedDeptName] = useState<string | null>(null);
 
-  // ── Filtered workforce based on interactive unit filter ───────────────────
   const filteredEmployees = useMemo(() => {
     if (selectedUnitFilter === 'all') return employees;
-    return employees.filter(e => (e.hospital_unit || (e as any).unit || 'Headquarters').trim() === selectedUnitFilter);
-  }, [employees, selectedUnitFilter]);
+    const defaultUnitName = workplaces[0]?.name || 'Unassigned';
+    return employees.filter(e => (e.hospital_unit || (e as any).unit || e.workplace?.name || defaultUnitName).trim() === selectedUnitFilter);
+  }, [employees, selectedUnitFilter, workplaces]);
 
   const filteredCategoryBreakdown = useMemo(() => {
     let regular = 0;

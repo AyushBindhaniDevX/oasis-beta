@@ -19,10 +19,11 @@ export const MONTHS = [
 ];
 
 export const BUSINESS_UNITS = [
-  'Headquarters',
+  'Shanti Memorial Hospital',
+  'Gopal Trust',
+  'Chikitsa',
   'Branch Office',
   'Operations Unit',
-  'Corporate Campus',
   'Main Branch',
 ] as const;
 
