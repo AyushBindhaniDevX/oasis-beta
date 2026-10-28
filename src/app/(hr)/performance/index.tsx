@@ -48,6 +48,19 @@ import type {
   AppraisalKpi,
 } from '@/types';
 import {
+  getAppraisalCycles,
+  createAppraisalCycle,
+  updateAppraisalCycle,
+  deleteAppraisalCycle,
+  downloadAppraisalQuestionsTemplate,
+  importAppraisalQuestionsFromExcel,
+  launchAppraisalCycle,
+  AppraisalCycle,
+  AppraisalCycleType,
+  AppraisalQuestion,
+} from '@/lib/services/appraisalCycles';
+import { HOSPITAL_UNITS } from '@/constants/config';
+import {
   Award,
   Target,
   TrendingUp,
@@ -67,6 +80,13 @@ import {
   Heart,
   Sliders,
   Check,
+  Calendar,
+  FileSpreadsheet,
+  Download,
+  Upload,
+  Play,
+  RefreshCw,
+  X,
 } from 'lucide-react-native';
 
 export const PRESET_KPIS: Record<string, AppraisalKpi[]> = {
@@ -101,11 +121,12 @@ export default function HRPerformanceScreen() {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'goals' | 'appraisals' | 'kudos' | 'analytics'>('goals');
+  const [activeTab, setActiveTab] = useState<'goals' | 'appraisals' | 'cycles' | 'kudos' | 'analytics'>('goals');
 
   // Data
   const [goals, setGoals] = useState<Goal[]>([]);
   const [appraisals, setAppraisals] = useState<AppraisalReview[]>([]);
+  const [cycles, setCycles] = useState<AppraisalCycle[]>([]);
   const [kudosList, setKudosList] = useState<Kudos[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
 
@@ -120,6 +141,9 @@ export default function HRPerformanceScreen() {
   const [showAppraisalModal, setShowAppraisalModal] = useState(false);
   const [showManagerEvalModal, setShowManagerEvalModal] = useState(false);
   const [showKudosModal, setShowKudosModal] = useState(false);
+  const [showCycleModal, setShowCycleModal] = useState(false);
+  const [cycleModalMode, setCycleModalMode] = useState<'create' | 'edit'>('create');
+  const [editingCycleId, setEditingCycleId] = useState<string | null>(null);
   const [selectedAppraisal, setSelectedAppraisal] = useState<AppraisalReview | null>(null);
 
   // New Goal Form State
@@ -143,6 +167,22 @@ export default function HRPerformanceScreen() {
   const [customKpiWeight, setCustomKpiWeight] = useState('25');
   const [savingAppraisal, setSavingAppraisal] = useState(false);
 
+  // Appraisal Cycle Scheduling Form State
+  const [cycleName, setCycleName] = useState('Annual Appraisal 2026-27');
+  const [cyclePeriod, setCyclePeriod] = useState('FY 2026-27');
+  const [cycleType, setCycleType] = useState<AppraisalCycleType>('annual');
+  const [cycleStartDate, setCycleStartDate] = useState('2026-11-01');
+  const [cycleSelfDeadline, setCycleSelfDeadline] = useState('2026-11-20');
+  const [cycleManagerDeadline, setCycleManagerDeadline] = useState('2026-11-30');
+  const [cycleUnitScope, setCycleUnitScope] = useState('all');
+  const [cycleQuestions, setCycleQuestions] = useState<AppraisalQuestion[]>([]);
+  const [cycleNewQStatement, setCycleNewQStatement] = useState('');
+  const [cycleNewQCategory, setCycleNewQCategory] = useState('Core Competency');
+  const [cycleNewQWeight, setCycleNewQWeight] = useState('20');
+  const [cycleNewQRubric, setCycleNewQRubric] = useState('');
+  const [savingCycle, setSavingCycle] = useState(false);
+  const [cycleActionProgress, setCycleActionProgress] = useState(false);
+
   // Manager Evaluation Form State (With Custom KPI Ratings)
   const [evalKpiRatings, setEvalKpiRatings] = useState<Record<string, number>>({});
   const [evalTech, setEvalTech] = useState(4);
@@ -163,14 +203,16 @@ export default function HRPerformanceScreen() {
   const loadData = useCallback(async () => {
     try {
       const orgId = tenantOrg?.id || profile?.organization_id;
-      const [gList, aList, kList, eList] = await Promise.all([
+      const [gList, aList, cList, kList, eList] = await Promise.all([
         getGoals(orgId ? { organizationId: orgId } : undefined),
         getAppraisals(orgId ? { organizationId: orgId } : undefined),
+        getAppraisalCycles(orgId || 'default'),
         getKudos(),
         getEmployees(orgId ? { organization_id: orgId } : undefined),
       ]);
       setGoals(gList);
       setAppraisals(aList);
+      setCycles(cList);
       setKudosList(kList);
       setEmployees(eList);
       if (eList.length > 0 && !newAppraisalEmpId) {
@@ -442,6 +484,171 @@ export default function HRPerformanceScreen() {
     }
   };
 
+  // ----------------------------------------------------
+  // APPRAISAL CYCLE & QUESTION BANK HANDLERS
+  // ----------------------------------------------------
+  const handleDownloadQuestionsTemplate = () => {
+    try {
+      downloadAppraisalQuestionsTemplate();
+    } catch (err: any) {
+      Alert.alert('Download Error', err.message || 'Failed to download Excel template.');
+    }
+  };
+
+  const handleUploadQuestionsExcel = async () => {
+    setCycleActionProgress(true);
+    try {
+      const res = await importAppraisalQuestionsFromExcel();
+      if (res?.questions && res.questions.length > 0) {
+        setCycleQuestions(res.questions);
+        Alert.alert('Excel Imported', `Successfully loaded ${res.questions.length} evaluation questions from Excel template.`);
+      }
+    } catch (err: any) {
+      Alert.alert('Import Failed', err.message || 'Failed to parse Excel file.');
+    } finally {
+      setCycleActionProgress(false);
+    }
+  };
+
+  const handleOpenScheduleCycle = () => {
+    setCycleModalMode('create');
+    setEditingCycleId(null);
+    setCycleName('Annual Appraisal 2026-27');
+    setCyclePeriod('FY 2026-27');
+    setCycleType('annual');
+    setCycleStartDate('2026-11-01');
+    setCycleSelfDeadline('2026-11-20');
+    setCycleManagerDeadline('2026-11-30');
+    setCycleUnitScope('all');
+    setCycleQuestions([
+      { id: 'q_1', category: 'Core Delivery', question: 'Consistently meets project and operational delivery deadlines with accuracy.', weightage: 20, max_score: 5, description: '1: Poor, 3: Met Expectation, 5: Exceeded' },
+      { id: 'q_2', category: 'Technical Competence', question: 'Demonstrates deep functional mastery and applies best technical practices.', weightage: 20, max_score: 5, description: '1: Inadequate skills, 5: Industry leading' },
+      { id: 'q_3', category: 'Teamwork & Ethics', question: 'Fosters collaboration, actively assists peers, and models company values.', weightage: 20, max_score: 5, description: '1: Disruptive, 5: Cultural pillar' },
+      { id: 'q_4', category: 'Problem Solving & Initiative', question: 'Proactively identifies systemic bottlenecks and creates robust solutions.', weightage: 20, max_score: 5, description: '1: Passive, 5: High initiative' },
+      { id: 'q_5', category: 'Communication & Documentation', question: 'Maintains clear communication, comprehensive documentation, and prompt updates.', weightage: 20, max_score: 5, description: '1: Unclear, 5: Exemplary clarity' },
+    ]);
+    setShowCycleModal(true);
+  };
+
+  const handleAddQuestionToCycle = () => {
+    if (!cycleNewQStatement.trim()) {
+      Alert.alert('Required', 'Please enter question statement or metric description.');
+      return;
+    }
+    const newQ: AppraisalQuestion = {
+      id: `q_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      category: cycleNewQCategory.trim() || 'General',
+      question: cycleNewQStatement.trim(),
+      weightage: parseFloat(cycleNewQWeight) || 20,
+      max_score: 5,
+      description: cycleNewQRubric.trim() || '1 to 5 Likert scale assessment',
+    };
+    setCycleQuestions((prev) => [...prev, newQ]);
+    setCycleNewQStatement('');
+    setCycleNewQRubric('');
+  };
+
+  const handleRemoveQuestionFromCycle = (id: string) => {
+    setCycleQuestions((prev) => prev.filter((q) => q.id !== id));
+  };
+
+  const handleSaveCycle = async () => {
+    if (!cycleName.trim() || !cyclePeriod.trim()) {
+      Alert.alert('Required', 'Please specify appraisal cycle title and review period.');
+      return;
+    }
+    if (cycleQuestions.length === 0) {
+      Alert.alert('Questions Required', 'Please configure or upload questions for this appraisal cycle.');
+      return;
+    }
+    setSavingCycle(true);
+    try {
+      const orgId = tenantOrg?.id || profile?.organization_id || 'default';
+      const totalWeight = cycleQuestions.reduce((a, b) => a + (b.weightage || 0), 0);
+      if (cycleModalMode === 'edit' && editingCycleId) {
+        await updateAppraisalCycle(editingCycleId, {
+          name: cycleName.trim(),
+          review_period: cyclePeriod.trim(),
+          cycle_type: cycleType,
+          start_date: cycleStartDate,
+          self_review_deadline: cycleSelfDeadline,
+          manager_review_deadline: cycleManagerDeadline,
+          target_unit: cycleUnitScope,
+          questions: cycleQuestions,
+          total_questions: cycleQuestions.length,
+          total_weightage: totalWeight,
+        });
+      } else {
+        await createAppraisalCycle({
+          name: cycleName.trim(),
+          review_period: cyclePeriod.trim(),
+          cycle_type: cycleType,
+          start_date: cycleStartDate,
+          self_review_deadline: cycleSelfDeadline,
+          manager_review_deadline: cycleManagerDeadline,
+          target_unit: cycleUnitScope,
+          questions: cycleQuestions,
+          status: 'scheduled',
+          organization_id: orgId,
+          total_questions: cycleQuestions.length,
+          total_weightage: totalWeight,
+        });
+      }
+      setShowCycleModal(false);
+      await loadData();
+      Alert.alert('Success', 'Appraisal cycle configured successfully.');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to save appraisal cycle.');
+    } finally {
+      setSavingCycle(false);
+    }
+  };
+
+  const handleLaunchCycleDirectly = async (cycle: AppraisalCycle) => {
+    Alert.alert(
+      'Launch Appraisal Cycle',
+      `Launch "${cycle.name}"? This will create evaluation reviews for all active employees in scope with pre-set questions from the Question Bank.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Launch Now',
+          style: 'default',
+          onPress: async () => {
+            try {
+              setCycleActionProgress(true);
+              const orgId = tenantOrg?.id || profile?.organization_id || 'default';
+              const result = await launchAppraisalCycle(cycle, orgId);
+              await loadData();
+              Alert.alert('Cycle Launched', result.message || `Appraisal cycle launched for ${result.initiatedCount} employees.`);
+            } catch (err: any) {
+              Alert.alert('Launch Failed', err.message || 'Failed to launch cycle.');
+            } finally {
+              setCycleActionProgress(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteCycleRecord = async (id: string) => {
+    Alert.alert('Delete Cycle', 'Are you sure you want to remove this cycle configuration?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteAppraisalCycle(id);
+            await loadData();
+          } catch (err: any) {
+            Alert.alert('Error', err.message || 'Failed to delete cycle.');
+          }
+        },
+      },
+    ]);
+  };
+
   if (loading) return <LoadingState />;
 
   // Computed metrics
@@ -534,6 +741,16 @@ export default function HRPerformanceScreen() {
             <Award size={16} color={activeTab === 'appraisals' ? colors.primary : colors.textSecondary} />
             <Text style={[styles.tabBtnText, { color: activeTab === 'appraisals' ? colors.primary : colors.textSecondary }]}>
               Appraisal Reviews ({appraisals.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setActiveTab('cycles')}
+            style={[styles.tabBtn, activeTab === 'cycles' && [styles.tabBtnActive, { borderBottomColor: colors.primary }]]}
+          >
+            <Calendar size={16} color={activeTab === 'cycles' ? colors.primary : colors.textSecondary} />
+            <Text style={[styles.tabBtnText, { color: activeTab === 'cycles' ? colors.primary : colors.textSecondary }]}>
+              Cycles & Question Bank ({cycles.length})
             </Text>
           </TouchableOpacity>
 
@@ -818,7 +1035,209 @@ export default function HRPerformanceScreen() {
         )}
 
         {/* ---------------------------------------------------- */}
-        {/* TAB 3: RECOGNITION & KUDOS */}
+        {/* TAB 3: APPRAISAL CYCLES & QUESTION BANK */}
+        {/* ---------------------------------------------------- */}
+        {activeTab === 'cycles' && (
+          <View style={{ gap: 16 }}>
+            {/* Header & Quick Action Row */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+              <View style={{ flex: 1, minWidth: 260 }}>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text }}>Appraisal Cycles & Question Bank</Text>
+                <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 2 }}>
+                  Schedule review periods, pre-set evaluation questions in Excel, and launch cycles.
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <TouchableOpacity
+                  onPress={handleDownloadQuestionsTemplate}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingHorizontal: 12,
+                    paddingVertical: 9,
+                    borderRadius: 8,
+                    backgroundColor: '#ECFDF5',
+                    borderWidth: 1,
+                    borderColor: '#A7F3D0',
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <FileSpreadsheet size={16} color="#059669" />
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#059669' }}>Download Example Template (.xlsx)</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleOpenScheduleCycle}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingHorizontal: 14,
+                    paddingVertical: 9,
+                    borderRadius: 8,
+                    backgroundColor: colors.primary,
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Plus size={16} color="#FFFFFF" />
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFFFFF' }}>Schedule Appraisal Cycle</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {cycles.length === 0 ? (
+              <Card style={styles.emptyCard}>
+                <FileSpreadsheet size={44} color="#059669" style={{ marginBottom: 12 }} />
+                <Text style={{ fontSize: 17, fontWeight: '700', color: colors.text }}>No Appraisal Cycles Scheduled Yet</Text>
+                <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 4, maxWidth: 500, textAlign: 'center', lineHeight: 18 }}>
+                  Schedule your next evaluation cycle with pre-set questions. You can download the sample questions template (.xlsx) with instructions, fill it in Excel, and upload it directly into your cycle.
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 18, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <Button
+                    title="Download Sample Questions (.xlsx)"
+                    variant="outline"
+                    onPress={handleDownloadQuestionsTemplate}
+                  />
+                  <Button
+                    title="+ Schedule Appraisal Cycle"
+                    onPress={handleOpenScheduleCycle}
+                    style={{ backgroundColor: colors.primary }}
+                  />
+                </View>
+              </Card>
+            ) : (
+              <View style={{ gap: 14 }}>
+                {cycles.map((c) => {
+                  const totalWeight = (c.questions || []).reduce((acc, q) => acc + (q.weightage || 0), 0);
+                  const isScheduled = c.status === 'scheduled';
+                  const isActive = c.status === 'active';
+                  const isDraft = c.status === 'draft';
+                  const isClosed = c.status === 'closed';
+
+                  return (
+                    <Card key={c.id} style={{ padding: 18, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', gap: 14 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                        <View style={{ flex: 1, minWidth: 260 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <Text style={{ fontSize: 17, fontWeight: '800', color: colors.text }}>{c.name}</Text>
+                            <Badge label={c.review_period} variant="neutral" />
+                            <Badge
+                              label={String(c.cycle_type || 'annual').toUpperCase()}
+                              variant="accentLight"
+                            />
+                            <Badge
+                              label={String(c.status || 'scheduled').toUpperCase()}
+                              variant={isActive ? 'successLight' : isScheduled ? 'warningLight' : isClosed ? 'neutral' : 'neutral'}
+                            />
+                          </View>
+                          <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 4 }}>
+                            Review Scope: <Text style={{ fontWeight: '600', color: colors.text }}>{c.target_unit === 'all' || !c.target_unit ? 'All Units / Sub-Brands' : c.target_unit}</Text>
+                          </Text>
+                        </View>
+
+                        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                          {!isActive && !isClosed && (
+                            <TouchableOpacity
+                              onPress={() => handleLaunchCycleDirectly(c)}
+                              disabled={cycleActionProgress}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 6,
+                                paddingHorizontal: 12,
+                                paddingVertical: 8,
+                                borderRadius: 8,
+                                backgroundColor: '#16a34a',
+                              }}
+                              activeOpacity={0.8}
+                            >
+                              <Play size={14} color="#FFF" />
+                              <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFF' }}>Launch Cycle</Text>
+                            </TouchableOpacity>
+                          )}
+                          <TouchableOpacity
+                            onPress={() => handleDeleteCycleRecord(c.id)}
+                            style={{ padding: 8, borderRadius: 8, borderWidth: 1, borderColor: '#fee2e2', backgroundColor: '#fff5f5' }}
+                          >
+                            <Trash2 size={16} color="#dc2626" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+
+                      {/* Timeline Details */}
+                      <View style={{ flexDirection: 'row', gap: 16, flexWrap: 'wrap', backgroundColor: '#f8fafc', padding: 12, borderRadius: 8 }}>
+                        <View style={{ minWidth: 120 }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textSecondary }}>START DATE</Text>
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text, marginTop: 2 }}>{formatDate(c.start_date)}</Text>
+                        </View>
+                        <View style={{ minWidth: 140 }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textSecondary }}>SELF-REVIEW DEADLINE</Text>
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text, marginTop: 2 }}>{formatDate(c.self_review_deadline)}</Text>
+                        </View>
+                        <View style={{ minWidth: 140 }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textSecondary }}>MANAGER DEADLINE</Text>
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text, marginTop: 2 }}>{formatDate(c.manager_review_deadline)}</Text>
+                        </View>
+                        <View style={{ minWidth: 120 }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textSecondary }}>QUESTION BANK</Text>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#0284c7', marginTop: 2 }}>
+                            {c.questions?.length || 0} Questions ({totalWeight}%)
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Questions List preview */}
+                      {c.questions && c.questions.length > 0 && (
+                        <View style={{ gap: 6 }}>
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                            Configured Evaluation Questions ({c.questions.length}):
+                          </Text>
+                          <View style={{ gap: 6 }}>
+                            {c.questions.map((q, qIdx) => (
+                              <View
+                                key={q.id || qIdx}
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'flex-start',
+                                  justifyContent: 'space-between',
+                                  padding: 10,
+                                  borderRadius: 8,
+                                  backgroundColor: '#FFFFFF',
+                                  borderWidth: 1,
+                                  borderColor: '#e2e8f0',
+                                  gap: 10,
+                                }}
+                              >
+                                <View style={{ flex: 1, gap: 2 }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <Badge label={q.category} variant="neutral" />
+                                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>{q.question}</Text>
+                                  </View>
+                                  {q.description && (
+                                    <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                                      Rubric: {q.description}
+                                    </Text>
+                                  )}
+                                </View>
+                                <View style={{ backgroundColor: '#EEF2FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#4F46E5' }}>{q.weightage}%</Text>
+                                </View>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      )}
+                    </Card>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* TAB 4: RECOGNITION & KUDOS */}
         {/* ---------------------------------------------------- */}
         {activeTab === 'kudos' && (
           <View style={{ gap: 16 }}>
@@ -1358,6 +1777,267 @@ export default function HRPerformanceScreen() {
               <Button title="Send Kudos" onPress={handleSendKudos} loading={sendingKudos} style={{ flex: 1, backgroundColor: colors.primary }} />
             </View>
           </View>
+        </Modal>
+
+        {/* ---------------------------------------------------- */}
+        {/* MODAL: SCHEDULE APPRAISAL CYCLE & QUESTION BANK */}
+        {/* ---------------------------------------------------- */}
+        <Modal
+          visible={showCycleModal}
+          onClose={() => setShowCycleModal(false)}
+          title="Schedule Appraisal Cycle"
+          maxWidth={760}
+        >
+          <ScrollView style={{ maxHeight: 600 }} showsVerticalScrollIndicator={false}>
+            <View style={{ gap: 16 }}>
+              {/* Cycle Meta Information */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Cycle Title</Text>
+                <TextInput
+                  placeholder="e.g. Annual Appraisal 2026-27"
+                  value={cycleName}
+                  onChangeText={setCycleName}
+                  style={styles.modalInput}
+                />
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <View style={[styles.formGroup, { flex: 1 }]}>
+                  <Text style={styles.formLabel}>Review Period</Text>
+                  <TextInput
+                    placeholder="e.g. FY 2026-27"
+                    value={cyclePeriod}
+                    onChangeText={setCyclePeriod}
+                    style={styles.modalInput}
+                  />
+                </View>
+
+                <View style={[styles.formGroup, { flex: 1 }]}>
+                  <Text style={styles.formLabel}>Target Unit / Sub-Brand</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginTop: 4 }}>
+                    {['all', ...HOSPITAL_UNITS].map((u) => (
+                      <TouchableOpacity
+                        key={u}
+                        onPress={() => setCycleUnitScope(u)}
+                        style={[
+                          styles.smallChip,
+                          cycleUnitScope === u && { backgroundColor: '#0D7377', borderColor: '#0D7377' },
+                        ]}
+                      >
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: cycleUnitScope === u ? '#FFF' : colors.textSecondary }}>
+                          {u === 'all' ? 'All Units' : u}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              </View>
+
+              {/* Cycle Type Chips */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Evaluation Cadence</Text>
+                <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                  {(['annual', 'half_yearly', 'quarterly', 'probation'] as const).map((t) => (
+                    <TouchableOpacity
+                      key={t}
+                      onPress={() => setCycleType(t)}
+                      style={[
+                        styles.smallChip,
+                        cycleType === t && { backgroundColor: colors.primary, borderColor: colors.primary },
+                      ]}
+                    >
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: cycleType === t ? '#FFF' : colors.textSecondary }}>
+                        {t.replace('_', ' ').toUpperCase()}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Timeline Dates */}
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <View style={[styles.formGroup, { flex: 1 }]}>
+                  <Text style={styles.formLabel}>Start Date</Text>
+                  <TextInput
+                    placeholder="YYYY-MM-DD"
+                    value={cycleStartDate}
+                    onChangeText={setCycleStartDate}
+                    style={styles.modalInput}
+                  />
+                </View>
+                <View style={[styles.formGroup, { flex: 1 }]}>
+                  <Text style={styles.formLabel}>Self-Review Deadline</Text>
+                  <TextInput
+                    placeholder="YYYY-MM-DD"
+                    value={cycleSelfDeadline}
+                    onChangeText={setCycleSelfDeadline}
+                    style={styles.modalInput}
+                  />
+                </View>
+                <View style={[styles.formGroup, { flex: 1 }]}>
+                  <Text style={styles.formLabel}>Manager Deadline</Text>
+                  <TextInput
+                    placeholder="YYYY-MM-DD"
+                    value={cycleManagerDeadline}
+                    onChangeText={setCycleManagerDeadline}
+                    style={styles.modalInput}
+                  />
+                </View>
+              </View>
+
+              {/* Excel Question Import / Template Tools */}
+              <View style={{ backgroundColor: '#F0FDF4', padding: 14, borderRadius: 10, borderWidth: 1, borderColor: '#BBF7D0', gap: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <FileSpreadsheet size={20} color="#166534" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: '#166534' }}>Excel Question Bank Integration</Text>
+                    <Text style={{ fontSize: 12, color: '#15803D' }}>
+                      Download the pre-formatted question template, fill questions in Excel, and upload to load questions into this cycle.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+                  <TouchableOpacity
+                    onPress={handleDownloadQuestionsTemplate}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      backgroundColor: '#FFFFFF',
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: '#166534',
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Download size={14} color="#166534" />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#166534' }}>Download Template (.xlsx)</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={handleUploadQuestionsExcel}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      backgroundColor: '#166534',
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 8,
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Upload size={14} color="#FFFFFF" />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFFFFF' }}>Upload Excel Questions (.xlsx)</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Questions Management */}
+              <View style={{ gap: 10 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>
+                    Questions Bank ({cycleQuestions.length})
+                  </Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: cycleQuestions.reduce((a, b) => a + (b.weightage || 0), 0) === 100 ? '#16a34a' : '#d97706' }}>
+                    Total Weight: {cycleQuestions.reduce((a, b) => a + (b.weightage || 0), 0)}%
+                  </Text>
+                </View>
+
+                {/* Question Cards List */}
+                <View style={{ gap: 8 }}>
+                  {cycleQuestions.map((q, idx) => (
+                    <View
+                      key={q.id || idx}
+                      style={{
+                        padding: 12,
+                        borderRadius: 8,
+                        backgroundColor: '#f8fafc',
+                        borderWidth: 1,
+                        borderColor: '#e2e8f0',
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        gap: 10,
+                      }}
+                    >
+                      <View style={{ flex: 1, gap: 4 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Badge label={q.category} variant="neutral" />
+                          <Badge label={`${q.weightage}%`} variant="accentLight" />
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>{q.question}</Text>
+                        </View>
+                        {q.description && (
+                          <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                            Rubric: {q.description}
+                          </Text>
+                        )}
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => handleRemoveQuestionFromCycle(q.id)}
+                        style={{ padding: 4 }}
+                      >
+                        <Trash2 size={16} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Add Question Manually */}
+                <View style={{ padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#FFFFFF', gap: 8 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase' }}>
+                    + Add Question Manually
+                  </Text>
+                  <TextInput
+                    placeholder="Evaluation Question Statement / Performance Metric"
+                    value={cycleNewQStatement}
+                    onChangeText={setCycleNewQStatement}
+                    style={styles.modalInput}
+                  />
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <TextInput
+                      placeholder="Category (e.g. Core Delivery)"
+                      value={cycleNewQCategory}
+                      onChangeText={setCycleNewQCategory}
+                      style={[styles.modalInput, { flex: 2 }]}
+                    />
+                    <TextInput
+                      placeholder="Weight %"
+                      value={cycleNewQWeight}
+                      onChangeText={setCycleNewQWeight}
+                      keyboardType="numeric"
+                      style={[styles.modalInput, { flex: 1 }]}
+                    />
+                  </View>
+                  <TextInput
+                    placeholder="Rating Rubric (e.g. 1: Unsatisfactory, 3: Met Expectation, 5: Role Model)"
+                    value={cycleNewQRubric}
+                    onChangeText={setCycleNewQRubric}
+                    style={styles.modalInput}
+                  />
+                  <Button
+                    title="Add Question to Bank"
+                    variant="outline"
+                    onPress={handleAddQuestionToCycle}
+                    size="sm"
+                  />
+                </View>
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                <Button title="Cancel" onPress={() => setShowCycleModal(false)} variant="outline" style={{ flex: 1 }} />
+                <Button
+                  title={savingCycle ? 'Saving Cycle...' : 'Save Appraisal Cycle'}
+                  onPress={handleSaveCycle}
+                  loading={savingCycle}
+                  style={{ flex: 1, backgroundColor: colors.primary }}
+                />
+              </View>
+            </View>
+          </ScrollView>
         </Modal>
       </ScrollView>
     </SidebarLayout>

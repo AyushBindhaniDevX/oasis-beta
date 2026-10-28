@@ -240,6 +240,7 @@ export async function downloadAppointmentLetterPdf(params: {
   refNumber?: string;
   signatoryName?: string;
   signatoryTitle?: string;
+  customTemplate?: any;
 }): Promise<string | null> {
   const result = await exportAppointmentLetterPdf({
     employee: params.employee,
@@ -247,6 +248,7 @@ export async function downloadAppointmentLetterPdf(params: {
     refNumber: params.refNumber,
     signatoryName: params.signatoryName,
     signatoryTitle: params.signatoryTitle,
+    customTemplate: params.customTemplate,
   });
 
   try {

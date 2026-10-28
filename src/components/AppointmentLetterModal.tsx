@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/use-theme';
 import { Modal } from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
@@ -17,6 +18,7 @@ import {
   StoredAppointmentLetter,
   getAppointmentLetterByEmployeeId,
 } from '@/lib/services/appointmentLetters';
+import { getTemplate } from '@/lib/services/templates';
 import { formatCurrency, formatDate } from '@/utils/format';
 import type { Employee, Profile, Organization } from '@/types';
 import {
@@ -36,6 +38,7 @@ import {
   Clock,
   ChevronUp,
   ChevronDown,
+  Settings,
 } from 'lucide-react-native';
 
 interface AppointmentLetterModalProps {
@@ -55,6 +58,7 @@ export function AppointmentLetterModal({
   organization,
   onSuccess,
 }: AppointmentLetterModalProps) {
+  const router = useRouter();
   const colors = useTheme();
 
   // Resolved employee & profile info
@@ -77,21 +81,27 @@ export function AppointmentLetterModal({
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [storedRecord, setStoredRecord] = useState<StoredAppointmentLetter | null>(null);
+  const [customTemplate, setCustomTemplate] = useState<any>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Initialize email & fetch record on open
+  // Initialize email, custom template & fetch record on open
   useEffect(() => {
     if (visible) {
       setRecipientEmail(defaultEmail);
       setFeedback(null);
       setShowPreview(false);
+      const targetOrgId = organization?.id || empProfile?.organization_id || 'default';
+      getTemplate(targetOrgId, 'appointment_letter').then((tpl) => {
+        if (tpl) setCustomTemplate(tpl);
+      }).catch(() => {});
+
       if (employee?.id) {
         getAppointmentLetterByEmployeeId(employee.id).then((rec) => {
           if (rec) setStoredRecord(rec);
         });
       }
     }
-  }, [visible, defaultEmail, employee?.id]);
+  }, [visible, defaultEmail, employee?.id, organization?.id, empProfile?.organization_id]);
 
   // Gross & Salary Breakdown
   const grossMonthly = employee?.basic_salary
@@ -174,6 +184,7 @@ export function AppointmentLetterModal({
         employee: effectiveEmployee,
         organization,
         refNumber: storedRecord?.ref_number || refNo,
+        customTemplate: customTemplate || undefined,
       });
 
       const successMsg = 'Appointment letter PDF generated and ready for print/download.';
@@ -194,7 +205,7 @@ export function AppointmentLetterModal({
       <View style={{ gap: 16 }}>
         {/* Header Summary */}
         <View style={[styles.headerBanner, { backgroundColor: '#F0F9F8', borderColor: '#0D737730' }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <View style={[styles.iconWrap, { backgroundColor: '#0D7377' }]}>
                 <FileText size={20} color="#FFFFFF" />
@@ -206,10 +217,32 @@ export function AppointmentLetterModal({
                 </Text>
               </View>
             </View>
-            <Badge
-              label={storedRecord?.email_sent ? 'Sent via Email' : 'Appointment Ready'}
-              variant={storedRecord?.email_sent ? 'success' : 'neutral'}
-            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => {
+                  onClose();
+                  router.push('/(hr)/templates' as any);
+                }}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: 6,
+                  borderWidth: 1,
+                  borderColor: '#0D737740',
+                  backgroundColor: '#FFFFFF',
+                }}
+              >
+                <Settings size={13} color="#0D7377" />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#0D7377' }}>Templates</Text>
+              </TouchableOpacity>
+              <Badge
+                label={storedRecord?.email_sent ? 'Sent via Email' : 'Appointment Ready'}
+                variant={storedRecord?.email_sent ? 'success' : 'neutral'}
+              />
+            </View>
           </View>
 
           {/* Quick Meta Details */}

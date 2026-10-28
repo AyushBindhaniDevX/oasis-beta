@@ -11,6 +11,7 @@ export interface AppointmentLetterData {
   probationMonths?: number;
   signatoryName?: string;
   signatoryTitle?: string;
+  customTemplate?: any;
 }
 
 export function generateAppointmentLetterHtml(data: AppointmentLetterData): string {
@@ -24,7 +25,7 @@ export function generateAppointmentLetterHtml(data: AppointmentLetterData): stri
   const designation = emp.designation || 'Professional Staff';
   const department = emp.department?.name || 'Operations';
   const unit = emp.hospital_unit || `${orgName} - Main Unit`;
-  const subtitle = 'Workforce & Human Capital Management';
+  const subtitle = data.customTemplate?.subtitle || 'Workforce & Human Capital Management';
   const joiningDate = emp.joining_date ? formatDate(emp.joining_date) : formatDate(new Date().toISOString());
   const issueDate = data.issueDate ? formatDate(data.issueDate) : formatDate(new Date().toISOString());
   const refPrefix = isSMH ? 'SMH' : orgName.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || 'HR';
@@ -301,18 +302,24 @@ export function generateAppointmentLetterHtml(data: AppointmentLetterData): stri
       Key Terms & Conditions of Employment:
     </div>
 
+    ${data.customTemplate?.clauses && data.customTemplate.clauses.length > 0 ? `
+    <ol class="terms-list">
+      ${data.customTemplate.clauses.map((c: string) => `<li>${c}</li>`).join('')}
+    </ol>
+    ` : `
     <ol class="terms-list">
       <li><strong>Probation Period:</strong> You will be on probation for a period of ${probationMonths} months from your date of joining. Upon satisfactory performance, your services will be confirmed in writing.</li>
-      <li><strong>Duty Roster & Working Hours:</strong> Your duty roster and shift timings will be assigned by your immediate Head of Department (HOD). Standard scheduled shift is 8 hours. Overtime, if designated, will apply only after completion of scheduled shift as per hospital policy.</li>
-      <li><strong>Attendance & Missed Punches:</strong> Attendance punches must be marked via the biometric / mobile portal. Missed punch regularizations are permitted a maximum of 5 times per calendar month.</li>
-      <li><strong>Patient Confidentiality & Medical Ethics:</strong> You shall strictly uphold NABH protocol, clinical standards, and complete patient data confidentiality.</li>
-      <li><strong>Termination & Notice:</strong> During probation, either party may terminate this agreement with 15 days' notice or salary in lieu thereof. Upon confirmation, notice period shall be 30 days.</li>
+      <li><strong>Duty Roster & Working Hours:</strong> Your duty roster and shift timings will be assigned by your immediate supervisor/HOD. Overtime, if designated, will apply only after completion of scheduled duty hours.</li>
+      <li><strong>Attendance & Geofencing:</strong> Attendance punches must be marked via the mobile app or web portal within your designated unit geofence.</li>
+      <li><strong>Confidentiality & Code of Conduct:</strong> You shall strictly protect organizational information, client data, and adhere to workplace policies.</li>
+      <li><strong>Termination & Notice:</strong> In the event of resignation or separation, notice period shall be 30 days or salary in lieu thereof as per company policy.</li>
     </ol>
+    `}
 
     <div class="signature-grid">
       <div class="sig-box">
         <div class="sig-line">For ${orgName}</div>
-        <div class="sig-role">${signatoryName}<br>${signatoryTitle}</div>
+        <div class="sig-role">${signatoryName}<br>${data.customTemplate?.signatory_title || signatoryTitle}</div>
       </div>
       <div class="sig-box">
         <div class="sig-line">Employee Acceptance Signature</div>

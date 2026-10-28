@@ -48,6 +48,7 @@ export const HR_NAV: NavItem[] = [
   { label: 'Performance', href: '/(hr)/performance', icon: Award, feature: 'performance' },
   { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard, feature: 'payroll' },
   { label: 'Units / Sub-Brands', href: '/(hr)/locations', icon: Building2, feature: 'locations' },
+  { label: 'Templates', href: '/(hr)/templates', icon: FileText, feature: 'templates' },
 ];
 
 export const ADMIN_NAV: NavItem[] = [
@@ -63,6 +64,7 @@ export const ADMIN_NAV: NavItem[] = [
   { label: 'Performance', href: '/(hr)/performance', icon: Award, feature: 'performance' },
   { label: 'Payroll', href: '/(hr)/payroll', icon: CreditCard, feature: 'payroll' },
   { label: 'Units / Sub-Brands', href: '/(hr)/locations', icon: Building2, feature: 'locations' },
+  { label: 'Templates', href: '/(hr)/templates', icon: FileText, feature: 'templates' },
   { label: 'Audit Logs', href: '/(admin)/audit-logs', icon: Shield, feature: 'audit_logs' },
   { label: 'Approval Workflows', href: '/(admin)/approval-workflows', icon: Workflow },
   { label: 'Data Management', href: '/(admin)/data-management', icon: FileSpreadsheet },

@@ -1,76 +1,78 @@
-import { getNavForRole } from '@/constants/navigation';
-import { useRouter } from 'expo-router';
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  RefreshControl,
-  useWindowDimensions,
-  Switch,
-} from 'react-native';
-import { useTheme } from '@/hooks/use-theme';
-import { useAuth } from '@/hooks/useAuth';
-import { useTenant } from '@/context/TenantContext';
+import { AppointmentLetterModal } from '@/components/AppointmentLetterModal';
+import { SidebarLayout } from '@/components/layout/Sidebar';
+import { CustomPayrollItemsManager } from '@/components/payroll/CustomPayrollItemsManager';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LoadingState } from '@/components/ui/States';
-import { SidebarLayout } from '@/components/layout/Sidebar';
+import { HOSPITAL_UNITS, normalizeEmploymentType, normalizeHospitalUnit } from '@/constants/config';
+import { getNavForRole } from '@/constants/navigation';
+import { useTenant } from '@/context/TenantContext';
+import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/hooks/useAuth';
+import { db } from '@/lib/firebase';
+import { createAuditLog } from '@/lib/services/audit';
+import { getDepartments, getEmployeeByProfileId, getEmployees, getWorkplaces, updateEmployee } from '@/lib/services/employee';
+import { getLeaveBalances, getLeaveTypes, updateLeaveBalance } from '@/lib/services/leave';
 import {
-  getOrgUsers,
-  updateUserRole,
-  updateUserProfileData,
-  toggleUserActive,
   createSystemUser,
   deleteUserRecord,
+  getOrgUsers,
+  toggleUserActive,
+  updateUserProfileData
 } from '@/lib/services/organization';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { getDepartments, getWorkplaces, getEmployees, updateEmployee, getEmployeeByProfileId } from '@/lib/services/employee';
-import { getShifts, assignEmployeeShift } from '@/lib/services/shifts';
-import { createAuditLog } from '@/lib/services/audit';
-import { getLeaveBalances, getLeaveTypes, updateLeaveBalance } from '@/lib/services/leave';
+import { assignEmployeeShift, getShifts } from '@/lib/services/shifts';
+import type { CustomPayrollItem, Department, Employee, LeaveBalance, LeaveType, Profile, Workplace, WorkShift } from '@/types';
 import { formatDate } from '@/utils/format';
-import { HOSPITAL_UNITS, normalizeHospitalUnit, normalizeEmploymentType } from '@/constants/config';
-import { CustomPayrollItemsManager } from '@/components/payroll/CustomPayrollItemsManager';
-import { AppointmentLetterModal } from '@/components/AppointmentLetterModal';
-import type { Profile, Department, Workplace, WorkShift, Employee, LeaveBalance, LeaveType, CustomPayrollItem } from '@/types';
+import { useRouter } from 'expo-router';
+import { doc, getDoc, setDoc, writeBatch } from 'firebase/firestore';
 import {
-  Search,
-  UserPlus,
-  Shield,
-  UserCheck,
-  UserX,
-  Edit2,
-  Lock,
-  Mail,
-  Phone,
+  AlertCircle,
+  Award,
   Briefcase,
   Building,
   CheckCircle2,
-  AlertCircle,
-  Users,
-  ShieldCheck,
-  Award,
-  Trash2,
-  KeyRound,
-  RotateCcw,
-  RefreshCw,
-  Umbrella,
-  Eye,
-  MoreVertical,
+  CheckSquare,
   ChevronRight,
-  HeartPulse,
+  Clock,
+  Edit2,
+  Eye,
   FileText,
+  HeartPulse,
+  KeyRound,
+  Mail,
+  MinusSquare,
+  MoreVertical,
+  Phone,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Square,
+  Trash2,
+  Umbrella,
+  UserCheck,
+  UserPlus,
+  Users,
+  UserX,
+  X,
+  Check,
 } from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View
+} from 'react-native';
 
 export default function UserManagementScreen() {
   const colors = useTheme();
@@ -93,7 +95,18 @@ export default function UserManagementScreen() {
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'hr' | 'employee'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [unitFilter, setUnitFilter] = useState<string>('all');
+  const [deptFilter, setDeptFilter] = useState<string>('all');
   const [empTypeFilter, setEmpTypeFilter] = useState<string>('all');
+
+  // Multi-Select & Mass Action state
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [massModalType, setMassModalType] = useState<'none' | 'unit' | 'status' | 'dept' | 'shift' | 'category'>('none');
+  const [massTargetUnit, setMassTargetUnit] = useState<string>(HOSPITAL_UNITS[0] || 'Headquarters');
+  const [massTargetStatus, setMassTargetStatus] = useState<'active' | 'inactive'>('active');
+  const [massTargetDeptId, setMassTargetDeptId] = useState<string | null>(null);
+  const [massTargetShiftId, setMassTargetShiftId] = useState<string | null>(null);
+  const [massTargetEmpType, setMassTargetEmpType] = useState<'Regular' | 'Contractual'>('Regular');
+  const [massProcessing, setMassProcessing] = useState(false);
 
   // Modals state
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -378,7 +391,7 @@ export default function UserManagementScreen() {
     setLeaveSuccessBanner('');
     try {
       const orgId = tenantOrg?.id || currentAdmin?.organization_id || u.organization_id || '';
-      
+
       // Auto-resolve employee ID for profile
       const emp = await getEmployeeByProfileId(u.id);
       const empId: string | null = emp?.id || null;
@@ -464,7 +477,7 @@ export default function UserManagementScreen() {
         setEditSpecialAllowance(empData.special_allowance != null ? String(empData.special_allowance) : '');
         setEditCustomItems(Array.isArray(tc.custom_items) ? tc.custom_items : []);
         setEditStatus(empData.employment_status || 'active');
-          setEditIsHhcEnabled(!!empData?.is_hhc_enabled || !!u.is_hhc_enabled);
+        setEditIsHhcEnabled(!!empData?.is_hhc_enabled || !!u.is_hhc_enabled);
 
         let shiftVal = (empData as any).default_shift_id || null;
         if (!shiftVal) {
@@ -474,7 +487,7 @@ export default function UserManagementScreen() {
             if (shiftSnap.exists() && shiftSnap.data()?.shift_id) {
               shiftVal = shiftSnap.data().shift_id;
             }
-          } catch (sErr) {}
+          } catch (sErr) { }
         }
         setEditShiftId(shiftVal);
       } else {
@@ -615,7 +628,7 @@ export default function UserManagementScreen() {
         try {
           const today = new Date().toISOString().split('T')[0];
           await assignEmployeeShift(currentEmpId, today, editShiftId, editUser.organization_id);
-        } catch (sErr) {}
+        } catch (sErr) { }
       }
 
       await createAuditLog('user_updated', 'profile', editUser.id, {
@@ -772,6 +785,11 @@ export default function UserManagementScreen() {
         const empUnit = normalizeHospitalUnit(emp?.hospital_unit);
         if (empUnit.toLowerCase() !== unitFilter.toLowerCase()) return false;
       }
+      // Department filter
+      if (deptFilter !== 'all') {
+        const emp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
+        if (emp?.department_id !== deptFilter) return false;
+      }
       // Employment Category filter
       if (empTypeFilter !== 'all') {
         const emp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
@@ -788,7 +806,123 @@ export default function UserManagementScreen() {
       }
       return true;
     });
-  }, [users, roleFilter, statusFilter, unitFilter, empTypeFilter, search, managers]);
+  }, [users, roleFilter, statusFilter, unitFilter, deptFilter, empTypeFilter, search, managers]);
+
+  // Selection state calculations & handlers
+  const isAllSelected = filteredUsers.length > 0 && filteredUsers.every((u) => selectedUserIds.includes(u.id));
+  const isSomeSelected = selectedUserIds.length > 0 && !isAllSelected;
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedUserIds([]);
+    } else {
+      setSelectedUserIds(filteredUsers.map((u) => u.id));
+    }
+  };
+
+  const toggleSelectUser = (userId: string) => {
+    setSelectedUserIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const clearSelection = () => {
+    setSelectedUserIds([]);
+  };
+
+  const handleMassApply = async () => {
+    if (selectedUserIds.length === 0) return;
+    setMassProcessing(true);
+    try {
+      const orgId = tenantOrg?.id || currentAdmin?.organization_id;
+      const batch = writeBatch(db);
+      let count = 0;
+      const nowIso = new Date().toISOString();
+
+      for (const uid of selectedUserIds) {
+        const emp = managers.find((m) => m.profile_id === uid || (m.profile as any)?.id === uid);
+
+        if (massModalType === 'unit') {
+          if (emp?.id) {
+            const matchingWp = workplaces.find((w) => w.name.toLowerCase().includes(massTargetUnit.toLowerCase()));
+            batch.update(doc(db, 'employees', emp.id), {
+              hospital_unit: massTargetUnit,
+              ...(matchingWp ? { workplace_id: matchingWp.id } : {}),
+              updated_at: nowIso,
+            });
+            count++;
+          }
+        } else if (massModalType === 'status') {
+          batch.update(doc(db, 'profiles', uid), {
+            is_active: massTargetStatus === 'active',
+            updated_at: nowIso,
+          });
+          if (emp?.id) {
+            batch.update(doc(db, 'employees', emp.id), {
+              employment_status: massTargetStatus === 'active' ? 'active' : 'inactive',
+              updated_at: nowIso,
+            });
+          }
+          count++;
+        } else if (massModalType === 'dept') {
+          if (emp?.id && massTargetDeptId) {
+            batch.update(doc(db, 'employees', emp.id), {
+              department_id: massTargetDeptId,
+              updated_at: nowIso,
+            });
+            count++;
+          }
+        } else if (massModalType === 'shift') {
+          if (emp?.id && massTargetShiftId) {
+            batch.update(doc(db, 'employees', emp.id), {
+              default_shift_id: massTargetShiftId,
+              updated_at: nowIso,
+            });
+            if (orgId) {
+              const today = new Date().toISOString().split('T')[0];
+              assignEmployeeShift(emp.id, today, massTargetShiftId, orgId).catch(() => { });
+            }
+            count++;
+          }
+        } else if (massModalType === 'category') {
+          if (emp?.id) {
+            batch.update(doc(db, 'employees', emp.id), {
+              employment_type: massTargetEmpType,
+              updated_at: nowIso,
+            });
+            count++;
+          }
+        }
+      }
+
+      await batch.commit();
+
+      await createAuditLog('mass_user_update', 'profile', currentAdmin?.id || 'admin', {
+        action: massModalType,
+        target_count: count,
+        user_ids: selectedUserIds,
+        performed_by: currentAdmin?.id,
+      });
+
+      setInfoBanner({
+        type: 'success',
+        message: `Successfully applied mass update to ${selectedUserIds.length} user${selectedUserIds.length > 1 ? 's' : ''}.`,
+      });
+      setTimeout(() => setInfoBanner(null), 4000);
+      setMassModalType('none');
+      setSelectedUserIds([]);
+      await load();
+    } catch (err: any) {
+      console.error('Mass update error:', err);
+      setInfoBanner({
+        type: 'error',
+        message: err.message || 'Failed to complete mass update.',
+      });
+      setTimeout(() => setInfoBanner(null), 5000);
+    } finally {
+      setMassProcessing(false);
+    }
+  };
 
   // Statistics
   const adminCount = users.filter((u) => u.role === 'admin').length;
@@ -996,6 +1130,37 @@ export default function UserManagementScreen() {
             </ScrollView>
           </View>
 
+          {/* Department Filter Chips */}
+          {departments.length > 0 && (
+            <View style={{ marginTop: 2 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
+                {[{ id: 'all', name: 'All Departments' }, ...departments].map((dept) => (
+                  <TouchableOpacity
+                    key={dept.id}
+                    onPress={() => setDeptFilter(dept.id)}
+                    style={[
+                      styles.filterChip,
+                      { flexDirection: 'row', alignItems: 'center', gap: 6 },
+                      deptFilter === dept.id
+                        ? { backgroundColor: '#7C3AED' }
+                        : { backgroundColor: '#f1f5f9' },
+                    ]}
+                  >
+                    <Briefcase size={13} color={deptFilter === dept.id ? '#FFF' : colors.textSecondary} />
+                    <Text
+                      style={[
+                        styles.chipText,
+                        { color: deptFilter === dept.id ? '#FFF' : colors.text, fontWeight: '700' },
+                      ]}
+                    >
+                      {dept.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
           {/* Employment Category Filter Chips */}
           <View style={styles.chipRow}>
             {(['all', 'Regular', 'Contractual'] as const).map((c) => (
@@ -1022,12 +1187,122 @@ export default function UserManagementScreen() {
           </View>
         </View>
 
+        {/* Floating Mass Action Bar */}
+        {selectedUserIds.length > 0 && (
+          <View style={[styles.floatingMassBar, { backgroundColor: '#0f172a', borderColor: '#334155' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ backgroundColor: '#0284c7', width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>{selectedUserIds.length}</Text>
+                </View>
+                <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>
+                  {selectedUserIds.length} User{selectedUserIds.length > 1 ? 's' : ''} Selected for Mass Action
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={clearSelection}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: '#1e293b' }}
+              >
+                <X size={14} color="#94a3b8" />
+                <Text style={{ color: '#94a3b8', fontSize: 12, fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => setMassModalType('unit')}
+                style={[styles.massBtn, { backgroundColor: '#0D7377' }]}
+                activeOpacity={0.85}
+              >
+                <Building size={14} color="#FFF" />
+                <Text style={styles.massBtnText}>Change Unit / Location</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setMassTargetStatus('active');
+                  setMassModalType('status');
+                }}
+                style={[styles.massBtn, { backgroundColor: '#059669' }]}
+                activeOpacity={0.85}
+              >
+                <UserCheck size={14} color="#FFF" />
+                <Text style={styles.massBtnText}>Activate / Deactivate</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setMassTargetDeptId(departments[0]?.id || null);
+                  setMassModalType('dept');
+                }}
+                style={[styles.massBtn, { backgroundColor: '#7C3AED' }]}
+                activeOpacity={0.85}
+              >
+                <Briefcase size={14} color="#FFF" />
+                <Text style={styles.massBtnText}>Change Department</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setMassTargetShiftId(shifts[0]?.id || null);
+                  setMassModalType('shift');
+                }}
+                style={[styles.massBtn, { backgroundColor: '#D97706' }]}
+                activeOpacity={0.85}
+              >
+                <Clock size={14} color="#FFF" />
+                <Text style={styles.massBtnText}>Assign Shift</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setMassTargetEmpType('Regular');
+                  setMassModalType('category');
+                }}
+                style={[styles.massBtn, { backgroundColor: '#4F46E5' }]}
+                activeOpacity={0.85}
+              >
+                <Award size={14} color="#FFF" />
+                <Text style={styles.massBtnText}>Change Category</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        )}
+
         {/* Users Table / Grid */}
         <View style={[styles.tableCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-          <View style={[styles.tableHeader, { borderBottomColor: '#f1f5f9' }]}>
-            <Text style={[styles.tableTitle, { color: colors.text }]}>
-              User Accounts ({filteredUsers.length})
-            </Text>
+          <View style={[styles.tableHeader, { borderBottomColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }]}>
+            <TouchableOpacity
+              onPress={toggleSelectAll}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 }}
+              activeOpacity={0.7}
+            >
+              {isAllSelected ? (
+                <CheckSquare size={20} color={colors.primary} />
+              ) : isSomeSelected ? (
+                <MinusSquare size={20} color={colors.primary} />
+              ) : (
+                <Square size={20} color={colors.textSecondary} />
+              )}
+              <Text style={[styles.tableTitle, { color: colors.text }]}>
+                {isAllSelected
+                  ? `All ${filteredUsers.length} Users Selected`
+                  : isSomeSelected
+                    ? `${selectedUserIds.length} of ${filteredUsers.length} Selected`
+                    : `User Accounts (${filteredUsers.length})`}
+              </Text>
+            </TouchableOpacity>
+
+            {selectedUserIds.length > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TouchableOpacity
+                  onPress={clearSelection}
+                  style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: '#f1f5f9' }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary }}>Clear Selection</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
           {filteredUsers.length === 0 ? (
@@ -1051,6 +1326,7 @@ export default function UserManagementScreen() {
                   }}
                   style={[
                     styles.userRow,
+                    selectedUserIds.includes(u.id) && { backgroundColor: '#f8fafc' },
                     idx !== filteredUsers.length - 1 && {
                       borderBottomWidth: 1,
                       borderBottomColor: '#f1f5f9',
@@ -1058,6 +1334,22 @@ export default function UserManagementScreen() {
                     !isDesktop && styles.userRowMobile,
                   ]}
                 >
+                  {/* Row Checkbox */}
+                  <TouchableOpacity
+                    onPress={(e) => {
+                      e.stopPropagation?.();
+                      toggleSelectUser(u.id);
+                    }}
+                    style={{ padding: 6, marginRight: 4 }}
+                    activeOpacity={0.7}
+                  >
+                    {selectedUserIds.includes(u.id) ? (
+                      <CheckSquare size={20} color={colors.primary} />
+                    ) : (
+                      <Square size={20} color="#94a3b8" />
+                    )}
+                  </TouchableOpacity>
+
                   <Avatar name={u.full_name} url={u.avatar_url} size={44} />
 
                   <View style={{ flex: 1, gap: 2, paddingHorizontal: 12 }}>
@@ -1312,14 +1604,14 @@ export default function UserManagementScreen() {
                   options={
                     currentAdmin?.role === 'hr'
                       ? [
-                          { label: 'Employee (Standard Access)', value: 'employee' },
-                          { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
-                        ]
+                        { label: 'Employee (Standard Access)', value: 'employee' },
+                        { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
+                      ]
                       : [
-                          { label: 'Employee (Standard Access)', value: 'employee' },
-                          { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
-                          { label: 'Administrator (System & Org Settings)', value: 'admin' },
-                        ]
+                        { label: 'Employee (Standard Access)', value: 'employee' },
+                        { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
+                        { label: 'Administrator (System & Org Settings)', value: 'admin' },
+                      ]
                   }
                   value={newRole}
                   onValueChange={(val) => setNewRole(val as any)}
@@ -1484,7 +1776,7 @@ export default function UserManagementScreen() {
                           />
                         </View>
                       </View>
-                      
+
                       <View style={[styles.switchCard, { backgroundColor: '#fff', borderColor: '#e2e8f0', marginTop: 5 }]}>
                         <View style={{ flex: 1, paddingRight: 10 }}>
                           <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
@@ -1613,14 +1905,14 @@ export default function UserManagementScreen() {
                 options={
                   currentAdmin?.role === 'hr'
                     ? [
-                        { label: 'Employee (Standard Access)', value: 'employee' },
-                        { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
-                      ]
+                      { label: 'Employee (Standard Access)', value: 'employee' },
+                      { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
+                    ]
                     : [
-                        { label: 'Employee (Standard Access)', value: 'employee' },
-                        { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
-                        { label: 'Administrator (System & Org Settings)', value: 'admin' },
-                      ]
+                      { label: 'Employee (Standard Access)', value: 'employee' },
+                      { label: 'HR Manager (Full HR & Payroll Access)', value: 'hr' },
+                      { label: 'Administrator (System & Org Settings)', value: 'admin' },
+                    ]
                 }
                 value={editRole}
                 onValueChange={(val) => setEditRole(val as any)}
@@ -2277,10 +2569,10 @@ export default function UserManagementScreen() {
           employee={
             appointmentLetterUser
               ? managers.find(
-                  (m) =>
-                    m.profile_id === appointmentLetterUser.id ||
-                    (m.profile as any)?.id === appointmentLetterUser.id
-                ) || null
+                (m) =>
+                  m.profile_id === appointmentLetterUser.id ||
+                  (m.profile as any)?.id === appointmentLetterUser.id
+              ) || null
               : null
           }
           organization={tenantOrg}
@@ -2289,6 +2581,257 @@ export default function UserManagementScreen() {
             setTimeout(() => setInfoBanner(null), 5000);
           }}
         />
+
+        {/* ---------------------------------------------------- */}
+        {/* MASS ACTION MODALS */}
+        {/* ---------------------------------------------------- */}
+
+        {/* Mass Change Unit Modal */}
+        <Modal
+          visible={massModalType === 'unit'}
+          onClose={() => setMassModalType('none')}
+          title="Mass Change Unit / Location"
+        >
+          <View style={{ gap: 16 }}>
+            <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 20 }}>
+              Reassign <Text style={{ fontWeight: '700', color: colors.text }}>{selectedUserIds.length} selected users</Text> to a new unit or sub-brand location. This will update their primary employee record and linked workplace.
+            </Text>
+
+            <Select
+              label="Target Unit / Sub-Brand"
+              value={massTargetUnit}
+              options={HOSPITAL_UNITS.map((u) => ({ label: u, value: u }))}
+              onValueChange={(val: string) => val && setMassTargetUnit(val)}
+            />
+
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                onPress={() => setMassModalType('none')}
+                style={{ flex: 1 }}
+                disabled={massProcessing}
+              />
+              <Button
+                title={massProcessing ? 'Applying...' : `Apply to ${selectedUserIds.length} Users`}
+                onPress={handleMassApply}
+                loading={massProcessing}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </Modal>
+
+        {/* Mass Activate / Deactivate Modal */}
+        <Modal
+          visible={massModalType === 'status'}
+          onClose={() => setMassModalType('none')}
+          title="Mass Change User Status"
+        >
+          <View style={{ gap: 16 }}>
+            <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 20 }}>
+              Update access status for <Text style={{ fontWeight: '700', color: colors.text }}>{selectedUserIds.length} selected users</Text>.
+            </Text>
+
+            <View style={{ gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => setMassTargetStatus('active')}
+                style={[
+                  styles.operationRow,
+                  massTargetStatus === 'active' && { borderColor: '#16a34a', backgroundColor: '#f0fdf4' },
+                ]}
+              >
+                <View style={[styles.opIconWrap, { backgroundColor: '#dcfce7' }]}>
+                  <UserCheck size={18} color="#16a34a" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.opTitle, { color: '#16a34a' }]}>Activate Accounts</Text>
+                  <Text style={[styles.opSubtitle, { color: colors.textSecondary }]}>
+                    Restore login access and set employment status to Active
+                  </Text>
+                </View>
+                {massTargetStatus === 'active' && <Check size={18} color="#16a34a" />}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setMassTargetStatus('inactive')}
+                style={[
+                  styles.operationRow,
+                  massTargetStatus === 'inactive' && { borderColor: '#e11d48', backgroundColor: '#fff1f2' },
+                ]}
+              >
+                <View style={[styles.opIconWrap, { backgroundColor: '#ffe4e6' }]}>
+                  <UserX size={18} color="#e11d48" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.opTitle, { color: '#e11d48' }]}>Deactivate / Suspend Accounts</Text>
+                  <Text style={[styles.opSubtitle, { color: colors.textSecondary }]}>
+                    Disable portal login access and mark account inactive
+                  </Text>
+                </View>
+                {massTargetStatus === 'inactive' && <Check size={18} color="#e11d48" />}
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                onPress={() => setMassModalType('none')}
+                style={{ flex: 1 }}
+                disabled={massProcessing}
+              />
+              <Button
+                title={massProcessing ? 'Applying...' : `Confirm for ${selectedUserIds.length} Users`}
+                onPress={handleMassApply}
+                loading={massProcessing}
+                variant={massTargetStatus === 'active' ? 'primary' : 'danger'}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </Modal>
+
+        {/* Mass Change Department Modal */}
+        <Modal
+          visible={massModalType === 'dept'}
+          onClose={() => setMassModalType('none')}
+          title="Mass Transfer Department"
+        >
+          <View style={{ gap: 16 }}>
+            <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 20 }}>
+              Transfer <Text style={{ fontWeight: '700', color: colors.text }}>{selectedUserIds.length} selected users</Text> to a new departmental division.
+            </Text>
+
+            <Select
+              label="Target Department"
+              value={massTargetDeptId}
+              options={departments.map((d) => ({ label: d.name, value: d.id }))}
+              onValueChange={(val: string) => setMassTargetDeptId(val)}
+            />
+
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                onPress={() => setMassModalType('none')}
+                style={{ flex: 1 }}
+                disabled={massProcessing}
+              />
+              <Button
+                title={massProcessing ? 'Transferring...' : `Transfer ${selectedUserIds.length} Users`}
+                onPress={handleMassApply}
+                loading={massProcessing}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </Modal>
+
+        {/* Mass Assign Shift Modal */}
+        <Modal
+          visible={massModalType === 'shift'}
+          onClose={() => setMassModalType('none')}
+          title="Mass Assign Shift"
+        >
+          <View style={{ gap: 16 }}>
+            <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 20 }}>
+              Assign work shift timing and roster schedule to <Text style={{ fontWeight: '700', color: colors.text }}>{selectedUserIds.length} selected users</Text>.
+            </Text>
+
+            <Select
+              label="Select Work Shift"
+              value={massTargetShiftId}
+              options={shifts.map((s) => ({ label: `${s.name} (${s.start_time} - ${s.end_time})`, value: s.id }))}
+              onValueChange={(val: string) => setMassTargetShiftId(val)}
+            />
+
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                onPress={() => setMassModalType('none')}
+                style={{ flex: 1 }}
+                disabled={massProcessing}
+              />
+              <Button
+                title={massProcessing ? 'Assigning...' : `Assign to ${selectedUserIds.length} Users`}
+                onPress={handleMassApply}
+                loading={massProcessing}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </Modal>
+
+        {/* Mass Change Category Modal */}
+        <Modal
+          visible={massModalType === 'category'}
+          onClose={() => setMassModalType('none')}
+          title="Mass Change Employment Category"
+        >
+          <View style={{ gap: 16 }}>
+            <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 20 }}>
+              Switch employment classification for <Text style={{ fontWeight: '700', color: colors.text }}>{selectedUserIds.length} selected users</Text>.
+            </Text>
+
+            <View style={{ gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => setMassTargetEmpType('Regular')}
+                style={[
+                  styles.operationRow,
+                  massTargetEmpType === 'Regular' && { borderColor: '#4F46E5', backgroundColor: '#EEF2FF' },
+                ]}
+              >
+                <View style={[styles.opIconWrap, { backgroundColor: '#EEF2FF' }]}>
+                  <Award size={18} color="#4F46E5" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.opTitle, { color: '#4F46E5' }]}>Regular (Full-time / Statutory PF & ESI)</Text>
+                  <Text style={[styles.opSubtitle, { color: colors.textSecondary }]}>
+                    Full employment rights, statutory benefits & regular roster
+                  </Text>
+                </View>
+                {massTargetEmpType === 'Regular' && <Check size={18} color="#4F46E5" />}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setMassTargetEmpType('Contractual')}
+                style={[
+                  styles.operationRow,
+                  massTargetEmpType === 'Contractual' && { borderColor: '#D97706', backgroundColor: '#FEF3C7' },
+                ]}
+              >
+                <View style={[styles.opIconWrap, { backgroundColor: '#FEF3C7' }]}>
+                  <Briefcase size={18} color="#D97706" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.opTitle, { color: '#D97706' }]}>Contractual (Consultant / Fixed-term)</Text>
+                  <Text style={[styles.opSubtitle, { color: colors.textSecondary }]}>
+                    Retainer or contractual engagement without statutory deductions
+                  </Text>
+                </View>
+                {massTargetEmpType === 'Contractual' && <Check size={18} color="#D97706" />}
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                onPress={() => setMassModalType('none')}
+                style={{ flex: 1 }}
+                disabled={massProcessing}
+              />
+              <Button
+                title={massProcessing ? 'Updating...' : `Set Category for ${selectedUserIds.length} Users`}
+                onPress={handleMassApply}
+                loading={massProcessing}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </SidebarLayout>
   );
@@ -2505,4 +3048,27 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 12 },
+  floatingMassBar: {
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  massBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  massBtnText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
 });
