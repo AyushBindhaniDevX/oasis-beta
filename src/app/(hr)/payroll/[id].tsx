@@ -64,7 +64,6 @@ import {
   Building2,
   Briefcase,
   Search,
-  FileSpreadsheet,
 } from 'lucide-react-native';
 
 import { exportExcel, exportTxt } from '@/utils/excel';
@@ -832,6 +831,7 @@ export default function PayrollDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* ── Top Header ──────────────────────────────────────────────────── */}
+        {/* ── Top Header ──────────────────────────────────────────────────── */}
         <View style={styles.headerRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 280 }}>
             <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { borderColor: colors.border }]}>
@@ -840,7 +840,7 @@ export default function PayrollDetailScreen() {
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <Text style={[styles.title, { color: colors.text }]}>
-                  {period ? `${MONTHS[period.month - 1]} ${period.year} Salary Register` : 'Payroll Details'}
+                  {period ? `${MONTHS[period.month - 1]} ${period.year} Payroll` : 'Payroll'}
                 </Text>
                 {period?.hospital_unit ? (
                   <View style={[styles.unitChip, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
@@ -850,23 +850,49 @@ export default function PayrollDetailScreen() {
                     </Text>
                   </View>
                 ) : null}
+                <Badge
+                  label={period?.status?.toUpperCase() || 'OPEN'}
+                  variant={period?.status === 'closed' ? 'success' : 'default'}
+                />
               </View>
               <Text style={[styles.subTitle, { color: colors.textSecondary }]}>
-                Standard 28-column format with unit separation and Regular / Contractual categorization.
+                {filteredEntries.length} {filteredEntries.length === 1 ? 'employee' : 'employees'}
               </Text>
             </View>
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <TouchableOpacity
+              style={[styles.actionBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              onPress={handleExportRegisterPdf}
+              disabled={exportingPdf}
+            >
+              <Printer size={15} color={colors.text} />
+              <Text style={[styles.actionBtnText, { color: colors.text }]}>
+                {exportingPdf ? 'Exporting...' : 'Export PDF'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              onPress={handleExportRegisterExcel}
+              disabled={exportingExcel}
+            >
+              <Download size={15} color={colors.text} />
+              <Text style={[styles.actionBtnText, { color: colors.text }]}>
+                {exportingExcel ? 'Exporting...' : 'Export Excel'}
+              </Text>
+            </TouchableOpacity>
+
             {period?.status === 'open' && (
               <>
                 <TouchableOpacity
-                  style={[styles.syncBtn, { borderColor: colors.primary, backgroundColor: colors.surface }]}
+                  style={[styles.actionBtn, { borderColor: colors.primary, backgroundColor: colors.surface }]}
                   onPress={handleSyncRecalculate}
                   disabled={recalculating}
                 >
                   <RefreshCw size={15} color={colors.primary} />
-                  <Text style={[styles.syncBtnText, { color: colors.primary }]}>
+                  <Text style={[styles.actionBtnText, { color: colors.primary }]}>
                     {recalculating ? 'Syncing...' : 'Sync Profiles'}
                   </Text>
                 </TouchableOpacity>
@@ -878,7 +904,7 @@ export default function PayrollDetailScreen() {
                     setShowAdd(true);
                   }}
                 >
-                  <Text style={styles.addBtnText}>+ Add Custom Entry</Text>
+                  <Text style={styles.addBtnText}>+ Add Entry</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -895,170 +921,120 @@ export default function PayrollDetailScreen() {
           </View>
         ) : null}
 
-        {/* ── PRESCRIBED SALARY REGISTER EXPORT BAR ────────────────────────── */}
-        <View style={[styles.exportCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.exportCardTop}>
-            <View style={{ flex: 1, minWidth: 240 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <FileSpreadsheet size={20} color={colors.primary} />
-                <Text style={[styles.exportTitle, { color: colors.text }]}>
-                  Monthly Salary Report Register (Prescribed Format)
-                </Text>
-              </View>
-              <Text style={[styles.exportSub, { color: colors.textSecondary }]}>
-                Generates the exact 28-column sheet with unit header, paid days, breakdown, statutory withholdings, and signature blocks.
-              </Text>
+        {/* ── Filter Toolbar ──────────────────────────────────────────────── */}
+        <View style={[styles.filterBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          {/* Unit Filter */}
+          <View style={styles.filterSection}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 6 }}>
+              <Building2 size={13} color={colors.textSecondary} />
+              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textSecondary }}>Unit:</Text>
             </View>
-
-            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <TouchableOpacity
-                style={[styles.exportActionBtn, { backgroundColor: '#1E40AF' }]}
-                onPress={handleExportRegisterPdf}
-                disabled={exportingPdf}
-              >
-                <Printer size={16} color="#FFF" />
-                <Text style={styles.exportActionBtnText}>
-                  {exportingPdf ? 'Preparing PDF...' : 'Print / Download PDF Register'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.exportActionBtn, { backgroundColor: '#059669' }]}
-                onPress={handleExportRegisterExcel}
-                disabled={exportingExcel}
-              >
-                <Download size={16} color="#FFF" />
-                <Text style={styles.exportActionBtnText}>
-                  {exportingExcel ? 'Generating...' : 'Export Excel Register'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Unit & Employment Type Filter Tabs */}
-          <View style={[styles.filterBar, { borderTopColor: colors.border }]}>
-            {/* Unit Filter */}
-            <View style={styles.filterSection}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 6 }}>
-                <Building2 size={14} color={colors.textSecondary} />
-                <Text style={{ fontSize: 11, fontWeight: '800', color: colors.textSecondary }}>UNIT:</Text>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                {['All', ...HOSPITAL_UNITS].map((u) => {
-                  const active = selectedUnit === u;
-                  return (
-                    <TouchableOpacity
-                      key={u}
-                      onPress={() => setSelectedUnit(u)}
-                      style={[
-                        styles.chipBtn,
-                        {
-                          backgroundColor: active ? colors.primary : colors.background,
-                          borderColor: active ? colors.primary : colors.border,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.chipBtnText, { color: active ? '#FFF' : colors.text }]}>
-                        {u === 'All' ? 'All Units' : u}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
-            {/* Employment Type Filter */}
-            <View style={styles.filterSection}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 6 }}>
-                <Briefcase size={14} color={colors.textSecondary} />
-                <Text style={{ fontSize: 11, fontWeight: '800', color: colors.textSecondary }}>TYPE:</Text>
-              </View>
-              {(['All', 'Regular', 'Contractual'] as const).map((cat) => {
-                const active = selectedCategory === cat;
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+              {['All', ...HOSPITAL_UNITS].map((u) => {
+                const active = selectedUnit === u;
                 return (
                   <TouchableOpacity
-                    key={cat}
-                    onPress={() => setSelectedCategory(cat)}
+                    key={u}
+                    onPress={() => setSelectedUnit(u)}
                     style={[
                       styles.chipBtn,
                       {
-                        backgroundColor: active ? '#7C3AED' : colors.background,
-                        borderColor: active ? '#7C3AED' : colors.border,
+                        backgroundColor: active ? colors.primary : colors.background,
+                        borderColor: active ? colors.primary : colors.border,
                       },
                     ]}
                   >
                     <Text style={[styles.chipBtnText, { color: active ? '#FFF' : colors.text }]}>
-                      {cat}
+                      {u === 'All' ? 'All Units' : u}
                     </Text>
                   </TouchableOpacity>
                 );
               })}
+            </ScrollView>
+          </View>
+
+          {/* Type Filter */}
+          <View style={styles.filterSection}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 6 }}>
+              <Briefcase size={13} color={colors.textSecondary} />
+              <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textSecondary }}>Type:</Text>
             </View>
+            {(['All', 'Regular', 'Contractual'] as const).map((cat) => {
+              const active = selectedCategory === cat;
+              return (
+                <TouchableOpacity
+                  key={cat}
+                  onPress={() => setSelectedCategory(cat)}
+                  style={[
+                    styles.chipBtn,
+                    {
+                      backgroundColor: active ? colors.primary : colors.background,
+                      borderColor: active ? colors.primary : colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.chipBtnText, { color: active ? '#FFF' : colors.text }]}>
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
-        {/* ── Summary KPI Cards for Active Selection ────────────────────────── */}
+        {/* ── Summary KPI Cards ────────────────────────────────────────────── */}
         <View style={styles.kpiGrid}>
           {/* Total Net */}
-          <View style={[styles.kpiCard, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+          <View style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={[styles.kpiIcon, { backgroundColor: '#DCFCE7' }]}>
-              <DollarSign size={22} color="#16A34A" />
+              <DollarSign size={20} color="#16A34A" />
             </View>
             <View>
-              <Text style={[styles.kpiLabel, { color: '#166534' }]}>TOTAL NET PAYOUT</Text>
-              <Text style={[styles.kpiValue, { color: '#14532D' }]}>{formatCurrency(totalNet)}</Text>
-              <Text style={[styles.kpiSub, { color: '#15803D' }]}>{filteredEntries.length} Listed Employees</Text>
+              <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>Net Payout</Text>
+              <Text style={[styles.kpiValue, { color: colors.text }]}>{formatCurrency(totalNet)}</Text>
             </View>
           </View>
 
           {/* Total Gross */}
-          <View style={[styles.kpiCard, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+          <View style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={[styles.kpiIcon, { backgroundColor: '#DBEAFE' }]}>
-              <CreditCard size={22} color="#2563EB" />
+              <CreditCard size={20} color="#2563EB" />
             </View>
             <View>
-              <Text style={[styles.kpiLabel, { color: '#1E40AF' }]}>GROSS COMPENSATION</Text>
-              <Text style={[styles.kpiValue, { color: '#1E3A8A' }]}>{formatCurrency(totalGross)}</Text>
-              <Text style={[styles.kpiSub, { color: '#3B82F6' }]}>Basic + Allowances</Text>
+              <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>Gross Compensation</Text>
+              <Text style={[styles.kpiValue, { color: colors.text }]}>{formatCurrency(totalGross)}</Text>
             </View>
           </View>
 
           {/* EPF Withholding */}
-          <View style={[styles.kpiCard, { backgroundColor: '#FAF5FF', borderColor: '#E9D5FF' }]}>
+          <View style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={[styles.kpiIcon, { backgroundColor: '#F3E8FF' }]}>
-              <ShieldCheck size={22} color="#9333EA" />
+              <ShieldCheck size={20} color="#9333EA" />
             </View>
             <View>
-              <Text style={[styles.kpiLabel, { color: '#6B21A8' }]}>TOTAL EPF DEDUCTIONS</Text>
-              <Text style={[styles.kpiValue, { color: '#581C87' }]}>{formatCurrency(totalEpf)}</Text>
-              <Text style={[styles.kpiSub, { color: '#7E22CE' }]}>Provident Fund Remittance</Text>
+              <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>EPF Deductions</Text>
+              <Text style={[styles.kpiValue, { color: colors.text }]}>{formatCurrency(totalEpf)}</Text>
             </View>
           </View>
 
           {/* TDS Withholding */}
-          <View style={[styles.kpiCard, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
-            <View style={[styles.kpiIcon, { backgroundColor: '#FDE68A' }]}>
-              <Percent size={22} color="#D97706" />
+          <View style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={[styles.kpiIcon, { backgroundColor: '#FEF3C7' }]}>
+              <Percent size={20} color="#D97706" />
             </View>
             <View>
-              <Text style={[styles.kpiLabel, { color: '#92400E' }]}>TOTAL TDS WITHHELD</Text>
-              <Text style={[styles.kpiValue, { color: '#78350F' }]}>{formatCurrency(totalTds)}</Text>
-              <Text style={[styles.kpiSub, { color: '#B45309' }]}>Income Tax Withholding</Text>
+              <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>TDS Withholding</Text>
+              <Text style={[styles.kpiValue, { color: colors.text }]}>{formatCurrency(totalTds)}</Text>
             </View>
           </View>
         </View>
 
         {/* ── Payroll Entries List ────────────────────────────────────────── */}
-        <View style={[styles.entriesCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-          <View style={styles.entriesCardHeader}>
-            <View style={{ flex: 1, minWidth: 220 }}>
-              <Text style={[styles.entriesTitle, { color: colors.text }]}>
-                Employee Salary Register ({filteredEntries.length})
-              </Text>
-              <Text style={[styles.entriesSub, { color: colors.textSecondary }]}>
-                Showing {selectedUnit !== 'All' ? selectedUnit : 'All Units'} • {selectedCategory !== 'All' ? selectedCategory : 'All Categories'}
-              </Text>
-            </View>
+        <View style={[styles.entriesCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.entriesCardHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.entriesTitle, { color: colors.text }]}>
+              Employees ({filteredEntries.length})
+            </Text>
 
             {/* Quick search input */}
             <View style={[styles.searchBox, { borderColor: colors.border, backgroundColor: colors.background }]}>
@@ -1066,7 +1042,7 @@ export default function PayrollDetailScreen() {
               <Input
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Search staff or code..."
+                placeholder="Search employee..."
                 style={styles.searchInput}
               />
             </View>
@@ -1271,7 +1247,7 @@ export default function PayrollDetailScreen() {
               >
                 <Lock size={16} color="#FFF" />
                 <Text style={styles.processBatchBtnText}>
-                  {processing ? 'Processing...' : 'Close & Finalize Payroll Period'}
+                  {processing ? 'Processing...' : 'Finalize Period'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -1284,7 +1260,7 @@ export default function PayrollDetailScreen() {
               >
                 <Send size={16} color="#FFF" />
                 <Text style={styles.processBatchBtnText}>
-                  {distributing ? 'Distributing...' : 'Distribute Digital Payslips'}
+                  {distributing ? 'Distributing...' : 'Distribute Payslips'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -1292,7 +1268,7 @@ export default function PayrollDetailScreen() {
         </View>
 
         {/* ── Add Custom Entry Modal ──────────────────────────────────────── */}
-        <Modal visible={showAdd} onClose={() => setShowAdd(false)} title="Add Custom Payroll Entry">
+        <Modal visible={showAdd} onClose={() => setShowAdd(false)} title="Add Payroll Entry">
           <ScrollView style={{ maxHeight: 650 }} showsVerticalScrollIndicator={false}>
             <View style={{ gap: 14 }}>
               <Select
@@ -1307,7 +1283,7 @@ export default function PayrollDetailScreen() {
 
               {/* Offer Salary */}
               <Input
-                label="Offer Salary (Monthly CTC / Scale)"
+                label="Offer Salary (Monthly CTC)"
                 value={formOfferSalary}
                 onChangeText={(v) => {
                   setFormOfferSalary(v);
@@ -1330,10 +1306,10 @@ export default function PayrollDetailScreen() {
                 keyboardType="numeric"
               />
 
-              {/* Attendance & Paid Days (Rule 1 & 2) */}
+              {/* Attendance & Paid Days */}
               <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
                 <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
-                  Attendance Breakdown (Rule 1: Paid Days Sum)
+                  Attendance & Paid Days
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <View style={{ flex: 1 }}>
@@ -1501,22 +1477,22 @@ export default function PayrollDetailScreen() {
                 </View>
               </View>
 
-              {/* Earnings Breakup (Rule 3) */}
+              {/* Earnings Breakdown */}
               <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
                 <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
-                  Earnings Breakup (Rule 3: Proportioned to Paid Days)
+                  Earnings Breakdown
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <View style={{ flex: 1 }}>
-                    <Input label="Basic (50%)" value={formBasic} onChangeText={setFormBasic} keyboardType="numeric" />
+                    <Input label="Basic Salary" value={formBasic} onChangeText={setFormBasic} keyboardType="numeric" />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Input label="HRA (20%)" value={formHra} onChangeText={setFormHra} keyboardType="numeric" />
+                    <Input label="HRA" value={formHra} onChangeText={setFormHra} keyboardType="numeric" />
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <View style={{ flex: 1 }}>
-                    <Input label="Conv. Allowance" value={formConv} onChangeText={setFormConv} keyboardType="numeric" />
+                    <Input label="Conveyance" value={formConv} onChangeText={setFormConv} keyboardType="numeric" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Input label="Washing Allowance" value={formWash} onChangeText={setFormWash} keyboardType="numeric" />
@@ -1532,23 +1508,23 @@ export default function PayrollDetailScreen() {
                 </View>
               </View>
 
-              {/* Deductions & Statutory (Rule 4, 5, 6, 7) */}
+              {/* Deductions */}
               <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
                 <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
-                  Deductions (Rule 4-7: EPF, ESIC, Manual TDS)
+                  Deductions
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <View style={{ flex: 1 }}>
-                    <Input label="EPF (Max ₹3000 / 12%)" value={formPf} onChangeText={setFormPf} keyboardType="numeric" />
+                    <Input label="EPF" value={formPf} onChangeText={setFormPf} keyboardType="numeric" />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Input label="ESIC (0.75% of Gross-Wash)" value={formEsi} onChangeText={setFormEsi} keyboardType="numeric" />
+                    <Input label="ESIC" value={formEsi} onChangeText={setFormEsi} keyboardType="numeric" />
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <View style={{ flex: 1 }}>
                     <Input
-                      label="TDS (Manual Input - Rule 7)"
+                      label="TDS"
                       value={formTds}
                       onChangeText={(v) => {
                         setFormTds(v);
@@ -1577,16 +1553,16 @@ export default function PayrollDetailScreen() {
                 </Text>
               </View>
 
-              {/* Overtime & Other Allowances (Rule 8 & 9) */}
+              {/* Overtime & Other Allowances */}
               <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
                 <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
-                  Overtime & Other Allowances (Rule 8 & 9)
+                  Overtime & Additional Pay
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <View style={{ flex: 1 }}>
                     <Input
                       label="Approved OT Hours"
-                      placeholder="4h = 0.5d, 7h = 1d"
+                      placeholder="e.g. 4 or 8"
                       value={formOtHours}
                       onChangeText={(v) => {
                         setFormOtHours(v);
@@ -1615,7 +1591,7 @@ export default function PayrollDetailScreen() {
                 </View>
 
                 <Input
-                  label="Other Allowances (Manual Input - Rule 9)"
+                  label="Other Allowances"
                   value={formOtherAllowances}
                   onChangeText={(v) => {
                     setFormOtherAllowances(v);
@@ -1704,10 +1680,10 @@ export default function PayrollDetailScreen() {
                 keyboardType="numeric"
               />
 
-              {/* Attendance & Paid Days (Rule 1 & 2) */}
+              {/* Attendance & Paid Days */}
               <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
                 <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
-                  Attendance Breakdown (Rule 1: Paid Days Sum)
+                  Attendance & Paid Days
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <View style={{ flex: 1 }}>
@@ -1875,22 +1851,22 @@ export default function PayrollDetailScreen() {
                 </View>
               </View>
 
-              {/* Earnings Breakup (Rule 3) */}
+              {/* Earnings Breakdown */}
               <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
                 <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
-                  Earnings Breakup (Rule 3: Proportioned to Paid Days)
+                  Earnings Breakdown
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <View style={{ flex: 1 }}>
-                    <Input label="Basic (50%)" value={formBasic} onChangeText={setFormBasic} keyboardType="numeric" />
+                    <Input label="Basic Salary" value={formBasic} onChangeText={setFormBasic} keyboardType="numeric" />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Input label="HRA (20%)" value={formHra} onChangeText={setFormHra} keyboardType="numeric" />
+                    <Input label="HRA" value={formHra} onChangeText={setFormHra} keyboardType="numeric" />
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <View style={{ flex: 1 }}>
-                    <Input label="Conv. Allowance" value={formConv} onChangeText={setFormConv} keyboardType="numeric" />
+                    <Input label="Conveyance" value={formConv} onChangeText={setFormConv} keyboardType="numeric" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Input label="Washing Allowance" value={formWash} onChangeText={setFormWash} keyboardType="numeric" />
@@ -1906,23 +1882,23 @@ export default function PayrollDetailScreen() {
                 </View>
               </View>
 
-              {/* Deductions & Statutory (Rule 4, 5, 6, 7) */}
+              {/* Deductions */}
               <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
                 <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
-                  Deductions (Rule 4-7: EPF, ESIC, Manual TDS)
+                  Deductions
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <View style={{ flex: 1 }}>
-                    <Input label="EPF (Max ₹3000 / 12%)" value={formPf} onChangeText={setFormPf} keyboardType="numeric" />
+                    <Input label="EPF" value={formPf} onChangeText={setFormPf} keyboardType="numeric" />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Input label="ESIC (0.75% of Gross-Wash)" value={formEsi} onChangeText={setFormEsi} keyboardType="numeric" />
+                    <Input label="ESIC" value={formEsi} onChangeText={setFormEsi} keyboardType="numeric" />
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <View style={{ flex: 1 }}>
                     <Input
-                      label="TDS (Manual Input - Rule 7)"
+                      label="TDS"
                       value={formTds}
                       onChangeText={(v) => {
                         setFormTds(v);
@@ -1951,16 +1927,16 @@ export default function PayrollDetailScreen() {
                 </Text>
               </View>
 
-              {/* Overtime & Other Allowances (Rule 8 & 9) */}
+              {/* Overtime & Other Allowances */}
               <View style={{ backgroundColor: colors.background, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
                 <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text, textTransform: 'uppercase' }}>
-                  Overtime & Other Allowances (Rule 8 & 9)
+                  Overtime & Additional Pay
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <View style={{ flex: 1 }}>
                     <Input
                       label="Approved OT Hours"
-                      placeholder="4h = 0.5d, 7h = 1d"
+                      placeholder="e.g. 4 or 8"
                       value={formOtHours}
                       onChangeText={(v) => {
                         setFormOtHours(v);
@@ -1989,7 +1965,7 @@ export default function PayrollDetailScreen() {
                 </View>
 
                 <Input
-                  label="Other Allowances (Manual Input - Rule 9)"
+                  label="Other Allowances"
                   value={formOtherAllowances}
                   onChangeText={(v) => {
                     setFormOtherAllowances(v);
@@ -2082,30 +2058,40 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   addBtnText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  actionBtnText: { fontSize: 13, fontWeight: '600' },
   kpiGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
+    gap: 12,
   },
   kpiCard: {
     flex: 1,
-    minWidth: 260,
+    minWidth: 200,
     borderWidth: 1,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 12,
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
   },
   kpiIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  kpiLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  kpiValue: { fontSize: 19, fontWeight: '800', marginVertical: 2 },
+  kpiLabel: { fontSize: 12, fontWeight: '600' },
+  kpiValue: { fontSize: 18, fontWeight: '800', marginTop: 2 },
   kpiSub: { fontSize: 11, fontWeight: '500' },
   entriesCard: {
     borderRadius: 16,
@@ -2187,45 +2173,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   processBatchBtnText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
-  exportCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-    padding: 16,
-    gap: 14,
-  },
-  exportCardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  exportTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  exportSub: {
-    fontSize: 12,
-    marginTop: 3,
-    maxWidth: 650,
-  },
-  exportActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  exportActionBtnText: {
-    color: '#FFF',
-    fontWeight: '700',
-    fontSize: 13,
-  },
   filterBar: {
-    borderTopWidth: 1,
-    paddingTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',

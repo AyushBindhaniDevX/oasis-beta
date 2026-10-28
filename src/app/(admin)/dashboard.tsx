@@ -293,7 +293,7 @@ export default function AdminDashboard() {
   const quickActions = [
     { label: 'Add New User', sub: 'Create login with unit & grade', href: '/(admin)/users', icon: UserPlus, color: colors.primary, bg: colors.background },
     { label: 'User Directory', sub: `${users.length} registered accounts`, href: '/(admin)/users', icon: Key, color: colors.primary, bg: colors.background },
-    { label: 'Payroll & Salary Sheets', sub: '28-column unit & category registers', href: '/(hr)/payroll', icon: FileSpreadsheet, color: '#059669', bg: colors.background },
+    { label: 'Payroll & Salary Sheets', sub: 'Monthly salary registers & cycles', href: '/(hr)/payroll', icon: FileSpreadsheet, color: '#059669', bg: colors.background },
     { label: 'Shifts & Rosters', sub: 'Weekly roster matrix & night allowance', href: '/(hr)/shifts', icon: Clock, color: colors.primary, bg: colors.background },
     { label: 'Security Audit Logs', sub: 'Compliance & access history', href: '/(admin)/audit-logs', icon: Shield, color: colors.primary, bg: colors.background },
     { label: 'Workplace Locations', sub: 'Geofences & office radius', href: '/(hr)/locations', icon: MapPin, color: colors.primary, bg: colors.background },

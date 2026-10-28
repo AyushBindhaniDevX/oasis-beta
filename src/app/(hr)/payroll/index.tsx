@@ -106,9 +106,9 @@ export default function PayrollScreen() {
         {/* Top Header */}
         <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
           <View>
-            <Text style={[styles.title, { color: colors.text }]}>Payroll Management</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Payroll</Text>
             <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 2 }}>
-              Generate unit-wise and category-wise monthly salary registers
+              Monthly payroll cycles and salary processing
             </Text>
           </View>
           <Button
@@ -221,18 +221,11 @@ export default function PayrollScreen() {
           />
         )}
 
-        {/* Create Period Modal with Brand / Unit Selection */}
-        <Modal visible={showCreate} onClose={closeCreate} title="Create Monthly Payroll Cycle">
+        {/* Create Period Modal */}
+        <Modal visible={showCreate} onClose={closeCreate} title="Create Payroll Period">
           <View style={{ gap: 14 }}>
-            <View style={[styles.infoBanner, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
-              <Building2 size={18} color="#2563EB" />
-              <Text style={{ color: '#1E40AF', fontSize: 13, flex: 1, lineHeight: 18 }}>
-                Select the target Hospital Unit / Sub-Brand. Employees enrolled under this unit will be automatically mapped to the register.
-              </Text>
-            </View>
-
             <Select
-              label="Hospital Unit / Brand"
+              label="Unit / Entity"
               options={[
                 { label: 'All Units (Consolidated)', value: 'ALL' },
                 ...HOSPITAL_UNITS.map(u => ({ label: u, value: u }))
