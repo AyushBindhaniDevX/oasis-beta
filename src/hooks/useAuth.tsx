@@ -360,6 +360,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
             }
 
+            // Also check employees collection if profile doc not created yet
+            if (!prof && cleanSsoEmail) {
+              const empQ = query(collection(db, 'employees'), where('email', '==', cleanSsoEmail), limit(1));
+              const empSnap = await getDocs(empQ);
+              let empDoc = !empSnap.empty ? empSnap.docs[0] : null;
+              if (!empDoc) {
+                const empWorkQ = query(collection(db, 'employees'), where('work_email', '==', cleanSsoEmail), limit(1));
+                const empWorkSnap = await getDocs(empWorkQ);
+                if (!empWorkSnap.empty) empDoc = empWorkSnap.docs[0];
+              }
+
+              if (empDoc) {
+                const empData = empDoc.data() as any;
+                if (empData.employment_status !== 'inactive' && empData.employment_status !== 'terminated') {
+                  const now = new Date().toISOString();
+                  const targetUid = sessionData.uid || empDoc.id;
+                  prof = {
+                    id: targetUid,
+                    email: cleanSsoEmail,
+                    full_name: empData.name || empData.full_name || sessionData.displayName || cleanSsoEmail.split('@')[0],
+                    phone: empData.phone || sessionData.phone || null,
+                    avatar_url: sessionData.photoURL || null,
+                    role: (empData.role as UserRole) || 'employee',
+                    organization_id: empData.organization_id || 'shanti-memorial-hospital',
+                    is_active: true,
+                    created_at: now,
+                    updated_at: now,
+                  };
+                  try {
+                    await setDoc(doc(db, 'profiles', targetUid), prof, { merge: true });
+                  } catch (e) {}
+                }
+              }
+            }
+
+            // Bootstrap admin fallback
+            if (!prof && cleanSsoEmail === 'ayushbindhani001@gmail.com') {
+              const now = new Date().toISOString();
+              prof = {
+                id: sessionData.uid || 'admin_bootstrap',
+                email: cleanSsoEmail,
+                full_name: 'Ayush Bindhani',
+                phone: sessionData.phone || null,
+                avatar_url: sessionData.photoURL || null,
+                role: 'admin',
+                organization_id: 'shanti-memorial-hospital',
+                is_active: true,
+                created_at: now,
+                updated_at: now,
+              };
+              try {
+                await setDoc(doc(db, 'profiles', prof.id), prof, { merge: true });
+              } catch (e) {}
+            }
+
             // Only accept SSO if valid active employee/HR/Admin profile exists
             if (prof && prof.is_active && ['employee', 'hr', 'admin'].includes(prof.role)) {
               const appUser: AppUser = {
@@ -396,13 +451,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   })();
                 }
               }
-            } else {
-              clearSsoSession();
             }
           }
         } catch (ssoErr) {
           console.warn('[Oasis SSO consumer error]:', ssoErr);
-          clearSsoSession();
         }
 
         if (!ssoMatched && isMounted) {

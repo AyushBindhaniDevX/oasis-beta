@@ -1,5 +1,7 @@
 /**
- * Robust SSO Ticket Decoder & Session Manager for Oasis HRMS
+ * Robust SSO Ticket Decoder & Session Manager for Oasis HRMS & HHC
+ * Synchronizes session across localStorage keys (oasis_sso_session, smh_sso_session, sso_user_session)
+ * and shared cookie sso_user_session
  */
 export function decodeSsoTicket(ticket: string): Record<string, any> | null {
   if (!ticket) return null;
@@ -33,6 +35,21 @@ export function decodeSsoTicket(ticket: string): Record<string, any> | null {
   }
 }
 
+export function syncSsoSession(decoded: Record<string, any>, rawTicket?: string): void {
+  if (typeof window === 'undefined' || !decoded) return;
+  try {
+    const str = JSON.stringify(decoded);
+    localStorage.setItem('oasis_sso_session', str);
+    localStorage.setItem('smh_sso_session', str);
+    localStorage.setItem('sso_user_session', str);
+
+    const isProd = window.location.hostname.endsWith('subedge.com');
+    const domainPart = isProd ? '; domain=.subedge.com' : '';
+    const cookieVal = rawTicket || encodeURIComponent(btoa(unescape(encodeURIComponent(str))));
+    document.cookie = `sso_user_session=${cookieVal}; path=/; max-age=86400; SameSite=Lax${domainPart}`;
+  } catch (e) {}
+}
+
 export function getSsoSession(): Record<string, any> | null {
   if (typeof window === 'undefined') return null;
 
@@ -52,9 +69,7 @@ export function getSsoSession(): Record<string, any> | null {
     if (ticketRaw) {
       const decoded = decodeSsoTicket(ticketRaw);
       if (decoded && (decoded.uid || decoded.email) && (Date.now() - (decoded.ts || 0)) < 86400000) {
-        try {
-          localStorage.setItem('oasis_sso_session', JSON.stringify(decoded));
-        } catch (e) {}
+        syncSsoSession(decoded, ticketRaw);
         try {
           const cleanUrl = new URL(window.location.href);
           cleanUrl.searchParams.delete('sso_ticket');
@@ -72,23 +87,25 @@ export function getSsoSession(): Record<string, any> | null {
     if (match && match[2]) {
       const decoded = decodeSsoTicket(decodeURIComponent(match[2]));
       if (decoded && (decoded.uid || decoded.email) && (Date.now() - (decoded.ts || 0)) < 86400000) {
-        try {
-          localStorage.setItem('oasis_sso_session', JSON.stringify(decoded));
-        } catch (e) {}
+        syncSsoSession(decoded, match[2]);
         return decoded;
       }
     }
   } catch (e) {}
 
-  // 3. Check LocalStorage
+  // 3. Check LocalStorage across all known portal keys
   try {
-    const saved = localStorage.getItem('oasis_sso_session');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed && (parsed.uid || parsed.email) && (Date.now() - (parsed.ts || 0)) < 86400000) {
-        return parsed;
-      } else {
-        localStorage.removeItem('oasis_sso_session');
+    const keys = ['oasis_sso_session', 'smh_sso_session', 'sso_user_session'];
+    for (const key of keys) {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && (parsed.uid || parsed.email) && (Date.now() - (parsed.ts || 0)) < 86400000) {
+          syncSsoSession(parsed);
+          return parsed;
+        } else {
+          localStorage.removeItem(key);
+        }
       }
     }
   } catch (e) {}
@@ -100,6 +117,8 @@ export function clearSsoSession() {
   if (typeof window === 'undefined') return;
   try {
     localStorage.removeItem('oasis_sso_session');
+    localStorage.removeItem('smh_sso_session');
+    localStorage.removeItem('sso_user_session');
     const isProd = window.location.hostname.endsWith('subedge.com');
     const domainPart = isProd ? '; domain=.subedge.com' : '';
     document.cookie = `sso_user_session=; path=/; max-age=0; SameSite=Lax${domainPart}`;
