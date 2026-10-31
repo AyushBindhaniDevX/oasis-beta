@@ -90,8 +90,9 @@ export function AppointmentLetterModal({
       setRecipientEmail(defaultEmail);
       setFeedback(null);
       setShowPreview(false);
-      const targetOrgId = organization?.id || empProfile?.organization_id || 'default';
-      getTemplate(targetOrgId, 'appointment_letter').then((tpl) => {
+      const targetOrgId = employee?.organization_id || empProfile?.organization_id || organization?.id || 'default';
+      const orgName = organization?.name;
+      getTemplate(targetOrgId, 'appointment_letter', orgName).then((tpl) => {
         if (tpl) setCustomTemplate(tpl);
       }).catch(() => {});
 

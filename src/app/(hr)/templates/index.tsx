@@ -43,15 +43,64 @@ import {
   Printer,
   ChevronRight,
   Info,
+  Building2,
+  Check,
 } from 'lucide-react-native';
 
 export default function TemplatesScreen() {
   const colors = useTheme();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
-  const { organization } = useTenant();
+  const { organization, allOrganizations } = useTenant();
   const { profile } = useAuth();
-  const orgId = organization?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000001';
+
+  // Multi-Tenant Organization Switcher State
+  const initialOrgId = organization?.id || profile?.organization_id || 'shanti-memorial-hospital';
+  const [selectedOrgId, setSelectedOrgId] = useState<string>(initialOrgId);
+
+  // Available Organizations
+  const availableOrgs = useMemo(() => {
+    const list: Array<{ id: string; name: string }> = [];
+    const seen = new Set<string>();
+
+    const addOrg = (id: string, name: string) => {
+      const normalized = id.toLowerCase().trim();
+      if (!seen.has(normalized)) {
+        seen.add(normalized);
+        list.push({ id, name });
+      }
+    };
+
+    if (organization?.id && organization.name) {
+      addOrg(organization.id, organization.name);
+    }
+
+    if (allOrganizations && allOrganizations.length > 0) {
+      allOrganizations.forEach((o) => {
+        if (o.id && o.name) addOrg(o.id, o.name);
+      });
+    }
+
+    // Default primary multi-tenant orgs if not already present
+    addOrg('shanti-memorial-hospital', 'Shanti Memorial Hospital (SMH)');
+    addOrg('subedge_org', 'Subedge Technology Pvt Ltd');
+
+    return list;
+  }, [organization, allOrganizations]);
+
+  const selectedOrg = useMemo(() => {
+    return (
+      availableOrgs.find((o) => o.id === selectedOrgId) || {
+        id: selectedOrgId,
+        name:
+          selectedOrgId === 'shanti-memorial-hospital' || selectedOrgId === 'smh'
+            ? 'Shanti Memorial Hospital'
+            : selectedOrgId === 'subedge_org' || selectedOrgId === 'subedge'
+            ? 'Subedge Technology Pvt Ltd'
+            : 'Enterprise Workplace',
+      }
+    );
+  }, [availableOrgs, selectedOrgId]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -73,13 +122,13 @@ export default function TemplatesScreen() {
   const [signatoryTitle, setSignatoryTitle] = useState('');
   const [newClause, setNewClause] = useState('');
 
-  const loadAll = async () => {
+  const loadAll = async (targetOrgId: string) => {
     try {
       setLoading(true);
-      const data = await getTemplates(orgId);
+      const data = await getTemplates(targetOrgId, selectedOrg.name);
       setTemplates(data);
 
-      // Select first of current tab if current selection not in tab
+      // Select matching template or first in active tab
       const current = data.find((t) => t.key === selectedKey);
       if (!current || current.type !== activeTab) {
         const firstInTab = data.find((t) => t.type === activeTab);
@@ -97,8 +146,8 @@ export default function TemplatesScreen() {
   };
 
   useEffect(() => {
-    loadAll();
-  }, [orgId]);
+    loadAll(selectedOrgId);
+  }, [selectedOrgId]);
 
   const selectTemplate = (tpl: DocumentTemplate) => {
     setSelectedKey(tpl.key);
@@ -130,6 +179,10 @@ export default function TemplatesScreen() {
     return templates.filter((t) => t.type === activeTab);
   }, [templates, activeTab]);
 
+  const customTemplatesCount = useMemo(() => {
+    return templates.filter((t) => t.is_custom).length;
+  }, [templates]);
+
   const handleInsertVariable = (varKey: string) => {
     setBody((prev) => `${prev} ${varKey} `);
     showNotice(`Inserted ${varKey}`);
@@ -147,7 +200,7 @@ export default function TemplatesScreen() {
 
   const showNotice = (msg: string) => {
     setFeedback(msg);
-    setTimeout(() => setFeedback(null), 3000);
+    setTimeout(() => setFeedback(null), 3500);
   };
 
   const handleSave = async () => {
@@ -156,6 +209,8 @@ export default function TemplatesScreen() {
     try {
       const updated: DocumentTemplate = {
         ...currentTemplate,
+        id: `${selectedOrgId}_${currentTemplate.key}`,
+        organization_id: selectedOrgId,
         name,
         subject: activeTab === 'email' ? subject : undefined,
         title: activeTab === 'document' ? title : undefined,
@@ -167,11 +222,12 @@ export default function TemplatesScreen() {
         signatory_title: signatoryTitle,
         updated_at: new Date().toISOString(),
         updated_by: profile?.full_name || 'Admin',
+        is_custom: true,
       };
 
       await saveTemplate(updated);
       setTemplates((prev) => prev.map((t) => (t.key === updated.key ? updated : t)));
-      showNotice('Template saved successfully!');
+      showNotice(`Template saved specifically for ${selectedOrg.name}!`);
     } catch (err: any) {
       Alert.alert('Save Failed', err.message || 'Could not save template');
     } finally {
@@ -182,19 +238,19 @@ export default function TemplatesScreen() {
   const handleReset = async () => {
     if (!currentTemplate) return;
     Alert.alert(
-      'Reset Template',
-      `Are you sure you want to reset "${currentTemplate.name}" to the system default format? Custom modifications will be discarded.`,
+      'Reset Template for Organization',
+      `Are you sure you want to reset "${currentTemplate.name}" to the default format for ${selectedOrg.name}? Custom modifications will be discarded.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reset',
+          text: 'Reset to Org Default',
           style: 'destructive',
           onPress: async () => {
             try {
-              const def = await resetTemplate(orgId, currentTemplate.key);
+              const def = await resetTemplate(selectedOrgId, currentTemplate.key, selectedOrg.name);
               setTemplates((prev) => prev.map((t) => (t.key === def.key ? def : t)));
               selectTemplate(def);
-              showNotice('Reset to default template format.');
+              showNotice(`Reset template to default format for ${selectedOrg.name}.`);
             } catch (err: any) {
               Alert.alert('Reset Failed', err.message);
             }
@@ -205,13 +261,14 @@ export default function TemplatesScreen() {
   };
 
   // Sample data dictionary for Live Preview
+  const isSMH = selectedOrgId === 'shanti-memorial-hospital' || selectedOrgId === 'smh';
   const sampleData: Record<string, string> = {
-    employee_name: 'Alex Morgan',
-    employee_code: 'EMP-1021',
-    designation: 'Senior Software Engineer',
-    department: 'Engineering & Technology',
-    unit: 'Headquarters Campus',
-    organization_name: organization?.name || 'Acme Global Enterprises',
+    employee_name: isSMH ? 'Dr. Priya Sharma' : 'Alex Morgan',
+    employee_code: isSMH ? 'SMH-1021' : 'EMP-1021',
+    designation: isSMH ? 'Senior Consultant Physician' : 'Senior Software Engineer',
+    department: isSMH ? 'Internal Medicine & Critical Care' : 'Engineering & Technology',
+    unit: isSMH ? 'Central Hospital Campus' : 'Headquarters Campus',
+    organization_name: selectedOrg.name,
     joining_date: '15 Jan 2026',
     relieving_date: '31 Oct 2026',
     effective_date: '01 Nov 2026',
@@ -219,11 +276,11 @@ export default function TemplatesScreen() {
     gross_salary: '₹50,000',
     annual_salary: '₹6,00,000',
     net_salary: '₹47,200',
-    ref_number: 'HR/APT/2026/EMP-1021',
-    signatory_name: signatoryName || 'Sarah Jenkins',
-    signatory_title: signatoryTitle || 'Head of Human Resources',
+    ref_number: isSMH ? 'SMH/HR/APT/2026/1021' : 'HR/APT/2026/EMP-1021',
+    signatory_name: signatoryName || (isSMH ? 'Medical Superintendent' : 'Sarah Jenkins'),
+    signatory_title: signatoryTitle || (isSMH ? 'Office of Medical Administration & HR' : 'Head of Human Resources'),
     portal_url: 'https://workforce.company.com',
-    user_email: 'alex.morgan@company.com',
+    user_email: isSMH ? 'priya.sharma@shantihospital.com' : 'alex.morgan@company.com',
     temporary_password: 'Welcome@123',
     month: 'October',
     year: '2026',
@@ -234,7 +291,7 @@ export default function TemplatesScreen() {
     start_date: '01 Nov 2026',
     end_date: '05 Nov 2026',
     days: '5',
-    remarks: 'Approved as per leave policy quota',
+    remarks: 'Approved as per organization leave policy quota',
     remaining_balance: '14',
     date: new Date().toLocaleDateString('en-GB'),
   };
@@ -256,8 +313,8 @@ export default function TemplatesScreen() {
         <title>${renderedTitle}</title>
         <style>
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; color: #0F172A; line-height: 1.6; }
-          .header { border-bottom: 2px solid #0D7377; padding-bottom: 16px; margin-bottom: 24px; }
-          .org-name { font-size: 22px; font-weight: 800; color: #0D7377; }
+          .header { border-bottom: 2px solid #006a61; padding-bottom: 16px; margin-bottom: 24px; }
+          .org-name { font-size: 22px; font-weight: 800; color: #006a61; }
           .sub { font-size: 13px; color: #64748B; }
           .title { font-size: 18px; font-weight: 800; text-align: center; margin: 24px 0; text-decoration: underline; }
           .salutation { font-weight: 700; margin-bottom: 12px; }
@@ -289,7 +346,7 @@ export default function TemplatesScreen() {
       </body>
       </html>
     `;
-    await exportOrPrintPdf(html, `${selectedKey}_sample.pdf`);
+    await exportOrPrintPdf(html, `${selectedKey}_${selectedOrgId}.pdf`);
   };
 
   if (loading) return <LoadingState />;
@@ -300,9 +357,12 @@ export default function TemplatesScreen() {
         {/* Top Header */}
         <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
           <View>
-            <Text style={[styles.pageTitle, { color: colors.text }]}>Document & Email Templates</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={[styles.pageTitle, { color: colors.text }]}>Document & Email Templates</Text>
+              <Badge label="ORG SPECIFIC" variant="accentLight" />
+            </View>
             <Text style={[styles.pageSubtitle, { color: colors.textSecondary }]}>
-              Customize letter formats, legal clauses, and automated email notifications across all units.
+              Customize official letters, clauses, and email notifications linked specifically to your organization.
             </Text>
           </View>
 
@@ -315,20 +375,64 @@ export default function TemplatesScreen() {
             ) : null}
 
             <Button
-              title="Reset Default"
+              title="Reset Org Default"
               icon={<RotateCcw size={14} color={colors.text} />}
               onPress={handleReset}
               variant="outline"
               size="sm"
             />
             <Button
-              title={saving ? 'Saving...' : 'Save Template'}
+              title={saving ? 'Saving...' : 'Save for Org'}
               icon={<Save size={14} color="#FFF" />}
               onPress={handleSave}
               disabled={saving}
               size="sm"
               style={{ backgroundColor: colors.primary }}
             />
+          </View>
+        </View>
+
+        {/* Organization Switcher Bar: Explicit linkage per organization */}
+        <View style={[styles.orgBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Building2 size={16} color={colors.primary} />
+            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
+              Target Organization:
+            </Text>
+          </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            {availableOrgs.map((org) => {
+              const isSelected = org.id === selectedOrgId;
+              return (
+                <TouchableOpacity
+                  key={org.id}
+                  onPress={() => setSelectedOrgId(org.id)}
+                  style={[
+                    styles.orgPill,
+                    { borderColor: isSelected ? colors.primary : colors.border },
+                    isSelected && { backgroundColor: colors.primary + '15', borderWidth: 2 },
+                  ]}
+                >
+                  <Building2 size={13} color={isSelected ? colors.primary : colors.textSecondary} />
+                  <Text
+                    style={[
+                      styles.orgPillText,
+                      { color: isSelected ? colors.primary : colors.text, fontWeight: isSelected ? '700' : '500' },
+                    ]}
+                  >
+                    {org.name}
+                  </Text>
+                  {isSelected && <Check size={13} color={colors.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          <View style={styles.customCountBadge}>
+            <Text style={styles.customCountText}>
+              {customTemplatesCount} customized for {selectedOrg.name.slice(0, 16)}...
+            </Text>
           </View>
         </View>
 
@@ -402,6 +506,20 @@ export default function TemplatesScreen() {
                         </Text>
                         <ChevronRight size={14} color={isSelected ? colors.primary : colors.textSecondary} />
                       </View>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                        {tpl.is_custom ? (
+                          <View style={[styles.customBadge, { backgroundColor: '#DCFCE7' }]}>
+                            <Sparkles size={10} color="#15803D" />
+                            <Text style={[styles.customBadgeText, { color: '#15803D' }]}>Custom for Org</Text>
+                          </View>
+                        ) : (
+                          <View style={[styles.customBadge, { backgroundColor: '#F1F5F9' }]}>
+                            <Text style={[styles.customBadgeText, { color: '#64748B' }]}>System Default</Text>
+                          </View>
+                        )}
+                      </View>
+
                       <Text style={[styles.tplItemDesc, { color: colors.textSecondary }]} numberOfLines={2}>
                         {tpl.description}
                       </Text>
@@ -417,8 +535,15 @@ export default function TemplatesScreen() {
             {/* Action Bar / Mode Switcher */}
             <View style={[styles.editorHeader, { borderBottomColor: colors.border }]}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.editorTitle, { color: colors.text }]}>{name}</Text>
-                <Text style={{ fontSize: 12, color: colors.textSecondary }}>{currentTemplate?.description}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={[styles.editorTitle, { color: colors.text }]}>{name}</Text>
+                  {currentTemplate?.is_custom && (
+                    <Badge label={`Customized for ${selectedOrg.name}`} variant="success" />
+                  )}
+                </View>
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                  Linked to: <Text style={{ fontWeight: '700', color: colors.primary }}>{selectedOrg.name}</Text> ({selectedOrgId})
+                </Text>
               </View>
 
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -459,7 +584,7 @@ export default function TemplatesScreen() {
             {/* Variable Tags Palette Toolbar */}
             <View style={[styles.variableBar, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <Sparkles size={14} color="#0D7377" />
+                <Sparkles size={14} color={colors.primary} />
                 <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary }}>
                   CLICK TO INSERT DYNAMIC VARIABLES:
                 </Text>
@@ -634,7 +759,7 @@ export default function TemplatesScreen() {
                           {renderedBody}
                         </Text>
                         <View style={{ borderTopWidth: 1, borderColor: '#E2E8F0', paddingTop: 16, marginTop: 12 }}>
-                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D7377' }}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
                             {sampleData.organization_name} — People Operations
                           </Text>
                           <Text style={{ fontSize: 11, color: '#64748B' }}>
@@ -681,7 +806,7 @@ export default function TemplatesScreen() {
                           <Text style={{ fontSize: 11, color: '#64748B' }}>Employee Acceptance & Signature</Text>
                         </View>
                         <View style={[styles.docSignBox, { alignItems: 'flex-end' }]}>
-                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#0D7377' }}>{signatoryName || 'Authorized Signatory'}</Text>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>{signatoryName || 'Authorized Signatory'}</Text>
                           <Text style={{ fontSize: 11, color: '#64748B' }}>{signatoryTitle || 'Human Resources Director'}</Text>
                         </View>
                       </View>
@@ -698,64 +823,69 @@ export default function TemplatesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   topBar: {
-    paddingHorizontal: 24,
-    paddingVertical: 18,
-    borderBottomWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderBottomWidth: 1,
     flexWrap: 'wrap',
     gap: 12,
   },
-  pageTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-  },
-  pageSubtitle: {
-    fontSize: 13,
-    marginTop: 2,
-  },
+  pageTitle: { fontSize: 20, fontWeight: '800' },
+  pageSubtitle: { fontSize: 12, marginTop: 2 },
   feedbackPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#D1FAE5',
+    backgroundColor: '#DCFCE7',
     paddingHorizontal: 10,
     paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  feedbackText: { fontSize: 12, color: '#166534', fontWeight: '700' },
+  orgBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  orgPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    backgroundColor: '#FFF',
+  },
+  orgPillText: {
+    fontSize: 12,
+  },
+  customCountBadge: {
+    marginLeft: 'auto',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 6,
   },
-  feedbackText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#065F46',
+  customCountText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
   },
-  mainLayout: {
-    flex: 1,
-    flexDirection: 'column',
-    padding: 16,
-    gap: 16,
-  },
-  mainLayoutDesktop: {
-    flexDirection: 'row',
-    padding: 20,
-    gap: 20,
-  },
-  leftNav: {
-    width: '100%',
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 14,
-    maxHeight: 320,
-  },
-  leftNavDesktop: {
-    width: 320,
-    maxHeight: '100%',
-  },
+  mainLayout: { flex: 1, flexDirection: 'column' },
+  mainLayoutDesktop: { flexDirection: 'row' },
+  leftNav: { width: '100%', borderRightWidth: 1, padding: 16 },
+  leftNavDesktop: { width: 320 },
   categoryToggle: {
     flexDirection: 'row',
     backgroundColor: '#F1F5F9',
@@ -772,62 +902,57 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 6,
   },
-  catBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
+  catBtnText: { fontSize: 13, fontWeight: '700' },
   tplItem: {
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    gap: 4,
+    backgroundColor: '#FFF',
   },
-  tplItemName: {
-    fontSize: 13,
-  },
-  tplItemDesc: {
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  rightContent: {
-    flex: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  editorHeader: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
+  tplItemName: { fontSize: 13, flex: 1 },
+  tplItemDesc: { fontSize: 11, marginTop: 4, lineHeight: 15 },
+  customBadge: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  customBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  rightContent: { flex: 1, flexDirection: 'column' },
+  editorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
     flexWrap: 'wrap',
+    gap: 12,
   },
-  editorTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
+  editorTitle: { fontSize: 16, fontWeight: '700' },
   modeToggle: {
     flexDirection: 'row',
     borderRadius: 8,
     padding: 3,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    gap: 4,
   },
   modeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    paddingVertical: 5,
     paddingHorizontal: 10,
-    paddingVertical: 6,
     borderRadius: 6,
   },
-  modeBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
+  modeBtnText: { fontSize: 12, fontWeight: '600' },
   variableBar: {
     paddingHorizontal: 20,
     paddingVertical: 10,
@@ -835,156 +960,88 @@ const styles = StyleSheet.create({
   },
   varChip: {
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 6,
     borderWidth: 1,
     alignItems: 'center',
   },
-  varChipText: {
-    fontSize: 12,
-    fontWeight: '700',
-    fontFamily: 'monospace',
-  },
-  varChipSub: {
-    fontSize: 9,
-    color: '#64748B',
-  },
-  formGroup: {
-    gap: 6,
-  },
-  formLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
+  varChipText: { fontSize: 11, fontWeight: '700', fontFamily: 'monospace' },
+  varChipSub: { fontSize: 9, color: '#64748B', marginTop: 1 },
+  formGroup: { gap: 6 },
+  formLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
   input: {
+    height: 40,
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    fontSize: 13,
   },
   textArea: {
     height: 120,
+    paddingTop: 10,
     textAlignVertical: 'top',
   },
   clauseRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     borderWidth: 1,
     borderRadius: 8,
     padding: 8,
-    gap: 8,
     marginBottom: 6,
+    gap: 8,
   },
   clauseInput: {
     flex: 1,
     fontSize: 13,
     paddingVertical: 4,
-    lineHeight: 18,
   },
   deleteClauseBtn: {
     padding: 6,
   },
   previewPaper: {
-    borderRadius: 8,
     borderWidth: 1,
-    padding: 24,
-    minHeight: 480,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  emailPreviewBox: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderRadius: 12,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    marginBottom: 40,
   },
+  emailPreviewBox: { flex: 1 },
   emailHeaderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
     backgroundColor: '#F8FAFC',
     borderBottomWidth: 1,
     borderColor: '#E2E8F0',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
-  emailSubjectText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  docPreviewBox: {
-    padding: 12,
-  },
+  emailSubjectText: { fontSize: 14, fontWeight: '700', color: '#0F172A', flex: 1, marginRight: 10 },
+  docPreviewBox: { padding: 36, gap: 14 },
   docHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     borderBottomWidth: 2,
-    borderColor: '#0D7377',
-    paddingBottom: 14,
-    marginBottom: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    borderColor: '#006a61',
+    paddingBottom: 16,
   },
-  docOrgName: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#0D7377',
-    textTransform: 'uppercase',
-  },
-  docOrgUnit: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#D97706',
-    marginTop: 2,
-  },
-  docMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    fontSize: 12,
-    color: '#475569',
-    marginBottom: 16,
-  },
-  docMetaText: {
-    fontSize: 12,
-    color: '#475569',
-  },
-  docTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    textAlign: 'center',
-    marginVertical: 16,
-    textDecorationLine: 'underline',
-    color: '#0F172A',
-  },
-  docSalutation: {
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 10,
-    color: '#0F172A',
-  },
-  docBody: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: '#334155',
-    marginBottom: 14,
-  },
-  docClauseText: {
-    fontSize: 12.5,
-    lineHeight: 18,
-    color: '#334155',
-  },
+  docOrgName: { fontSize: 20, fontWeight: '800', color: '#006a61' },
+  docOrgUnit: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  docMeta: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 6 },
+  docMetaText: { fontSize: 12, color: '#64748B', fontWeight: '600' },
+  docTitle: { fontSize: 16, fontWeight: '800', textAlign: 'center', textDecorationLine: 'underline', marginVertical: 12 },
+  docSalutation: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
+  docBody: { fontSize: 13, color: '#334155', lineHeight: 22 },
+  docClauseText: { fontSize: 12, color: '#334155', lineHeight: 18 },
   docSignatureRow: {
-    marginTop: 40,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderColor: '#E2E8F0',
+    marginTop: 40,
     paddingTop: 16,
   },
-  docSignBox: {
-    gap: 4,
-  },
+  docSignBox: { width: 220, borderTopWidth: 1, borderColor: '#CBD5E1', paddingTop: 8 },
 });
