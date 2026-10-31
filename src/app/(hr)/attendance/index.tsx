@@ -210,7 +210,7 @@ export default function HRAttendanceScreen() {
                   { color: activeTab === 'late_overview' ? '#FFFFFF' : colors.textSecondary },
                 ]}
               >
-                Late Comers Overview
+                Late & Absent Overview
               </Text>
             </TouchableOpacity>
           </View>

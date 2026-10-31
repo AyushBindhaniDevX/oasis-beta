@@ -1,10 +1,13 @@
 import { db } from '@/lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
-import type { Attendance, Employee, Profile, Department, WorkShift } from '@/types';
+import type { Attendance, Employee, Profile, Department, WorkShift, LeaveRequest } from '@/types';
 import { exportExcel } from '@/utils/excel';
 
-export interface LateIncidentRecord {
+export type ExceptionType = 'late' | 'absent';
+
+export interface AttendanceIncidentRecord {
   id: string;
+  type: ExceptionType; // 'late' or 'absent'
   employeeId: string;
   employeeCode: string;
   employeeName: string;
@@ -14,41 +17,52 @@ export interface LateIncidentRecord {
   date: string;
   shiftName: string;
   shiftStart: string;
-  actualPunchIn: string;
-  lateMinutes: number;
-  monthOccurrence: number; // 1st, 2nd, 3rd, 4th...
-  isGrace: boolean;
-  lopDays: number; // 0 or 0.5
+  actualPunchIn: string; // "09:25 AM" or "No Clock-In"
+  lateMinutes: number; // minutes delay for late, 0 for absent
+  monthOccurrence: number; // 1st, 2nd, 3rd occurrence
+  isGrace: boolean; // true for late occurrences <= 3
+  lopDays: number; // 0, 0.5 (late > 3), or 1.0 (absent)
   statusBadge: string;
 }
 
-export interface EmployeeLateSummary {
+// Backward compatibility alias
+export type LateIncidentRecord = AttendanceIncidentRecord;
+
+export interface EmployeeAttendanceSummary {
   employeeId: string;
   employeeCode: string;
   employeeName: string;
+  avatarUrl?: string | null;
   department: string;
   designation: string;
   totalLateDays: number;
+  totalAbsentDays: number;
   graceUsedDays: number;
-  lopPenaltyDays: number;
+  lopPenaltyDays: number; // 0.5 * late penalties + 1.0 * absent
   totalLateMinutes: number;
   lateDates: string[];
+  absentDates: string[];
 }
+
+// Backward compatibility alias
+export type EmployeeLateSummary = EmployeeAttendanceSummary;
 
 export interface LateComersOverviewData {
   mode: 'daily' | 'monthly';
   targetDate?: string;
   periodLabel: string;
   summary: {
+    totalExceptions: number;
     totalLatePunches: number;
+    totalAbsences: number;
     uniqueStaffCount: number;
     withinGraceCount: number;
     lopPenaltiesCount: number;
     totalLopDaysDeducted: number;
     totalLateMinutes: number;
   };
-  incidents: LateIncidentRecord[];
-  employeeSummaries: EmployeeLateSummary[];
+  incidents: AttendanceIncidentRecord[];
+  employeeSummaries: EmployeeAttendanceSummary[];
 }
 
 export interface GetLateComersOverviewOptions {
@@ -57,6 +71,7 @@ export interface GetLateComersOverviewOptions {
   month?: number; // 1 - 12
   year?: number;
   search?: string;
+  filterType?: 'all' | 'late' | 'absent';
 }
 
 /**
@@ -99,16 +114,17 @@ export function parseTimeString(timeStr?: string | null): { hours: number; minut
 /**
  * Checks if an employee or attendance record matches the targeted organization
  */
-function isOrgMatch(emp: Employee | undefined, att: Attendance, orgId?: string): boolean {
+function isOrgMatch(emp: Employee | undefined, att?: Attendance | null, orgId?: string): boolean {
   if (!orgId || orgId === 'all') return true;
 
-  // Direct attendance check
-  const attOrg = (att as any).organization_id;
-  if (attOrg) {
-    if (attOrg === orgId) return true;
-    if (orgId === 'shanti-memorial-hospital' && attOrg === 'smh') return true;
-    if (orgId === 'smh' && attOrg === 'shanti-memorial-hospital') return true;
-    if (orgId === 'subedge_org' && attOrg === 'subedge') return true;
+  if (att) {
+    const attOrg = (att as any).organization_id;
+    if (attOrg) {
+      if (attOrg === orgId) return true;
+      if (orgId === 'shanti-memorial-hospital' && attOrg === 'smh') return true;
+      if (orgId === 'smh' && attOrg === 'shanti-memorial-hospital') return true;
+      if (orgId === 'subedge_org' && attOrg === 'subedge') return true;
+    }
   }
 
   if (!emp) return false;
@@ -125,13 +141,15 @@ function isOrgMatch(emp: Employee | undefined, att: Attendance, orgId?: string):
 }
 
 /**
- * Hospital policy for Shanti Memorial Hospital & Standard Multi-Tenant HRMS:
- * - 1st to 3rd late coming in a month: Covered under Grace Period (0 LOP)
- * - 4th late coming onwards in a month: 0.5 Day Loss of Pay (LOP) penalty per occurrence
- *
- * Supports both:
- * - Daily View (mode: 'daily', date: 'YYYY-MM-DD'): Shows late arrivals on that specific day with cumulative monthly occurrence context
- * - Monthly View (mode: 'monthly', month, year): Shows all late occurrences and staff summaries across the entire month
+ * Unified Late and Absent Attendance Exceptions Service:
+ * - Tracks Late Punches:
+ *   - 1st to 3rd late coming in a month: Covered under Grace Period (0 LOP)
+ *   - 4th late coming onwards in a month: 0.5 Day Loss of Pay (LOP) penalty per occurrence
+ * - Tracks Absent Staff:
+ *   - Unexcused missing punch or marked absent: 1.0 Day Loss of Pay (LOP) per absence
+ * - Supports both:
+ *   - Daily View (mode: 'daily', date: 'YYYY-MM-DD'): Shows all Late & Absent staff on that date
+ *   - Monthly View (mode: 'monthly', month, year): Shows cumulative monthly exceptions and consolidated staff summaries
  */
 export async function getLateComersOverview(
   orgId?: string,
@@ -183,13 +201,14 @@ export async function getLateComersOverview(
   }
 
   try {
-    const [attSnap, empsSnap, profsSnap, deptsSnap, shiftsSnap, empShiftsSnap] = await Promise.all([
+    const [attSnap, empsSnap, profsSnap, deptsSnap, shiftsSnap, empShiftsSnap, leavesSnap] = await Promise.all([
       getDocs(collection(db, 'attendance')),
       getDocs(collection(db, 'employees')),
       getDocs(collection(db, 'profiles')),
       getDocs(collection(db, 'departments')),
       getDocs(collection(db, 'shifts')).catch(() => getDocs(collection(db, 'work_shifts'))),
       getDocs(collection(db, 'employee_shifts')).catch(() => ({ docs: [] } as any)),
+      getDocs(collection(db, 'leave_requests')).catch(() => ({ docs: [] } as any)),
     ]);
 
     const profMap = new Map<string, Profile>();
@@ -210,27 +229,44 @@ export async function getLateComersOverview(
       }
     });
 
+    // Approved leaves index per employee
+    const approvedLeaves: Array<{ employeeId: string; startDate: string; endDate: string }> = [];
+    leavesSnap.forEach((d: any) => {
+      const data = d.data();
+      if (data?.status === 'approved' && data?.start_date && data?.end_date) {
+        approvedLeaves.push({
+          employeeId: data.employee_id,
+          startDate: data.start_date,
+          endDate: data.end_date,
+        });
+      }
+    });
+
+    const isEmployeeOnApprovedLeave = (empId: string, date: string): boolean => {
+      return approvedLeaves.some(
+        (l) => l.employeeId === empId && date >= l.startDate && date <= l.endDate
+      );
+    };
+
     const empMap = new Map<string, Employee>();
+    const activeOrgEmployees: Employee[] = [];
+
     empsSnap.forEach((d) => {
       const emp = { id: d.id, ...d.data() } as Employee;
       emp.profile = emp.profile_id ? profMap.get(emp.profile_id) : undefined;
       emp.department = emp.department_id ? deptMap.get(emp.department_id) : undefined;
       empMap.set(d.id, emp);
-      // Also map by profile_id for resilient lookup if attendance references profile id
       if (emp.profile_id) {
         empMap.set(emp.profile_id, emp);
       }
+      if (isOrgMatch(emp, null, orgId) && emp.employment_status !== 'terminated') {
+        activeOrgEmployees.push(emp);
+      }
     });
 
-    // Filter attendance for the target month & organization
-    const rawLateRecords: Array<{
-      att: Attendance;
-      emp: Employee;
-      shift: WorkShift | null;
-      shiftStartTimeStr: string;
-      punchInTimeStr: string;
-      lateMinutes: number;
-    }> = [];
+    // Group attendances for the target month by `${employeeId}_${date}`
+    const attByEmpAndDate = new Map<string, Attendance>();
+    const monthAttendances: Attendance[] = [];
 
     attSnap.forEach((d) => {
       const att = { id: d.id, ...d.data() } as Attendance;
@@ -240,13 +276,53 @@ export async function getLateComersOverview(
         return;
       }
 
-      // Check if matches targeted month (we need all month records to compute monthly cumulative occurrences)
-      if (att.date && !att.date.startsWith(monthPrefix)) {
-        return;
+      if (att.date && att.date.startsWith(monthPrefix)) {
+        monthAttendances.push(att);
+        if (emp) {
+          attByEmpAndDate.set(`${emp.id}_${att.date}`, att);
+        }
       }
+    });
 
-      // Find applicable shift
-      const scheduleShiftId = emp ? empShiftScheduleMap.get(`${emp.id}_${att.date}`) : null;
+    // Sort month attendances by date ascending to calculate chronological monthly occurrences
+    monthAttendances.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+    // Track cumulative occurrences and monthly summaries per employee
+    const lateOccurrenceTracker = new Map<string, number>();
+    const absentOccurrenceTracker = new Map<string, number>();
+    const employeeSummaryTracker = new Map<string, EmployeeAttendanceSummary>();
+
+    const getOrCreateSummary = (emp: Employee): EmployeeAttendanceSummary => {
+      let summary = employeeSummaryTracker.get(emp.id);
+      if (!summary) {
+        summary = {
+          employeeId: emp.id,
+          employeeCode: emp.employee_code || 'EMP-000',
+          employeeName: emp.profile?.full_name || 'Staff Member',
+          avatarUrl: emp.profile?.avatar_url || null,
+          department: emp.department?.name || 'General Operations',
+          designation: emp.designation || 'Staff',
+          totalLateDays: 0,
+          totalAbsentDays: 0,
+          graceUsedDays: 0,
+          lopPenaltyDays: 0,
+          totalLateMinutes: 0,
+          lateDates: [],
+          absentDates: [],
+        };
+        employeeSummaryTracker.set(emp.id, summary);
+      }
+      return summary;
+    };
+
+    const allIncidents: AttendanceIncidentRecord[] = [];
+
+    // 1. Process all existing month attendance records (both late and absent)
+    for (const att of monthAttendances) {
+      const emp = empMap.get(att.employee_id);
+      if (!emp) continue;
+
+      const scheduleShiftId = empShiftScheduleMap.get(`${emp.id}_${att.date}`);
       const targetShiftId = scheduleShiftId || (att as any).shift_id || emp?.default_shift_id;
       const shift = targetShiftId ? shiftMap.get(targetShiftId) || null : null;
 
@@ -254,9 +330,8 @@ export async function getLateComersOverview(
       const parsedShiftStart = parseTimeString(shiftStartStr) || { hours: 9, minutes: 0, formatted: '09:00 AM' };
       const shiftStartMinutes = parsedShiftStart.hours * 60 + parsedShiftStart.minutes;
 
-      // Parse actual clock in
-      let punchInTimeStr = '09:15 AM';
-      let punchInMinutes = shiftStartMinutes + 15;
+      let punchInTimeStr = 'No Clock-In';
+      let punchInMinutes = 0;
       let hasClockIn = false;
 
       if (att.clock_in) {
@@ -268,118 +343,165 @@ export async function getLateComersOverview(
         }
       }
 
-      // Determine if late
-      // Standard grace: 15 minutes after shift start time
+      // Determine exception type
       const delayMinutes = hasClockIn ? punchInMinutes - shiftStartMinutes : 0;
       let isLate = att.status === 'late';
+      let isAbsent = att.status === 'absent';
 
-      if (!isLate && hasClockIn) {
-        // If punch was after shift start + 15 mins grace
+      if (!isLate && !isAbsent && hasClockIn) {
         if (delayMinutes > 15) {
           isLate = true;
         }
       }
 
-      if (isLate && emp) {
+      if (isLate) {
+        const currentCount = (lateOccurrenceTracker.get(emp.id) || 0) + 1;
+        lateOccurrenceTracker.set(emp.id, currentCount);
+
+        const isGrace = currentCount <= 3;
+        const lopDays = isGrace ? 0 : 0.5;
         const effectiveLateMinutes = Math.max(delayMinutes > 0 ? delayMinutes : 15, 10);
-        rawLateRecords.push({
-          att,
-          emp,
-          shift,
-          shiftStartTimeStr: parsedShiftStart.formatted,
-          punchInTimeStr,
+
+        const statusBadge = isGrace
+          ? `Grace Allowed (${currentCount}/3)`
+          : `0.5 Day LOP Penalty (${currentCount}th)`;
+
+        allIncidents.push({
+          id: att.id,
+          type: 'late',
+          employeeId: emp.id,
+          employeeCode: emp.employee_code || 'EMP-000',
+          employeeName: emp.profile?.full_name || 'Staff Member',
+          avatarUrl: emp.profile?.avatar_url || null,
+          department: emp.department?.name || 'General Operations',
+          designation: emp.designation || 'Staff',
+          date: att.date,
+          shiftName: shift?.name || 'General Day Shift',
+          shiftStart: parsedShiftStart.formatted,
+          actualPunchIn: punchInTimeStr,
           lateMinutes: effectiveLateMinutes,
+          monthOccurrence: currentCount,
+          isGrace,
+          lopDays,
+          statusBadge,
         });
+
+        const empSum = getOrCreateSummary(emp);
+        empSum.totalLateDays += 1;
+        if (isGrace) {
+          empSum.graceUsedDays += 1;
+        } else {
+          empSum.lopPenaltyDays += 0.5;
+        }
+        empSum.totalLateMinutes += effectiveLateMinutes;
+        empSum.lateDates.push(att.date);
+      } else if (isAbsent) {
+        const currentCount = (absentOccurrenceTracker.get(emp.id) || 0) + 1;
+        absentOccurrenceTracker.set(emp.id, currentCount);
+
+        allIncidents.push({
+          id: att.id,
+          type: 'absent',
+          employeeId: emp.id,
+          employeeCode: emp.employee_code || 'EMP-000',
+          employeeName: emp.profile?.full_name || 'Staff Member',
+          avatarUrl: emp.profile?.avatar_url || null,
+          department: emp.department?.name || 'General Operations',
+          designation: emp.designation || 'Staff',
+          date: att.date,
+          shiftName: shift?.name || 'General Day Shift',
+          shiftStart: parsedShiftStart.formatted,
+          actualPunchIn: 'No Clock-In (Absent)',
+          lateMinutes: 0,
+          monthOccurrence: currentCount,
+          isGrace: false,
+          lopDays: 1.0,
+          statusBadge: '1.0 Day LOP Penalty',
+        });
+
+        const empSum = getOrCreateSummary(emp);
+        empSum.totalAbsentDays += 1;
+        empSum.lopPenaltyDays += 1.0;
+        empSum.absentDates.push(att.date);
       }
-    });
-
-    // Sort by date ascending to accurately calculate cumulative monthly occurrence per employee
-    rawLateRecords.sort((a, b) => (a.att.date || '').localeCompare(b.att.date || ''));
-
-    const employeeOccurrenceTracker = new Map<string, number>();
-    const employeeSummaryTracker = new Map<string, EmployeeLateSummary>();
-
-    const allIncidents: LateIncidentRecord[] = [];
-
-    for (const item of rawLateRecords) {
-      const { att, emp, shift, shiftStartTimeStr, punchInTimeStr, lateMinutes } = item;
-
-      const currentCount = (employeeOccurrenceTracker.get(emp.id) || 0) + 1;
-      employeeOccurrenceTracker.set(emp.id, currentCount);
-
-      const isGrace = currentCount <= 3;
-      const lopDays = isGrace ? 0 : 0.5;
-
-      const statusBadge = isGrace
-        ? `Grace Allowed (${currentCount}/3)`
-        : `0.5 Day LOP Penalty (${currentCount}th)`;
-
-      allIncidents.push({
-        id: att.id,
-        employeeId: emp.id,
-        employeeCode: emp.employee_code || 'EMP-000',
-        employeeName: emp.profile?.full_name || 'Staff Member',
-        avatarUrl: emp.profile?.avatar_url || null,
-        department: emp.department?.name || 'General Operations',
-        designation: emp.designation || 'Staff',
-        date: att.date,
-        shiftName: shift?.name || 'General Day Shift',
-        shiftStart: shiftStartTimeStr,
-        actualPunchIn: punchInTimeStr,
-        lateMinutes,
-        monthOccurrence: currentCount,
-        isGrace,
-        lopDays,
-        statusBadge,
-      });
-
-      // Update consolidated employee monthly summary
-      const existingSummary = employeeSummaryTracker.get(emp.id) || {
-        employeeId: emp.id,
-        employeeCode: emp.employee_code || 'EMP-000',
-        employeeName: emp.profile?.full_name || 'Staff Member',
-        department: emp.department?.name || 'General Operations',
-        designation: emp.designation || 'Staff',
-        totalLateDays: 0,
-        graceUsedDays: 0,
-        lopPenaltyDays: 0,
-        totalLateMinutes: 0,
-        lateDates: [],
-      };
-
-      existingSummary.totalLateDays += 1;
-      if (isGrace) {
-        existingSummary.graceUsedDays += 1;
-      } else {
-        existingSummary.lopPenaltyDays += 0.5;
-      }
-      existingSummary.totalLateMinutes += lateMinutes;
-      existingSummary.lateDates.push(att.date);
-
-      employeeSummaryTracker.set(emp.id, existingSummary);
     }
 
-    // Filter incidents based on mode
-    let targetIncidents: LateIncidentRecord[] = [];
+    // 2. For Daily View: Also identify scheduled active staff who have NO punch-in on targetDate
+    if (mode === 'daily' && targetDateStr) {
+      for (const emp of activeOrgEmployees) {
+        const hasExisting = attByEmpAndDate.has(`${emp.id}_${targetDateStr}`);
+        if (!hasExisting) {
+          // Check if employee is on scheduled OFF
+          const scheduleShiftId = empShiftScheduleMap.get(`${emp.id}_${targetDateStr}`);
+          if (scheduleShiftId === 'OFF') continue;
+
+          // Check if employee is on approved leave
+          if (isEmployeeOnApprovedLeave(emp.id, targetDateStr)) continue;
+
+          const targetShiftId = scheduleShiftId || emp.default_shift_id;
+          const shift = targetShiftId ? shiftMap.get(targetShiftId) || null : null;
+          const shiftStartStr = shift?.start_time || '09:00';
+          const parsedShiftStart = parseTimeString(shiftStartStr) || { hours: 9, minutes: 0, formatted: '09:00 AM' };
+
+          const currentCount = (absentOccurrenceTracker.get(emp.id) || 0) + 1;
+          absentOccurrenceTracker.set(emp.id, currentCount);
+
+          allIncidents.push({
+            id: `missing_${emp.id}_${targetDateStr}`,
+            type: 'absent',
+            employeeId: emp.id,
+            employeeCode: emp.employee_code || 'EMP-000',
+            employeeName: emp.profile?.full_name || 'Staff Member',
+            avatarUrl: emp.profile?.avatar_url || null,
+            department: emp.department?.name || 'General Operations',
+            designation: emp.designation || 'Staff',
+            date: targetDateStr,
+            shiftName: shift?.name || 'General Day Shift',
+            shiftStart: parsedShiftStart.formatted,
+            actualPunchIn: 'No Clock-In (Absent)',
+            lateMinutes: 0,
+            monthOccurrence: currentCount,
+            isGrace: false,
+            lopDays: 1.0,
+            statusBadge: '1.0 Day LOP Penalty',
+          });
+
+          const empSum = getOrCreateSummary(emp);
+          empSum.totalAbsentDays += 1;
+          empSum.lopPenaltyDays += 1.0;
+          empSum.absentDates.push(targetDateStr);
+        }
+      }
+    }
+
+    // Filter incidents based on mode & targetDate
+    let targetIncidents: AttendanceIncidentRecord[] = [];
     if (mode === 'daily' && targetDateStr) {
       targetIncidents = allIncidents.filter((inc) => inc.date === targetDateStr);
     } else {
       targetIncidents = [...allIncidents];
     }
 
-    // Incidents reverse-chronological by date/punch for display
-    targetIncidents.sort((a, b) => b.date.localeCompare(a.date));
+    // Sort: Late & Absent combined, reverse chronological
+    targetIncidents.sort((a, b) => {
+      const dateCompare = b.date.localeCompare(a.date);
+      if (dateCompare !== 0) return dateCompare;
+      // Sort Absences and higher LOP first
+      return b.lopDays - a.lopDays;
+    });
 
     const employeeSummaries = Array.from(employeeSummaryTracker.values());
-    employeeSummaries.sort((a, b) => b.totalLateDays - a.totalLateDays);
+    employeeSummaries.sort((a, b) => b.lopPenaltyDays - a.lopPenaltyDays || b.totalLateDays - a.totalLateDays);
 
-    // Calculate aggregated metrics
-    const totalLatePunches = targetIncidents.length;
+    // Compute metrics
+    const totalLatePunches = targetIncidents.filter((i) => i.type === 'late').length;
+    const totalAbsences = targetIncidents.filter((i) => i.type === 'absent').length;
+    const totalExceptions = targetIncidents.length;
     const uniqueStaffIds = new Set(targetIncidents.map((i) => i.employeeId));
     const uniqueStaffCount = uniqueStaffIds.size;
     const withinGraceCount = targetIncidents.filter((i) => i.isGrace).length;
-    const lopPenaltiesCount = targetIncidents.filter((i) => !i.isGrace).length;
-    const totalLopDaysDeducted = lopPenaltiesCount * 0.5;
+    const lopPenaltiesCount = targetIncidents.filter((i) => i.lopDays > 0).length;
+    const totalLopDaysDeducted = targetIncidents.reduce((acc, i) => acc + i.lopDays, 0);
     const totalLateMinutes = targetIncidents.reduce((acc, i) => acc + i.lateMinutes, 0);
 
     return {
@@ -387,7 +509,9 @@ export async function getLateComersOverview(
       targetDate: targetDateStr,
       periodLabel,
       summary: {
+        totalExceptions,
         totalLatePunches,
+        totalAbsences,
         uniqueStaffCount,
         withinGraceCount,
         lopPenaltiesCount,
@@ -404,7 +528,9 @@ export async function getLateComersOverview(
       targetDate: targetDateStr,
       periodLabel,
       summary: {
+        totalExceptions: 0,
         totalLatePunches: 0,
+        totalAbsences: 0,
         uniqueStaffCount: 0,
         withinGraceCount: 0,
         lopPenaltiesCount: 0,
@@ -418,7 +544,7 @@ export async function getLateComersOverview(
 }
 
 /**
- * Export late comers overview data to Excel
+ * Export attendance exceptions (late and absent) overview data to Excel
  */
 export async function exportLateComersToExcel(
   data: LateComersOverviewData,
@@ -429,22 +555,24 @@ export async function exportLateComersToExcel(
   if (isDaily || mode === 'incidents') {
     const headers = [
       'Sl. No',
+      'Exception Type',
       'Employee Code',
       'Employee Name',
       'Department',
       'Designation',
       'Date',
-      'Shift Name',
+      'Assigned Shift',
       'Scheduled Start',
       'Actual Punch In',
       'Late Delay (Mins)',
-      'Monthly Occurrence',
-      'Hospital Policy Status',
+      'Month Occurrence',
+      'Policy Impact Status',
       'LOP Penalty (Days)',
     ];
 
     const rows = data.incidents.map((inc, idx) => [
       idx + 1,
+      inc.type.toUpperCase(),
       inc.employeeCode,
       inc.employeeName,
       inc.department,
@@ -453,16 +581,18 @@ export async function exportLateComersToExcel(
       inc.shiftName,
       inc.shiftStart,
       inc.actualPunchIn,
-      inc.lateMinutes,
-      `${inc.monthOccurrence} occurrence`,
+      inc.type === 'late' ? inc.lateMinutes : '-',
+      `${inc.monthOccurrence} time`,
       inc.statusBadge,
       inc.lopDays,
     ]);
 
-    const titlePrefix = isDaily ? `Daily_Late_Comers_${data.targetDate || 'Report'}` : `Late_Punches_Log_${data.periodLabel.replace(/\s+/g, '_')}`;
+    const titlePrefix = isDaily
+      ? `Attendance_Exceptions_Daily_${data.targetDate || 'Report'}`
+      : `Attendance_Exceptions_Monthly_${data.periodLabel.replace(/\s+/g, '_')}`;
 
     await exportExcel(titlePrefix, [
-      { name: isDaily ? 'Daily Late Comers' : 'Late Incidents', headers, rows },
+      { name: isDaily ? 'Daily Exceptions' : 'Monthly Exceptions', headers, rows },
     ]);
   } else {
     const headers = [
@@ -471,12 +601,13 @@ export async function exportLateComersToExcel(
       'Employee Name',
       'Department',
       'Designation',
-      'Total Late Days',
+      'Late Days',
+      'Absent Days',
       'Grace Used (<=3)',
-      'Penalty Days (>3)',
-      'Total LOP Deducted',
-      'Total Late Minutes',
-      'Incident Dates',
+      'Total LOP Penalty (Days)',
+      'Total Delay Minutes',
+      'Late Dates',
+      'Absent Dates',
     ];
 
     const rows = data.employeeSummaries.map((emp, idx) => [
@@ -486,15 +617,16 @@ export async function exportLateComersToExcel(
       emp.department,
       emp.designation,
       emp.totalLateDays,
+      emp.totalAbsentDays,
       emp.graceUsedDays,
-      Math.max(0, emp.totalLateDays - 3),
       emp.lopPenaltyDays,
       emp.totalLateMinutes,
       emp.lateDates.join(', '),
+      emp.absentDates.join(', '),
     ]);
 
-    await exportExcel(`Staff_Late_Summary_${data.periodLabel.replace(/\s+/g, '_')}`, [
-      { name: 'Staff Late Summary', headers, rows },
+    await exportExcel(`Staff_Attendance_Exceptions_Summary_${data.periodLabel.replace(/\s+/g, '_')}`, [
+      { name: 'Staff Summary', headers, rows },
     ]);
   }
 }

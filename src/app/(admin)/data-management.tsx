@@ -148,12 +148,12 @@ export default function DataManagementScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Clock size={16} color="#006a61" />
                   <Text style={{ fontSize: 14, fontWeight: '700', color: '#006a61' }}>
-                    Late Comers Live Overview
+                    Late & Absent Live Overview
                   </Text>
                   <Badge label="NO DOWNLOAD NEEDED" variant="accentLight" />
                 </View>
                 <Text style={{ fontSize: 12, color: '#334155' }}>
-                  Inspect daily punch-in times, grace limits (3/month), and 0.5 LOP penalties directly on-screen instead of repeatedly downloading PDFs or Excel files.
+                  Inspect daily punch-in times, absences, grace limits (3/month), and 0.5 / 1.0 LOP penalties directly on-screen instead of repeatedly downloading files.
                 </Text>
               </View>
               <Button

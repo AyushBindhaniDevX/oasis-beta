@@ -22,9 +22,9 @@ import {
 } from '@/lib/services/lateAttendance';
 import {
   Clock,
+  UserX,
   Search,
   RefreshCw,
-  Download,
   AlertTriangle,
   ShieldCheck,
   Users,
@@ -36,6 +36,7 @@ import {
   FileSpreadsheet,
   AlertCircle,
   Building2,
+  CheckCircle2,
 } from 'lucide-react-native';
 
 interface LateComersOverviewViewProps {
@@ -55,6 +56,9 @@ export function LateComersOverviewView({
 
   // View Mode: 'daily' (default) or 'monthly'
   const [viewMode, setViewMode] = useState<'daily' | 'monthly'>('daily');
+
+  // Filter Type: 'all' | 'late' | 'absent'
+  const [exceptionFilter, setExceptionFilter] = useState<'all' | 'late' | 'absent'>('all');
 
   // Daily Mode State
   const getTodayStr = () => {
@@ -102,7 +106,7 @@ export function LateComersOverviewView({
         setData(res);
       }
     } catch (err) {
-      console.error('Failed to load late comers overview:', err);
+      console.error('Failed to load late and absent overview:', err);
     } finally {
       setLoading(false);
     }
@@ -148,9 +152,16 @@ export function LateComersOverviewView({
 
   const filteredIncidents = useMemo(() => {
     if (!data?.incidents) return [];
-    if (!searchQuery.trim()) return data.incidents;
+    let list = data.incidents;
+
+    // Filter by type: 'all' | 'late' | 'absent'
+    if (exceptionFilter !== 'all') {
+      list = list.filter((i) => i.type === exceptionFilter);
+    }
+
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase();
-    return data.incidents.filter(
+    return list.filter(
       (i) =>
         i.employeeName.toLowerCase().includes(q) ||
         i.employeeCode.toLowerCase().includes(q) ||
@@ -158,19 +169,27 @@ export function LateComersOverviewView({
         i.shiftName.toLowerCase().includes(q) ||
         i.date.includes(q)
     );
-  }, [data?.incidents, searchQuery]);
+  }, [data?.incidents, exceptionFilter, searchQuery]);
 
   const filteredSummaries = useMemo(() => {
     if (!data?.employeeSummaries) return [];
-    if (!searchQuery.trim()) return data.employeeSummaries;
+    let list = data.employeeSummaries;
+
+    if (exceptionFilter === 'late') {
+      list = list.filter((s) => s.totalLateDays > 0);
+    } else if (exceptionFilter === 'absent') {
+      list = list.filter((s) => s.totalAbsentDays > 0);
+    }
+
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase();
-    return data.employeeSummaries.filter(
+    return list.filter(
       (s) =>
         s.employeeName.toLowerCase().includes(q) ||
         s.employeeCode.toLowerCase().includes(q) ||
         s.department.toLowerCase().includes(q)
     );
-  }, [data?.employeeSummaries, searchQuery]);
+  }, [data?.employeeSummaries, exceptionFilter, searchQuery]);
 
   const handleExport = async () => {
     if (!data) return;
@@ -186,7 +205,9 @@ export function LateComersOverviewView({
   };
 
   const summary = data?.summary || {
+    totalExceptions: 0,
     totalLatePunches: 0,
+    totalAbsences: 0,
     uniqueStaffCount: 0,
     withinGraceCount: 0,
     lopPenaltiesCount: 0,
@@ -219,9 +240,9 @@ export function LateComersOverviewView({
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Clock size={20} color="#006a61" />
             <Text style={[styles.title, { color: colors.text }]}>
-              Late Comers Live Overview
+              Late & Absent Attendance Overview
             </Text>
-            <Badge label={viewMode === 'daily' ? 'DAILY ROSTER VIEW' : 'MONTHLY AGGREGATE'} variant="accentLight" />
+            <Badge label={viewMode === 'daily' ? 'DAILY LIVE MONITOR' : 'MONTHLY AUDIT'} variant="accentLight" />
             {organizationId && (
               <View style={[styles.orgBadge, { backgroundColor: colors.primary + '15', borderColor: colors.primary + '40' }]}>
                 <Building2 size={12} color={colors.primary} />
@@ -233,8 +254,8 @@ export function LateComersOverviewView({
           </View>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             {viewMode === 'daily'
-              ? `Real-time punctuality monitor for ${formattedSelectedDate} with 3-time monthly grace tracking & 0.5 LOP penalty assessment.`
-              : `Monthly summary of late punches, 3-time grace period consumption, and accumulated salary deduction impact.`}
+              ? `Daily punctuality and absence monitor for ${formattedSelectedDate} with 3-time monthly grace tracker and 0.5 / 1.0 LOP penalty impact.`
+              : `Monthly summary of late punches, unexcused absences, grace consumption, and payroll deduction calculations.`}
           </Text>
         </View>
 
@@ -396,7 +417,7 @@ export function LateComersOverviewView({
                       monthlyTab === 'incidents' && { fontWeight: '700' },
                     ]}
                   >
-                    Punch Log ({data?.incidents.length || 0})
+                    Incidents Log ({data?.incidents.length || 0})
                   </Text>
                 </TouchableOpacity>
 
@@ -447,11 +468,10 @@ export function LateComersOverviewView({
 
         {/* 4 Metric Summary Cards */}
         <View style={styles.metricsGrid}>
+          {/* Late Card */}
           <Card style={styles.metricCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={styles.metricLabel}>
-                {viewMode === 'daily' ? 'Daily Late Arrivals' : 'Total Late Punches'}
-              </Text>
+              <Text style={styles.metricLabel}>Late Arrivals</Text>
               <View style={[styles.metricIconWrap, { backgroundColor: '#FEF3C7' }]}>
                 <Clock size={16} color="#D97706" />
               </View>
@@ -461,16 +481,33 @@ export function LateComersOverviewView({
             </Text>
             <Text style={styles.metricSub}>
               {viewMode === 'daily'
-                ? `Logged on ${formattedSelectedDate}`
-                : `Recorded in ${data?.periodLabel || 'period'}`}
+                ? `Punched in late on ${formattedSelectedDate}`
+                : `Total late punches in ${data?.periodLabel || 'month'}`}
             </Text>
           </Card>
 
+          {/* Absent Card */}
           <Card style={styles.metricCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={styles.metricLabel}>
-                {viewMode === 'daily' ? 'Grace Covered (≤3)' : 'Grace Allowed (≤3)'}
-              </Text>
+              <Text style={styles.metricLabel}>Absent Staff</Text>
+              <View style={[styles.metricIconWrap, { backgroundColor: '#FEE2E2' }]}>
+                <UserX size={16} color="#DC2626" />
+              </View>
+            </View>
+            <Text style={[styles.metricValue, { color: '#B91C1C' }]}>
+              {summary.totalAbsences}
+            </Text>
+            <Text style={styles.metricSub}>
+              {viewMode === 'daily'
+                ? `No clock-in / absent on ${formattedSelectedDate}`
+                : `Total absences in ${data?.periodLabel || 'month'}`}
+            </Text>
+          </Card>
+
+          {/* Grace Allowed Card */}
+          <Card style={styles.metricCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={styles.metricLabel}>Grace Allowed (≤3)</Text>
               <View style={[styles.metricIconWrap, { backgroundColor: '#DCFCE7' }]}>
                 <ShieldCheck size={16} color="#15803D" />
               </View>
@@ -478,56 +515,90 @@ export function LateComersOverviewView({
             <Text style={[styles.metricValue, { color: '#15803D' }]}>
               {summary.withinGraceCount}
             </Text>
-            <Text style={styles.metricSub}>0 LOP (No salary deduction)</Text>
+            <Text style={styles.metricSub}>0 LOP (Covered under monthly grace)</Text>
           </Card>
 
+          {/* Total LOP Penalties Card */}
           <Card style={styles.metricCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={styles.metricLabel}>
-                {viewMode === 'daily' ? '0.5 LOP Penalties' : 'Total LOP Penalties'}
-              </Text>
-              <View style={[styles.metricIconWrap, { backgroundColor: '#FEE2E2' }]}>
-                <AlertTriangle size={16} color="#DC2626" />
+              <Text style={styles.metricLabel}>Total LOP Days</Text>
+              <View style={[styles.metricIconWrap, { backgroundColor: '#FDF2F8' }]}>
+                <AlertTriangle size={16} color="#BE185D" />
               </View>
             </View>
-            <Text style={[styles.metricValue, { color: '#B91C1C' }]}>
-              {summary.lopPenaltiesCount}
+            <Text style={[styles.metricValue, { color: '#9D174D' }]}>
+              {summary.totalLopDaysDeducted.toFixed(1)} Days
             </Text>
             <Text style={styles.metricSub}>
-              {summary.totalLopDaysDeducted.toFixed(1)} days LOP salary penalty
-            </Text>
-          </Card>
-
-          <Card style={styles.metricCard}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={styles.metricLabel}>
-                {viewMode === 'daily' ? 'Total Delay Today' : 'Staff Members'}
-              </Text>
-              <View style={[styles.metricIconWrap, { backgroundColor: '#DBEAFE' }]}>
-                {viewMode === 'daily' ? (
-                  <Clock size={16} color="#2563EB" />
-                ) : (
-                  <Users size={16} color="#2563EB" />
-                )}
-              </View>
-            </View>
-            <Text style={[styles.metricValue, { color: '#1D4ED8' }]}>
-              {viewMode === 'daily'
-                ? formatMinutesToHours(summary.totalLateMinutes)
-                : summary.uniqueStaffCount}
-            </Text>
-            <Text style={styles.metricSub}>
-              {viewMode === 'daily'
-                ? `Cumulative late minutes`
-                : `With late punch marks`}
+              {summary.lopPenaltiesCount} penalty occurrences (0.5 Late + 1.0 Absent)
             </Text>
           </Card>
         </View>
 
-        {/* Search & Export Toolbar */}
+        {/* Filter Pills & Search & Export Toolbar */}
         <View style={styles.searchExportRow}>
+          {/* Filter Pills: All / Late Only / Absent Only */}
+          <View style={styles.filterPillsRow}>
+            <TouchableOpacity
+              onPress={() => setExceptionFilter('all')}
+              style={[
+                styles.filterPill,
+                exceptionFilter === 'all' && { backgroundColor: '#006a61', borderColor: '#006a61' },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  { color: exceptionFilter === 'all' ? '#FFFFFF' : colors.textSecondary },
+                  exceptionFilter === 'all' && { fontWeight: '700' },
+                ]}
+              >
+                All ({summary.totalExceptions})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setExceptionFilter('late')}
+              style={[
+                styles.filterPill,
+                exceptionFilter === 'late' && { backgroundColor: '#D97706', borderColor: '#D97706' },
+              ]}
+            >
+              <Clock size={12} color={exceptionFilter === 'late' ? '#FFFFFF' : '#D97706'} />
+              <Text
+                style={[
+                  styles.filterPillText,
+                  { color: exceptionFilter === 'late' ? '#FFFFFF' : '#B45309' },
+                  exceptionFilter === 'late' && { fontWeight: '700' },
+                ]}
+              >
+                Late Only ({summary.totalLatePunches})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setExceptionFilter('absent')}
+              style={[
+                styles.filterPill,
+                exceptionFilter === 'absent' && { backgroundColor: '#DC2626', borderColor: '#DC2626' },
+              ]}
+            >
+              <UserX size={12} color={exceptionFilter === 'absent' ? '#FFFFFF' : '#DC2626'} />
+              <Text
+                style={[
+                  styles.filterPillText,
+                  { color: exceptionFilter === 'absent' ? '#FFFFFF' : '#B91C1C' },
+                  exceptionFilter === 'absent' && { fontWeight: '700' },
+                ]}
+              >
+                Absent Only ({summary.totalAbsences})
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Search Box */}
           <View style={[styles.searchBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Search size={16} color={colors.textSecondary} />
+            <Search size={15} color={colors.textSecondary} />
             <TextInput
               placeholder="Search by staff name, code, department, shift..."
               placeholderTextColor={colors.textSecondary}
@@ -537,13 +608,13 @@ export function LateComersOverviewView({
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}>
-                <X size={14} color={colors.textSecondary} />
+                <X size={13} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
           </View>
 
           <Button
-            title={exporting ? 'Exporting...' : viewMode === 'daily' ? 'Export Daily Excel' : 'Export Monthly Excel'}
+            title={exporting ? 'Exporting...' : viewMode === 'daily' ? 'Export Daily' : 'Export Monthly'}
             icon={<FileSpreadsheet size={14} color="#FFF" />}
             onPress={handleExport}
             loading={exporting}
@@ -557,122 +628,170 @@ export function LateComersOverviewView({
           <View style={{ padding: 48, alignItems: 'center' }}>
             <ActivityIndicator size="large" color="#006a61" />
             <Text style={{ marginTop: 12, color: colors.textSecondary, fontSize: 14 }}>
-              Loading {viewMode === 'daily' ? 'daily' : 'monthly'} late arrival records...
+              Loading {viewMode === 'daily' ? 'daily' : 'monthly'} attendance records...
             </Text>
           </View>
         ) : viewMode === 'daily' || monthlyTab === 'incidents' ? (
-          /* Incident Table (Daily view or Monthly Punch Log) */
+          /* Incident Table (Daily view or Monthly Log) */
           <View style={[styles.tableContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             {/* Table Header */}
             <View style={[styles.tableHeader, { backgroundColor: '#F8FAFC', borderBottomColor: colors.border }]}>
+              <Text style={[styles.th, { width: 85 }]}>TYPE</Text>
               {viewMode === 'monthly' && <Text style={[styles.th, { width: 95 }]}>DATE</Text>}
               <Text style={[styles.th, { flex: 1.6, minWidth: 160 }]}>STAFF MEMBER</Text>
               <Text style={[styles.th, { flex: 1.1, minWidth: 120 }]}>DEPARTMENT</Text>
               <Text style={[styles.th, { flex: 1.2, minWidth: 130 }]}>ASSIGNED SHIFT</Text>
-              <Text style={[styles.th, { width: 90 }]}>PUNCH IN</Text>
-              <Text style={[styles.th, { width: 85 }]}>LATE BY</Text>
-              <Text style={[styles.th, { width: 110 }]}>MONTH OCCURRENCE</Text>
-              <Text style={[styles.th, { width: 175 }]}>HOSPITAL POLICY STATUS</Text>
+              <Text style={[styles.th, { width: 95 }]}>PUNCH IN</Text>
+              <Text style={[styles.th, { width: 85 }]}>DELAY</Text>
+              <Text style={[styles.th, { width: 105 }]}>OCCURRENCE</Text>
+              <Text style={[styles.th, { width: 175 }]}>POLICY IMPACT</Text>
             </View>
 
             {filteredIncidents.length === 0 ? (
               <View style={{ padding: 40, alignItems: 'center' }}>
-                <ShieldCheck size={42} color="#059669" />
+                <CheckCircle2 size={42} color="#059669" />
                 <Text style={{ marginTop: 10, fontWeight: '700', fontSize: 16, color: colors.text }}>
-                  {viewMode === 'daily' ? `No Late Arrivals on ${formattedSelectedDate}` : 'No Late Punches Found'}
+                  {viewMode === 'daily'
+                    ? `No ${exceptionFilter === 'late' ? 'Late Arrivals' : exceptionFilter === 'absent' ? 'Absences' : 'Attendance Exceptions'} on ${formattedSelectedDate}`
+                    : `No ${exceptionFilter === 'late' ? 'Late Punches' : exceptionFilter === 'absent' ? 'Absences' : 'Attendance Exceptions'} Found`}
                 </Text>
                 <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 4, textAlign: 'center', maxWidth: 450 }}>
                   {viewMode === 'daily'
-                    ? `All scheduled staff members checked in on time for this day. Punctuality standards fully observed.`
-                    : 'No late attendance incidents recorded for this organization during the selected month.'}
+                    ? `All scheduled staff members checked in on time for this day. Full punctuality & attendance standards observed.`
+                    : 'No attendance exceptions recorded for this organization during the selected month.'}
                 </Text>
               </View>
             ) : (
-              filteredIncidents.map((row, idx) => (
-                <View
-                  key={row.id || `${row.employeeId}_${row.date}_${idx}`}
-                  style={[
-                    styles.tableRow,
-                    { borderBottomColor: colors.border + '30' },
-                    idx % 2 === 1 && { backgroundColor: '#FAFAFA' },
-                  ]}
-                >
-                  {viewMode === 'monthly' && (
-                    <View style={{ width: 95 }}>
-                      <Text style={{ fontSize: 12, fontWeight: '600', color: colors.text }}>{row.date}</Text>
-                    </View>
-                  )}
-
-                  <View style={{ flex: 1.6, minWidth: 160, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <Avatar name={row.employeeName} url={row.avatarUrl || undefined} size={32} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }} numberOfLines={1}>
-                        {row.employeeName}
-                      </Text>
-                      <Text style={{ fontSize: 11, color: colors.textSecondary }} numberOfLines={1}>
-                        {row.employeeCode} • {row.designation}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={{ flex: 1.1, minWidth: 120 }}>
-                    <Text style={{ fontSize: 12, color: colors.text }} numberOfLines={1}>
-                      {row.department}
-                    </Text>
-                  </View>
-
-                  <View style={{ flex: 1.2, minWidth: 130 }}>
-                    <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary }} numberOfLines={1}>
-                      {row.shiftName}
-                    </Text>
-                    <Text style={{ fontSize: 11, color: '#64748B' }}>
-                      Start: {row.shiftStart}
-                    </Text>
-                  </View>
-
-                  <View style={{ width: 90 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#B45309' }}>
-                      {row.actualPunchIn}
-                    </Text>
-                  </View>
-
-                  <View style={{ width: 85 }}>
-                    <Badge label={`+${row.lateMinutes}m`} variant="warning" />
-                  </View>
-
-                  <View style={{ width: 110 }}>
-                    <View style={styles.countPill}>
-                      <Text style={styles.countPillText}>
-                        {row.monthOccurrence === 1
-                          ? '1st time'
-                          : row.monthOccurrence === 2
-                          ? '2nd time'
-                          : row.monthOccurrence === 3
-                          ? '3rd time'
-                          : `${row.monthOccurrence}th time`}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={{ width: 175 }}>
-                    {row.isGrace ? (
-                      <View style={[styles.policyBadge, { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' }]}>
-                        <ShieldCheck size={12} color="#15803D" />
-                        <Text style={[styles.policyBadgeText, { color: '#15803D' }]}>
-                          Grace ({row.monthOccurrence}/3 Used)
+              filteredIncidents.map((row, idx) => {
+                const isLate = row.type === 'late';
+                return (
+                  <View
+                    key={row.id || `${row.employeeId}_${row.date}_${idx}`}
+                    style={[
+                      styles.tableRow,
+                      { borderBottomColor: colors.border + '30' },
+                      idx % 2 === 1 && { backgroundColor: '#FAFAFA' },
+                    ]}
+                  >
+                    {/* Exception Type Badge */}
+                    <View style={{ width: 85 }}>
+                      <View
+                        style={[
+                          styles.typeBadge,
+                          {
+                            backgroundColor: isLate ? '#FEF3C7' : '#FEE2E2',
+                            borderColor: isLate ? '#FDE68A' : '#FCA5A5',
+                          },
+                        ]}
+                      >
+                        {isLate ? <Clock size={11} color="#B45309" /> : <UserX size={11} color="#DC2626" />}
+                        <Text
+                          style={[
+                            styles.typeBadgeText,
+                            { color: isLate ? '#B45309' : '#DC2626' },
+                          ]}
+                        >
+                          {isLate ? 'LATE' : 'ABSENT'}
                         </Text>
                       </View>
-                    ) : (
-                      <View style={[styles.policyBadge, { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5' }]}>
-                        <AlertTriangle size={12} color="#B91C1C" />
-                        <Text style={[styles.policyBadgeText, { color: '#B91C1C' }]}>
-                          0.5 LOP Penalty ({row.monthOccurrence}th)
-                        </Text>
+                    </View>
+
+                    {viewMode === 'monthly' && (
+                      <View style={{ width: 95 }}>
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: colors.text }}>{row.date}</Text>
                       </View>
                     )}
+
+                    <View style={{ flex: 1.6, minWidth: 160, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <Avatar name={row.employeeName} url={row.avatarUrl || undefined} size={32} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }} numberOfLines={1}>
+                          {row.employeeName}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: colors.textSecondary }} numberOfLines={1}>
+                          {row.employeeCode} • {row.designation}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={{ flex: 1.1, minWidth: 120 }}>
+                      <Text style={{ fontSize: 12, color: colors.text }} numberOfLines={1}>
+                        {row.department}
+                      </Text>
+                    </View>
+
+                    <View style={{ flex: 1.2, minWidth: 130 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary }} numberOfLines={1}>
+                        {row.shiftName}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: '#64748B' }}>
+                        Start: {row.shiftStart}
+                      </Text>
+                    </View>
+
+                    <View style={{ width: 95 }}>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: '700',
+                          color: isLate ? '#B45309' : '#DC2626',
+                        }}
+                      >
+                        {row.actualPunchIn}
+                      </Text>
+                    </View>
+
+                    <View style={{ width: 85 }}>
+                      {isLate ? (
+                        <Badge label={`+${row.lateMinutes}m`} variant="warning" />
+                      ) : (
+                        <Badge label="Full Day" variant="danger" />
+                      )}
+                    </View>
+
+                    <View style={{ width: 105 }}>
+                      <View style={styles.countPill}>
+                        <Text style={styles.countPillText}>
+                          {row.monthOccurrence === 1
+                            ? '1st time'
+                            : row.monthOccurrence === 2
+                            ? '2nd time'
+                            : row.monthOccurrence === 3
+                            ? '3rd time'
+                            : `${row.monthOccurrence}th time`}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={{ width: 175 }}>
+                      {isLate ? (
+                        row.isGrace ? (
+                          <View style={[styles.policyBadge, { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' }]}>
+                            <ShieldCheck size={12} color="#15803D" />
+                            <Text style={[styles.policyBadgeText, { color: '#15803D' }]}>
+                              Grace ({row.monthOccurrence}/3 Used)
+                            </Text>
+                          </View>
+                        ) : (
+                          <View style={[styles.policyBadge, { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5' }]}>
+                            <AlertTriangle size={12} color="#B91C1C" />
+                            <Text style={[styles.policyBadgeText, { color: '#B91C1C' }]}>
+                              0.5 LOP Penalty ({row.monthOccurrence}th)
+                            </Text>
+                          </View>
+                        )
+                      ) : (
+                        <View style={[styles.policyBadge, { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5' }]}>
+                          <AlertTriangle size={12} color="#B91C1C" />
+                          <Text style={[styles.policyBadgeText, { color: '#B91C1C' }]}>
+                            1.0 Day LOP Penalty
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
-                </View>
-              ))
+                );
+              })
             )}
           </View>
         ) : (
@@ -682,21 +801,21 @@ export function LateComersOverviewView({
             <View style={[styles.tableHeader, { backgroundColor: '#F8FAFC', borderBottomColor: colors.border }]}>
               <Text style={[styles.th, { flex: 1.6, minWidth: 160 }]}>STAFF MEMBER</Text>
               <Text style={[styles.th, { flex: 1.2, minWidth: 130 }]}>DEPARTMENT</Text>
-              <Text style={[styles.th, { width: 100 }]}>TOTAL LATE</Text>
-              <Text style={[styles.th, { width: 110 }]}>GRACE USED (≤3)</Text>
-              <Text style={[styles.th, { width: 110 }]}>PENALTY DAYS (&gt;3)</Text>
-              <Text style={[styles.th, { width: 130 }]}>SALARY LOP IMPACT</Text>
-              <Text style={[styles.th, { width: 110 }]}>TOTAL DELAY</Text>
+              <Text style={[styles.th, { width: 90 }]}>LATE</Text>
+              <Text style={[styles.th, { width: 90 }]}>ABSENT</Text>
+              <Text style={[styles.th, { width: 105 }]}>GRACE USED (≤3)</Text>
+              <Text style={[styles.th, { width: 130 }]}>TOTAL LOP IMPACT</Text>
+              <Text style={[styles.th, { width: 100 }]}>TOTAL DELAY</Text>
             </View>
 
             {filteredSummaries.length === 0 ? (
               <View style={{ padding: 40, alignItems: 'center' }}>
-                <ShieldCheck size={42} color="#059669" />
+                <CheckCircle2 size={42} color="#059669" />
                 <Text style={{ marginTop: 10, fontWeight: '700', fontSize: 16, color: colors.text }}>
-                  No Late Staff Records
+                  No Attendance Exceptions
                 </Text>
                 <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 4 }}>
-                  No employees accrued late punches during this calendar month.
+                  No employees accrued late or absent marks during this calendar month.
                 </Text>
               </View>
             ) : (
@@ -722,19 +841,17 @@ export function LateComersOverviewView({
                     <Text style={{ fontSize: 13, color: colors.text }}>{row.department}</Text>
                   </View>
 
-                  <View style={{ width: 100 }}>
-                    <Badge label={`${row.totalLateDays} Days`} variant={row.totalLateDays > 3 ? 'danger' : 'warning'} />
+                  <View style={{ width: 90 }}>
+                    <Badge label={`${row.totalLateDays}d`} variant={row.totalLateDays > 3 ? 'danger' : row.totalLateDays > 0 ? 'warning' : 'neutral'} />
                   </View>
 
-                  <View style={{ width: 110 }}>
+                  <View style={{ width: 90 }}>
+                    <Badge label={`${row.totalAbsentDays}d`} variant={row.totalAbsentDays > 0 ? 'danger' : 'neutral'} />
+                  </View>
+
+                  <View style={{ width: 105 }}>
                     <Text style={{ fontSize: 13, fontWeight: '600', color: '#15803D' }}>
                       {row.graceUsedDays} / 3 Days
-                    </Text>
-                  </View>
-
-                  <View style={{ width: 110 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '600', color: row.totalLateDays > 3 ? '#B91C1C' : colors.textSecondary }}>
-                      {Math.max(0, row.totalLateDays - 3)} Days
                     </Text>
                   </View>
 
@@ -743,7 +860,7 @@ export function LateComersOverviewView({
                       <View style={[styles.policyBadge, { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5' }]}>
                         <AlertTriangle size={12} color="#B91C1C" />
                         <Text style={[styles.policyBadgeText, { color: '#B91C1C' }]}>
-                          -{row.lopPenaltyDays} Day LOP
+                          -{row.lopPenaltyDays.toFixed(1)} Day LOP
                         </Text>
                       </View>
                     ) : (
@@ -756,7 +873,7 @@ export function LateComersOverviewView({
                     )}
                   </View>
 
-                  <View style={{ width: 110 }}>
+                  <View style={{ width: 100 }}>
                     <Text style={{ fontSize: 12, color: colors.textSecondary }}>
                       {formatMinutesToHours(row.totalLateMinutes)}
                     </Text>
@@ -965,12 +1082,34 @@ const styles = StyleSheet.create({
   },
   searchExportRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
   },
+  filterPillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  filterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFF',
+  },
+  filterPillText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
   searchBox: {
     flex: 1,
+    minWidth: 200,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
@@ -1008,6 +1147,21 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
+  },
+  typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+  },
+  typeBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   countPill: {
     backgroundColor: '#F1F5F9',
