@@ -29,7 +29,8 @@ import { formatDate, formatCurrency } from '@/utils/format';
 import { HOSPITAL_UNITS, EMPLOYMENT_TYPES } from '@/constants/config';
 import { AppointmentLetterModal } from '@/components/AppointmentLetterModal';
 import { resendAppointmentLetterEmail, downloadAppointmentLetterPdf } from '@/lib/services/appointmentLetters';
-import type { Employee, Department, Workplace, WorkShift, LeaveBalance, LeaveType } from '@/types';
+import { HhcRoleSelector } from '@/components/HhcRoleSelector';
+import type { Employee, Department, Workplace, WorkShift, LeaveBalance, LeaveType, HHCRole } from '@/types';
 import { Edit3, AlertCircle, Umbrella, CheckCircle2, HeartPulse, FileText, Mail, Download } from 'lucide-react-native';
 
 const statusVariant = (s: string): 'success' | 'danger' | 'warning' | 'neutral' => {
@@ -141,6 +142,7 @@ export default function EmployeeDetailScreen() {
   const [basicSalary, setBasicSalary] = useState('');
   const [status, setStatus] = useState<string>('active');
   const [isHhcEnabled, setIsHhcEnabled] = useState(false);
+  const [hhcRole, setHhcRole] = useState<HHCRole>('field_worker');
   const [joiningDate, setJoiningDate] = useState('');
   const [hospitalUnit, setHospitalUnit] = useState<string>('Headquarters');
   const [employmentType, setEmploymentType] = useState<string>('Regular');
@@ -242,6 +244,8 @@ export default function EmployeeDetailScreen() {
     setBasicSalary(emp.basic_salary ? String(emp.basic_salary) : '0');
     setStatus(emp.employment_status || 'active');
     setIsHhcEnabled(!!emp.is_hhc_enabled || !!emp.profile?.is_hhc_enabled);
+    const resolvedHhcRole: HHCRole = emp.hhc_role || emp.profile?.hhc_role || ((emp.designation || '').toLowerCase().includes('dr') ? 'doctor' : 'field_worker');
+    setHhcRole(resolvedHhcRole);
     setJoiningDate(emp.joining_date || '');
     setHospitalUnit(emp.hospital_unit || 'Headquarters');
     setWorkplaceId(emp.workplace_id || null);
@@ -294,6 +298,7 @@ export default function EmployeeDetailScreen() {
           phone: phone.trim() || null,
           role,
           is_hhc_enabled: isHhcEnabled,
+          hhc_role: isHhcEnabled ? hhcRole : null,
         });
       }
 
@@ -313,6 +318,7 @@ export default function EmployeeDetailScreen() {
         employment_status: status as any,
         joining_date: joiningDate || null,
         is_hhc_enabled: isHhcEnabled,
+        hhc_role: isHhcEnabled ? hhcRole : null,
         hospital_unit: hospitalUnit,
         employment_type: employmentType as any,
         grade: grade.trim() || null,
@@ -397,9 +403,12 @@ export default function EmployeeDetailScreen() {
             <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
               <Badge label={emp.employment_status || 'active'} variant={statusVariant(emp.employment_status || 'active')} />
               <Badge label={emp.profile?.role || 'employee'} variant="neutral" />
-              {(emp.is_hhc_enabled || emp.profile?.is_hhc_enabled) && (
-                <Badge label="HHC Provider" variant="success" />
-              )}
+              {(emp.is_hhc_enabled || emp.profile?.is_hhc_enabled) && (() => {
+                const effectiveHhc = emp.hhc_role || emp.profile?.hhc_role || ((emp.designation || '').toLowerCase().includes('dr') ? 'doctor' : 'field_worker');
+                const label = effectiveHhc === 'supervisor' ? 'HHC Supervisor' : effectiveHhc === 'doctor' ? 'HHC Doctor' : 'HHC Field Worker';
+                const variant = effectiveHhc === 'supervisor' ? 'primary' : effectiveHhc === 'doctor' ? 'success' : 'neutral';
+                return <Badge label={label} variant={variant as any} />;
+              })()}
             </View>
           </Card>
 
@@ -420,7 +429,21 @@ export default function EmployeeDetailScreen() {
             <Row label="Assigned Shift" value={currentShift ? `${currentShift.name} (${currentShift.start_time} - ${currentShift.end_time})` : 'Standard'} colors={colors} />
             <Row label="Basic Salary" value={formatCurrency(emp.basic_salary)} colors={colors} />
             <Row label="Joining Date" value={emp.joining_date ? formatDate(emp.joining_date) : 'N/A'} colors={colors} />
-            <Row label="Home Health Care (HHC)" value={(emp.is_hhc_enabled || emp.profile?.is_hhc_enabled) ? 'Enabled (Doctor / Provider)' : 'Disabled'} colors={colors} />
+            <Row
+              label="Home Health Care (HHC)"
+              value={
+                (emp.is_hhc_enabled || emp.profile?.is_hhc_enabled)
+                  ? `Enabled (${
+                      (emp.hhc_role || emp.profile?.hhc_role) === 'supervisor'
+                        ? 'Supervisor & Dispatch Lead'
+                        : (emp.hhc_role || emp.profile?.hhc_role) === 'doctor'
+                        ? 'Doctor & Clinical Assessor'
+                        : 'Field Worker & Paramedic'
+                    })`
+                  : 'Disabled'
+              }
+              colors={colors}
+            />
           </Card>
 
           {/* Statutory & Tax Settings Card */}
@@ -811,41 +834,14 @@ export default function EmployeeDetailScreen() {
               ]}
             />
 
-            {/* Healthcare & HHC Toggle */}
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => setIsHhcEnabled(!isHhcEnabled)}
-              style={[
-                styles.hhcCard,
-                {
-                  backgroundColor: isHhcEnabled ? '#F0F9FF' : colors.surface,
-                  borderColor: isHhcEnabled ? '#0D7377' : colors.border,
-                },
-              ]}
-            >
-              <View style={{ flex: 1, paddingRight: 14 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <HeartPulse size={18} color={isHhcEnabled ? '#0D7377' : '#64748B'} />
-                  <Text style={[styles.hhcTitle, { color: isHhcEnabled ? '#0D7377' : colors.text }]}>
-                    Home Health Care (HHC) Provider
-                  </Text>
-                  {isHhcEnabled && (
-                    <View style={styles.hhcBadgeActive}>
-                      <Text style={styles.hhcBadgeActiveText}>ACTIVE DOCTOR / NURSE</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={[styles.hhcSubtitle, { color: colors.textSecondary }]}>
-                  Enable this doctor or staff member for clinical dispatch and patient leads in Cordeliakare HHC.
-                </Text>
-              </View>
-              <Switch
-                value={isHhcEnabled}
-                onValueChange={setIsHhcEnabled}
-                trackColor={{ false: '#E2E8F0', true: '#0D7377' }}
-                thumbColor="#FFFFFF"
-              />
-            </TouchableOpacity>
+            {/* Healthcare & HHC Role Configuration */}
+            <HhcRoleSelector
+              enabled={isHhcEnabled}
+              onEnabledChange={setIsHhcEnabled}
+              role={hhcRole}
+              onRoleChange={setHhcRole}
+              colors={colors}
+            />
 
             <Input
               label="Joining Date (YYYY-MM-DD)"

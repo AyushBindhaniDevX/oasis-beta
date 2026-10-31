@@ -13,7 +13,7 @@ import {
   limit,
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, updateProfile as fbUpdateProfile, sendPasswordResetEmail } from 'firebase/auth';
-import type { Employee, Profile, Department, Workplace } from '@/types';
+import type { Employee, Profile, Department, Workplace, HHCRole } from '@/types';
 
 function generateUuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -337,6 +337,7 @@ export async function createEmployee(params: {
   date_of_birth?: string;
   tax_config?: any;
   is_hhc_enabled?: boolean;
+  hhc_role?: HHCRole | null;
   hospital_unit?: string;
   employment_type?: string;
   grade?: string;
@@ -385,6 +386,7 @@ export async function createEmployee(params: {
     needs_password_change: true,
     must_change_password: true,
     is_hhc_enabled: params.is_hhc_enabled ?? false,
+    hhc_role: params.is_hhc_enabled ? (params.hhc_role || 'field_worker') : null,
     created_at: now,
     updated_at: now,
   };
@@ -427,6 +429,7 @@ export async function createEmployee(params: {
     tax_config: params.tax_config || null,
     onboarding_completed: false,
     is_hhc_enabled: params.is_hhc_enabled ?? false,
+    hhc_role: params.is_hhc_enabled ? (params.hhc_role || 'field_worker') : null,
     created_at: now,
     updated_at: now,
   };
@@ -532,37 +535,45 @@ export async function updateEmployee(id: string, updates: Record<string, any>): 
 
   const cleanPayload = sanitizeFirestoreData(payload);
   await updateDoc(doc(db, 'employees', id), cleanPayload);
-  if (updates.is_hhc_enabled !== undefined) {
+  if (updates.is_hhc_enabled !== undefined || updates.hhc_role !== undefined) {
     try {
       const empSnap = await getDoc(doc(db, 'employees', id));
       const profId = empSnap.data()?.profile_id;
       if (profId) {
-        await updateDoc(doc(db, 'profiles', profId), {
-          is_hhc_enabled: updates.is_hhc_enabled,
+        const profUpdates: Record<string, any> = {
           updated_at: new Date().toISOString(),
-        });
+        };
+        if (updates.is_hhc_enabled !== undefined) profUpdates.is_hhc_enabled = updates.is_hhc_enabled;
+        if (updates.hhc_role !== undefined) profUpdates.hhc_role = updates.hhc_role;
+        await updateDoc(doc(db, 'profiles', profId), profUpdates);
       }
     } catch (err) {
-      console.warn('Could not sync profile is_hhc_enabled:', err);
+      console.warn('Could not sync profile is_hhc_enabled / hhc_role:', err);
     }
   }
 }
 
-export async function getHHCDoctors(organizationId?: string): Promise<Employee[]> {
+export async function getHHCMembers(role?: HHCRole, organizationId?: string): Promise<Employee[]> {
   try {
     const snap = await getDocs(collection(db, 'employees'));
     const list: Employee[] = [];
     snap.forEach((d) => {
       const data = d.data() as Employee;
       if (data.is_hhc_enabled) {
-        list.push({ ...data, id: d.id });
+        if (!role || data.hhc_role === role) {
+          list.push({ ...data, id: d.id });
+        }
       }
     });
     return list;
   } catch (e) {
-    console.error('getHHCDoctors error:', e);
+    console.error('getHHCMembers error:', e);
     return [];
   }
+}
+
+export async function getHHCDoctors(organizationId?: string): Promise<Employee[]> {
+  return getHHCMembers('doctor', organizationId);
 }
 
 export async function completeOnboarding(

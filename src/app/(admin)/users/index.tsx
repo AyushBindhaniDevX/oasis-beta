@@ -26,7 +26,8 @@ import {
   updateUserProfileData
 } from '@/lib/services/organization';
 import { assignEmployeeShift, getShifts } from '@/lib/services/shifts';
-import type { CustomPayrollItem, Department, Employee, LeaveBalance, LeaveType, Profile, Workplace, WorkShift } from '@/types';
+import { HhcRoleSelector } from '@/components/HhcRoleSelector';
+import type { CustomPayrollItem, Department, Employee, LeaveBalance, LeaveType, Profile, Workplace, WorkShift, HHCRole } from '@/types';
 import { formatDate } from '@/utils/format';
 import { useRouter } from 'expo-router';
 import { doc, getDoc, setDoc, writeBatch } from 'firebase/firestore';
@@ -183,6 +184,7 @@ export default function UserManagementScreen() {
   const [editCustomItems, setEditCustomItems] = useState<CustomPayrollItem[]>([]);
   const [editStatus, setEditStatus] = useState('active');
   const [editIsHhcEnabled, setEditIsHhcEnabled] = useState(false);
+  const [editHhcRole, setEditHhcRole] = useState<HHCRole>('field_worker');
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -482,6 +484,8 @@ export default function UserManagementScreen() {
         setEditCustomItems(Array.isArray(tc.custom_items) ? tc.custom_items : []);
         setEditStatus(empData.employment_status || 'active');
         setEditIsHhcEnabled(!!empData?.is_hhc_enabled || !!u.is_hhc_enabled);
+        const resolvedRole: HHCRole = empData?.hhc_role || u.hhc_role || ((empData?.designation || '').toLowerCase().includes('dr') ? 'doctor' : 'field_worker');
+        setEditHhcRole(resolvedRole);
 
         let shiftVal = (empData as any).default_shift_id || null;
         if (!shiftVal) {
@@ -521,6 +525,7 @@ export default function UserManagementScreen() {
         setEditCustomItems([]);
         setEditStatus('active');
         setEditIsHhcEnabled(!!u.is_hhc_enabled);
+        setEditHhcRole(u.hhc_role || 'field_worker');
       }
     } catch (e) {
       console.warn('Could not fetch linked employee for user edit:', e);
@@ -557,6 +562,7 @@ export default function UserManagementScreen() {
         phone: editPhone.trim() || null,
         role: editRole,
         is_hhc_enabled: editIsHhcEnabled,
+        hhc_role: editIsHhcEnabled ? editHhcRole : null,
       });
 
       const updatedTaxConfig = {
@@ -594,6 +600,7 @@ export default function UserManagementScreen() {
           tax_config: updatedTaxConfig,
           employment_status: editStatus as any,
           is_hhc_enabled: editIsHhcEnabled,
+          hhc_role: editIsHhcEnabled ? editHhcRole : null,
         });
       } else {
         const newEmpId = `emp-${Date.now()}`;
@@ -619,6 +626,7 @@ export default function UserManagementScreen() {
           employment_status: editStatus as any,
           onboarding_completed: true,
           is_hhc_enabled: editIsHhcEnabled,
+          hhc_role: editIsHhcEnabled ? editHhcRole : null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
@@ -1404,6 +1412,15 @@ export default function UserManagementScreen() {
                           </>
                         );
                       })()}
+                      {(() => {
+                        const linkedEmp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
+                        const isHhc = !!u.is_hhc_enabled || !!linkedEmp?.is_hhc_enabled;
+                        if (!isHhc) return null;
+                        const hhcRole = linkedEmp?.hhc_role || u.hhc_role || ((linkedEmp?.designation || '').toLowerCase().includes('dr') ? 'doctor' : 'field_worker');
+                        const label = hhcRole === 'supervisor' ? 'HHC SUPERVISOR' : hhcRole === 'doctor' ? 'HHC DOCTOR' : 'HHC FIELD';
+                        const variant = hhcRole === 'supervisor' ? 'primary' : hhcRole === 'doctor' ? 'successLight' : 'neutral';
+                        return <Badge label={label} variant={variant as any} />;
+                      })()}
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 2 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -2177,41 +2194,14 @@ export default function UserManagementScreen() {
                   onValueChange={(val) => setEditStatus(val || 'active')}
                 />
 
-                {/* Healthcare & HHC Toggle */}
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={() => setEditIsHhcEnabled(!editIsHhcEnabled)}
-                  style={[
-                    styles.hhcCard,
-                    {
-                      backgroundColor: editIsHhcEnabled ? '#F0F9FF' : colors.surface,
-                      borderColor: editIsHhcEnabled ? '#0D7377' : colors.border,
-                    },
-                  ]}
-                >
-                  <View style={{ flex: 1, paddingRight: 14 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <HeartPulse size={18} color={editIsHhcEnabled ? '#0D7377' : '#64748B'} />
-                      <Text style={[styles.hhcTitle, { color: editIsHhcEnabled ? '#0D7377' : colors.text }]}>
-                        Home Health Care (HHC) Provider
-                      </Text>
-                      {editIsHhcEnabled && (
-                        <View style={styles.hhcBadgeActive}>
-                          <Text style={styles.hhcBadgeActiveText}>ACTIVE DOCTOR / NURSE</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={[styles.hhcSubtitle, { color: colors.textSecondary }]}>
-                      Enable this doctor or staff member for clinical dispatch and patient leads in Cordeliakare HHC.
-                    </Text>
-                  </View>
-                  <Switch
-                    value={editIsHhcEnabled}
-                    onValueChange={setEditIsHhcEnabled}
-                    trackColor={{ false: '#E2E8F0', true: '#0D7377' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </TouchableOpacity>
+                {/* Healthcare & HHC Role Configuration */}
+                <HhcRoleSelector
+                  enabled={editIsHhcEnabled}
+                  onEnabledChange={setEditIsHhcEnabled}
+                  role={editHhcRole}
+                  onRoleChange={setEditHhcRole}
+                  colors={colors}
+                />
               </View>
 
               <View style={[styles.modalActions, { marginTop: 16, marginBottom: 12 }]}>

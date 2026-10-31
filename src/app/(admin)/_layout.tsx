@@ -8,7 +8,7 @@ export default function AdminLayout() {
   const segments = useSegments();
 
   if (isLoading) return <View style={{ flex: 1 }}><LoadingState /></View>;
-  if (!isAuthenticated || !profile || profile.is_active === false) return <Redirect href="/(auth)/login" />;
+  if (!isAuthenticated || !profile || profile.is_active === false || !profile.organization_id) return <Redirect href="/(auth)/login" />;
   
   // Allow both Admin and HR roles into AdminLayout
   if (role !== 'admin' && role !== 'hr') return <Redirect href="/(employee)/dashboard" />;

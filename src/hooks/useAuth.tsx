@@ -87,6 +87,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error('ACCESS_DENIED_ROLE: Your account role is not authorized to access this portal.');
       }
 
+      // Strict Organization Link Check: User MUST be linked to an active organization
+      if (!data.organization_id || typeof data.organization_id !== 'string' || !data.organization_id.trim()) {
+        throw new Error('ACCESS_DENIED_NO_ORG: Your account is not linked to any organization. Please contact your administrator.');
+      }
+
       if (cleanEmail === 'ayushbindhani001@gmail.com' && data.role !== 'admin') {
         const updated = {
           ...data,
@@ -122,6 +127,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Strict Role Check
         if (!existingData.role || !['employee', 'hr', 'admin'].includes(existingData.role)) {
           throw new Error('ACCESS_DENIED_ROLE: Your account role is not authorized to access this portal.');
+        }
+
+        // Strict Organization Link Check
+        if (!existingData.organization_id || typeof existingData.organization_id !== 'string' || !existingData.organization_id.trim()) {
+          throw new Error('ACCESS_DENIED_NO_ORG: Your account is not linked to any organization. Please contact your administrator.');
         }
 
         if (cleanEmail === 'ayushbindhani001@gmail.com' && existingData.role !== 'admin') {
@@ -188,11 +198,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!['employee', 'hr', 'admin'].includes(role)) {
         throw new Error('ACCESS_DENIED_ROLE: Your employment role is not authorized to access this portal.');
       }
-      let empOrgId = linkedEmployee.organization_id;
-      if (!empOrgId) {
-        const orgsQ = query(collection(db, 'organizations'), limit(1));
-        const orgsSnap = await getDocs(orgsQ);
-        empOrgId = !orgsSnap.empty ? orgsSnap.docs[0].id : '00000000-0000-0000-0000-000000000001';
+
+      // Strict Organization Link Check: Employee MUST be linked to an organization
+      const empOrgId = linkedEmployee.organization_id;
+      if (!empOrgId || typeof empOrgId !== 'string' || !empOrgId.trim()) {
+        throw new Error('ACCESS_DENIED_NO_ORG: Your employee record is not linked to any organization. Please contact HR to assign your organization.');
       }
 
       const now = new Date().toISOString();
@@ -215,7 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // 4. Primary Bootstrap Admin Exception
     if (cleanEmail === 'ayushbindhani001@gmail.com') {
-      let adminOrgId = '00000000-0000-0000-0000-000000000001';
+      let adminOrgId = 'shanti-memorial-hospital';
       try {
         const orgsQ = query(collection(db, 'organizations'), limit(1));
         const orgsSnap = await getDocs(orgsQ);
@@ -239,31 +249,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return adminPayload;
     }
 
-    // 5. Automatic Profile Provisioning for Google OAuth / First Sign-in
-    try {
-      const orgsQ = query(collection(db, 'organizations'), limit(1));
-      const orgsSnap = await getDocs(orgsQ);
-      const defaultOrgId = !orgsSnap.empty ? orgsSnap.docs[0].id : '00000000-0000-0000-0000-000000000001';
-
-      const now = new Date().toISOString();
-      const autoProfile: Profile = {
-        id: authUser.uid,
-        email: cleanEmail,
-        full_name: authUser.displayName || cleanEmail.split('@')[0],
-        phone: authUser.phoneNumber || null,
-        avatar_url: authUser.photoURL || null,
-        role: 'employee',
-        organization_id: defaultOrgId,
-        is_active: true,
-        created_at: now,
-        updated_at: now,
-      };
-      await setDoc(doc(db, 'profiles', authUser.uid), autoProfile);
-      return autoProfile;
-    } catch (provisionErr) {
-      console.warn('Auto profile provision note:', provisionErr);
-      throw new Error('ACCESS_DENIED_UNREGISTERED: Your email (' + cleanEmail + ') is not registered as an active employee in the system. Only active employees, HR, and admins can access the portal.');
-    }
+    // 5. User does NOT exist in profiles or employee directory -> STRICT REJECTION
+    // Enforces: User must exist in system and be linked to an organization before using login in HRMS
+    throw new Error('ACCESS_DENIED_UNREGISTERED: No account found for ' + (cleanEmail || 'this user') + '. You must exist in the employee directory and be linked to an organization before logging in.');
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -474,8 +462,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (err?.message?.includes('ACCESS_DENIED_DEACTIVATED')) {
           throw new Error('Access Denied: Your account has been deactivated. Please contact your HR department or administrator.');
         }
+        if (err?.message?.includes('ACCESS_DENIED_NO_ORG')) {
+          throw new Error('Access Denied: Your account is not linked to an organization. Please contact your administrator.');
+        }
         if (err?.message?.includes('ACCESS_DENIED_UNREGISTERED')) {
-          throw new Error('Access Denied: Your email is not registered in the employee directory. Only authorized employees, HR, and admins can access this portal.');
+          throw new Error('Access Denied: Your email is not registered in the employee directory. You must exist in the system and be linked to an organization before logging in.');
         }
         if (err?.message?.includes('ACCESS_DENIED_ROLE')) {
           throw new Error('Access Denied: Your account role is not authorized to access this portal.');
@@ -612,8 +603,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (err?.message?.includes('ACCESS_DENIED_DEACTIVATED')) {
         throw new Error('Access Denied: Your account has been deactivated. Please contact your HR department or administrator.');
       }
+      if (err?.message?.includes('ACCESS_DENIED_NO_ORG')) {
+        throw new Error('Access Denied: Your account is not linked to an organization. Please contact your administrator.');
+      }
       if (err?.message?.includes('ACCESS_DENIED_UNREGISTERED')) {
-        throw new Error('Access Denied: Your email is not registered in the employee directory. Only authorized employees, HR, and admins can access this portal.');
+        throw new Error('Access Denied: Your Google account is not registered in the employee directory. You must exist in the system and be linked to an organization before logging in.');
       }
       if (err?.message?.includes('ACCESS_DENIED_ROLE')) {
         throw new Error('Access Denied: Your account role is not authorized to access this portal.');
@@ -625,7 +619,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [syncProfileForAuthUser]);
 
-  // Sign Up via Firebase Auth (Only allowed if email pre-exists in employee directory)
+  // Sign Up via Firebase Auth (Only allowed if email pre-exists in employee directory and linked to an org)
   const handleSignUp = useCallback(
     async (email: string, password: string, fullName: string, role: string = 'employee', orgId?: string) => {
       const cleanEmail = email.trim().toLowerCase();
@@ -647,7 +641,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (e) {}
 
       if (!linkedEmployee && cleanEmail !== 'ayushbindhani001@gmail.com') {
-        throw new Error('Access Denied: Self-registration is restricted. Your email must be invited and added to the employee directory by HR first.');
+        throw new Error('Access Denied: Self-registration is restricted. You must exist in the employee directory and be linked to an organization by HR first.');
+      }
+
+      if (linkedEmployee && (!linkedEmployee.organization_id || typeof linkedEmployee.organization_id !== 'string' || !linkedEmployee.organization_id.trim())) {
+        throw new Error('Access Denied: Your employee record is not linked to an organization. Please contact HR.');
       }
 
       if (linkedEmployee && (linkedEmployee.employment_status === 'inactive' || linkedEmployee.employment_status === 'terminated')) {

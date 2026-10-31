@@ -440,48 +440,50 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Letter of Appointment Card */}
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: '#F0F9F8', alignItems: 'center', justifyContent: 'center' }}>
-                  <FileText size={20} color="#0D7377" />
+          {/* Letter of Appointment Card - Strictly for Admin and HR */}
+          {(profile?.role === 'admin' || profile?.role === 'hr') && (
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: '#F0F9F8', alignItems: 'center', justifyContent: 'center' }}>
+                    <FileText size={20} color="#0D7377" />
+                  </View>
+                  <View>
+                    <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 2 }]}>Letter of Appointment</Text>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary }}>Official appointment terms & compensation document</Text>
+                  </View>
                 </View>
-                <View>
-                  <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 2 }]}>Letter of Appointment</Text>
-                  <Text style={{ fontSize: 13, color: colors.textSecondary }}>Official appointment terms & compensation document</Text>
-                </View>
+
+                <TouchableOpacity
+                  onPress={handleDownloadAppointmentLetter}
+                  disabled={downloadingLetter}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                    backgroundColor: '#0D7377',
+                    borderRadius: 8,
+                  }}
+                  activeOpacity={0.8}
+                >
+                  {downloadingLetter ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Download size={15} color="#FFFFFF" />
+                      <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>Download PDF</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
 
-              <TouchableOpacity
-                onPress={handleDownloadAppointmentLetter}
-                disabled={downloadingLetter}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 8,
-                  paddingHorizontal: 16,
-                  paddingVertical: 10,
-                  backgroundColor: '#0D7377',
-                  borderRadius: 8,
-                }}
-                activeOpacity={0.8}
-              >
-                {downloadingLetter ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Download size={15} color="#FFFFFF" />
-                    <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>Download PDF</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              {downloadFeedback && (
+                <Text style={{ fontSize: 12, color: '#0D7377', fontWeight: '600' }}>{downloadFeedback}</Text>
+              )}
             </View>
-
-            {downloadFeedback && (
-              <Text style={{ fontSize: 12, color: '#0D7377', fontWeight: '600' }}>{downloadFeedback}</Text>
-            )}
-          </View>
+          )}
 
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>

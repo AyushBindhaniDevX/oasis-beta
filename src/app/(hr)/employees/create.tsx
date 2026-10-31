@@ -13,7 +13,8 @@ import { getDepartments, createEmployee, getEmployees, getWorkplaces } from '@/l
 import { getShifts } from '@/lib/services/shifts';
 import { CustomPayrollItemsManager } from '@/components/payroll/CustomPayrollItemsManager';
 import { HOSPITAL_UNITS } from '@/constants/config';
-import type { Department, Employee, WorkShift, Workplace, CustomPayrollItem } from '@/types';
+import { HhcRoleSelector } from '@/components/HhcRoleSelector';
+import type { Department, Employee, WorkShift, Workplace, CustomPayrollItem, HHCRole } from '@/types';
 import { RefreshCw, ShieldCheck, ChevronDown, ChevronUp, Sliders, Eye, EyeOff, KeyRound, HeartPulse } from 'lucide-react-native';
 
 export default function CreateEmployeeScreen() {
@@ -50,6 +51,7 @@ export default function CreateEmployeeScreen() {
   const [role, setRole] = useState<string>('employee');
   const [designation, setDesignation] = useState('');
   const [isHhcEnabled, setIsHhcEnabled] = useState(false);
+  const [hhcRole, setHhcRole] = useState<HHCRole>('field_worker');
   const [basicSalary, setBasicSalary] = useState('');
 
   // Tax config & custom percentages
@@ -198,6 +200,7 @@ export default function CreateEmployeeScreen() {
         employment_type: employmentType,
         grade: grade.trim() || undefined,
         is_hhc_enabled: isHhcEnabled,
+        hhc_role: isHhcEnabled ? hhcRole : null,
         basic_salary: parseFloat(basicSalary) || 0,
         conveyance_allowance: parseFloat(conveyanceAllowance) || 1200,
         washing_allowance: parseFloat(washingAllowance) || 500,
@@ -526,38 +529,13 @@ export default function CreateEmployeeScreen() {
             HEALTHCARE & EXTENSION ROLES
           </Text>
 
-          <View
-            style={[
-              styles.hhcCard,
-              {
-                backgroundColor: isHhcEnabled ? '#F0F9FF' : colors.surface,
-                borderColor: isHhcEnabled ? '#0D7377' : colors.border,
-              },
-            ]}
-          >
-            <View style={{ flex: 1, paddingRight: 14 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <HeartPulse size={18} color={isHhcEnabled ? '#0D7377' : '#64748B'} />
-                <Text style={[styles.hhcTitle, { color: colors.text }]}>
-                  Home Health Care (HHC) Provider
-                </Text>
-                {isHhcEnabled && (
-                  <View style={styles.hhcBadgeActive}>
-                    <Text style={styles.hhcBadgeActiveText}>ACTIVE DOCTOR / NURSE</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={[styles.hhcSubtitle, { color: colors.textSecondary }]}>
-                Enable this staff member/doctor to be assigned patient care leads in the Home Health Care Portal and perform field visits.
-              </Text>
-            </View>
-            <Switch
-              value={isHhcEnabled}
-              onValueChange={setIsHhcEnabled}
-              trackColor={{ false: '#E2E8F0', true: '#0D7377' }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
+          <HhcRoleSelector
+            enabled={isHhcEnabled}
+            onEnabledChange={setIsHhcEnabled}
+            role={hhcRole}
+            onRoleChange={setHhcRole}
+            colors={colors}
+          />
 
 
           {/* ─── Tax & Statutory Configuration ──────────────────────────── */}

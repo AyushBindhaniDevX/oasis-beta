@@ -40,7 +40,7 @@ export default function EmployeeLayout() {
     return <View style={{ flex: 1 }}><LoadingState /></View>;
   }
 
-  if (!isAuthenticated || !profile || profile.is_active === false || !['employee', 'hr', 'admin'].includes(profile.role)) {
+  if (!isAuthenticated || !profile || profile.is_active === false || !profile.organization_id || !['employee', 'hr', 'admin'].includes(profile.role)) {
     return <Redirect href="/(auth)/login" />;
   }
 

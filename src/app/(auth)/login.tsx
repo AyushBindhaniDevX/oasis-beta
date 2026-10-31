@@ -98,9 +98,24 @@ export default function LoginScreen() {
         const q = query(collection(db, 'profiles'), where('phone', '==', trimmedInput));
         const snap = await getDocs(q);
         if (!snap.empty) {
-          finalEmail = snap.docs[0].data().email;
+          const profData = snap.docs[0].data();
+          if (!profData.organization_id) {
+            throw new Error('Access Denied: Your account is not linked to an organization.');
+          }
+          finalEmail = profData.email;
         } else {
-          throw new Error('No account found with this phone number.');
+          // Check employee directory as well
+          const empQ = query(collection(db, 'employees'), where('phone', '==', trimmedInput));
+          const empSnap = await getDocs(empQ);
+          if (!empSnap.empty) {
+            const empData = empSnap.docs[0].data();
+            if (!empData.organization_id) {
+              throw new Error('Access Denied: Your employee record is not linked to an organization.');
+            }
+            finalEmail = empData.email || empData.work_email;
+          } else {
+            throw new Error('Access Denied: No account found for this phone number. You must exist in the directory before logging in.');
+          }
         }
       }
 

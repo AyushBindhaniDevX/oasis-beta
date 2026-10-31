@@ -1,6 +1,7 @@
 // Database types for Oasis HRMS Cloud Architecture
 
 export type UserRole = 'employee' | 'hr' | 'admin';
+export type HHCRole = 'supervisor' | 'doctor' | 'field_worker';
 export type EmploymentStatus = 'active' | 'inactive' | 'terminated';
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'half_day' | 'on_leave';
 export type LeaveRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'l1_approved' | 'l2_approved';
@@ -87,6 +88,7 @@ export interface Profile {
   needs_password_change?: boolean;
   must_change_password?: boolean;
   is_hhc_enabled?: boolean;
+  hhc_role?: HHCRole | null;
   created_at: string;
   updated_at: string;
 }
@@ -153,6 +155,7 @@ export interface Employee {
   employment_status: EmploymentStatus;
   onboarding_completed: boolean;
   is_hhc_enabled?: boolean;
+  hhc_role?: HHCRole | null;
   is_pf_eligible?: boolean; // PF vs Non-PF categorization
   is_esi_eligible?: boolean; // ESI eligibility
   is_overtime_eligible?: boolean; // Overtime calculation designated staff
