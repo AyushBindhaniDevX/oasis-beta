@@ -51,56 +51,12 @@ export default function TemplatesScreen() {
   const colors = useTheme();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
-  const { organization, allOrganizations } = useTenant();
+  const { organization, companyName } = useTenant();
   const { profile } = useAuth();
 
-  // Multi-Tenant Organization Switcher State
-  const initialOrgId = organization?.id || profile?.organization_id || 'shanti-memorial-hospital';
-  const [selectedOrgId, setSelectedOrgId] = useState<string>(initialOrgId);
-
-  // Available Organizations
-  const availableOrgs = useMemo(() => {
-    const list: Array<{ id: string; name: string }> = [];
-    const seen = new Set<string>();
-
-    const addOrg = (id: string, name: string) => {
-      const normalized = id.toLowerCase().trim();
-      if (!seen.has(normalized)) {
-        seen.add(normalized);
-        list.push({ id, name });
-      }
-    };
-
-    if (organization?.id && organization.name) {
-      addOrg(organization.id, organization.name);
-    }
-
-    if (allOrganizations && allOrganizations.length > 0) {
-      allOrganizations.forEach((o) => {
-        if (o.id && o.name) addOrg(o.id, o.name);
-      });
-    }
-
-    // Default primary multi-tenant orgs if not already present
-    addOrg('shanti-memorial-hospital', 'Shanti Memorial Hospital (SMH)');
-    addOrg('subedge_org', 'Subedge Technology Pvt Ltd');
-
-    return list;
-  }, [organization, allOrganizations]);
-
-  const selectedOrg = useMemo(() => {
-    return (
-      availableOrgs.find((o) => o.id === selectedOrgId) || {
-        id: selectedOrgId,
-        name:
-          selectedOrgId === 'shanti-memorial-hospital' || selectedOrgId === 'smh'
-            ? 'Shanti Memorial Hospital'
-            : selectedOrgId === 'subedge_org' || selectedOrgId === 'subedge'
-            ? 'Subedge Technology Pvt Ltd'
-            : 'Enterprise Workplace',
-      }
-    );
-  }, [availableOrgs, selectedOrgId]);
+  // Active Tenant Organization automatically linked from session context
+  const currentOrgId = organization?.id || profile?.organization_id || 'shanti-memorial-hospital';
+  const currentOrgName = organization?.name || companyName || 'Shanti Memorial Hospital';
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -122,10 +78,10 @@ export default function TemplatesScreen() {
   const [signatoryTitle, setSignatoryTitle] = useState('');
   const [newClause, setNewClause] = useState('');
 
-  const loadAll = async (targetOrgId: string) => {
+  const loadAll = async () => {
     try {
       setLoading(true);
-      const data = await getTemplates(targetOrgId, selectedOrg.name);
+      const data = await getTemplates(currentOrgId, currentOrgName);
       setTemplates(data);
 
       // Select matching template or first in active tab
@@ -146,8 +102,8 @@ export default function TemplatesScreen() {
   };
 
   useEffect(() => {
-    loadAll(selectedOrgId);
-  }, [selectedOrgId]);
+    loadAll();
+  }, [currentOrgId, currentOrgName]);
 
   const selectTemplate = (tpl: DocumentTemplate) => {
     setSelectedKey(tpl.key);
@@ -209,8 +165,8 @@ export default function TemplatesScreen() {
     try {
       const updated: DocumentTemplate = {
         ...currentTemplate,
-        id: `${selectedOrgId}_${currentTemplate.key}`,
-        organization_id: selectedOrgId,
+        id: `${currentOrgId}_${currentTemplate.key}`,
+        organization_id: currentOrgId,
         name,
         subject: activeTab === 'email' ? subject : undefined,
         title: activeTab === 'document' ? title : undefined,
@@ -227,7 +183,7 @@ export default function TemplatesScreen() {
 
       await saveTemplate(updated);
       setTemplates((prev) => prev.map((t) => (t.key === updated.key ? updated : t)));
-      showNotice(`Template saved specifically for ${selectedOrg.name}!`);
+      showNotice(`Template saved specifically for ${currentOrgName}!`);
     } catch (err: any) {
       Alert.alert('Save Failed', err.message || 'Could not save template');
     } finally {
@@ -239,7 +195,7 @@ export default function TemplatesScreen() {
     if (!currentTemplate) return;
     Alert.alert(
       'Reset Template for Organization',
-      `Are you sure you want to reset "${currentTemplate.name}" to the default format for ${selectedOrg.name}? Custom modifications will be discarded.`,
+      `Are you sure you want to reset "${currentTemplate.name}" to the default format for ${currentOrgName}? Custom modifications will be discarded.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -247,10 +203,10 @@ export default function TemplatesScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const def = await resetTemplate(selectedOrgId, currentTemplate.key, selectedOrg.name);
+              const def = await resetTemplate(currentOrgId, currentTemplate.key, currentOrgName);
               setTemplates((prev) => prev.map((t) => (t.key === def.key ? def : t)));
               selectTemplate(def);
-              showNotice(`Reset template to default format for ${selectedOrg.name}.`);
+              showNotice(`Reset template to default format for ${currentOrgName}.`);
             } catch (err: any) {
               Alert.alert('Reset Failed', err.message);
             }
@@ -261,14 +217,14 @@ export default function TemplatesScreen() {
   };
 
   // Sample data dictionary for Live Preview
-  const isSMH = selectedOrgId === 'shanti-memorial-hospital' || selectedOrgId === 'smh';
+  const isSMH = currentOrgId === 'shanti-memorial-hospital' || currentOrgId === 'smh';
   const sampleData: Record<string, string> = {
     employee_name: isSMH ? 'Dr. Priya Sharma' : 'Alex Morgan',
     employee_code: isSMH ? 'SMH-1021' : 'EMP-1021',
     designation: isSMH ? 'Senior Consultant Physician' : 'Senior Software Engineer',
     department: isSMH ? 'Internal Medicine & Critical Care' : 'Engineering & Technology',
     unit: isSMH ? 'Central Hospital Campus' : 'Headquarters Campus',
-    organization_name: selectedOrg.name,
+    organization_name: currentOrgName,
     joining_date: '15 Jan 2026',
     relieving_date: '31 Oct 2026',
     effective_date: '01 Nov 2026',
@@ -346,7 +302,7 @@ export default function TemplatesScreen() {
       </body>
       </html>
     `;
-    await exportOrPrintPdf(html, `${selectedKey}_${selectedOrgId}.pdf`);
+    await exportOrPrintPdf(html, `${selectedKey}_${currentOrgId}.pdf`);
   };
 
   if (loading) return <LoadingState />;
@@ -356,13 +312,17 @@ export default function TemplatesScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Top Header */}
         <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-          <View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <Text style={[styles.pageTitle, { color: colors.text }]}>Document & Email Templates</Text>
-              <Badge label="ORG SPECIFIC" variant="accentLight" />
+              <View style={[styles.orgNameBadge, { backgroundColor: colors.primary + '15', borderColor: colors.primary + '40' }]}>
+                <Building2 size={12} color={colors.primary} />
+                <Text style={[styles.orgNameText, { color: colors.primary }]}>{currentOrgName}</Text>
+              </View>
+              <Badge label="ORGANIZATION LINKED" variant="accentLight" />
             </View>
             <Text style={[styles.pageSubtitle, { color: colors.textSecondary }]}>
-              Customize official letters, clauses, and email notifications linked specifically to your organization.
+              Official letterheads, legal clauses, and automated notification templates linked specifically to {currentOrgName}.
             </Text>
           </View>
 
@@ -389,50 +349,6 @@ export default function TemplatesScreen() {
               size="sm"
               style={{ backgroundColor: colors.primary }}
             />
-          </View>
-        </View>
-
-        {/* Organization Switcher Bar: Explicit linkage per organization */}
-        <View style={[styles.orgBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Building2 size={16} color={colors.primary} />
-            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
-              Target Organization:
-            </Text>
-          </View>
-
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {availableOrgs.map((org) => {
-              const isSelected = org.id === selectedOrgId;
-              return (
-                <TouchableOpacity
-                  key={org.id}
-                  onPress={() => setSelectedOrgId(org.id)}
-                  style={[
-                    styles.orgPill,
-                    { borderColor: isSelected ? colors.primary : colors.border },
-                    isSelected && { backgroundColor: colors.primary + '15', borderWidth: 2 },
-                  ]}
-                >
-                  <Building2 size={13} color={isSelected ? colors.primary : colors.textSecondary} />
-                  <Text
-                    style={[
-                      styles.orgPillText,
-                      { color: isSelected ? colors.primary : colors.text, fontWeight: isSelected ? '700' : '500' },
-                    ]}
-                  >
-                    {org.name}
-                  </Text>
-                  {isSelected && <Check size={13} color={colors.primary} />}
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-
-          <View style={styles.customCountBadge}>
-            <Text style={styles.customCountText}>
-              {customTemplatesCount} customized for {selectedOrg.name.slice(0, 16)}...
-            </Text>
           </View>
         </View>
 
@@ -511,11 +427,11 @@ export default function TemplatesScreen() {
                         {tpl.is_custom ? (
                           <View style={[styles.customBadge, { backgroundColor: '#DCFCE7' }]}>
                             <Sparkles size={10} color="#15803D" />
-                            <Text style={[styles.customBadgeText, { color: '#15803D' }]}>Custom for Org</Text>
+                            <Text style={[styles.customBadgeText, { color: '#15803D' }]}>Customized</Text>
                           </View>
                         ) : (
                           <View style={[styles.customBadge, { backgroundColor: '#F1F5F9' }]}>
-                            <Text style={[styles.customBadgeText, { color: '#64748B' }]}>System Default</Text>
+                            <Text style={[styles.customBadgeText, { color: '#64748B' }]}>Org Default</Text>
                           </View>
                         )}
                       </View>
@@ -538,11 +454,11 @@ export default function TemplatesScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Text style={[styles.editorTitle, { color: colors.text }]}>{name}</Text>
                   {currentTemplate?.is_custom && (
-                    <Badge label={`Customized for ${selectedOrg.name}`} variant="success" />
+                    <Badge label={`Customized for ${currentOrgName}`} variant="success" />
                   )}
                 </View>
                 <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-                  Linked to: <Text style={{ fontWeight: '700', color: colors.primary }}>{selectedOrg.name}</Text> ({selectedOrgId})
+                  Linked to: <Text style={{ fontWeight: '700', color: colors.primary }}>{currentOrgName}</Text> ({currentOrgId}) • {customTemplatesCount} customized templates
                 </Text>
               </View>
 
@@ -836,6 +752,19 @@ const styles = StyleSheet.create({
   },
   pageTitle: { fontSize: 20, fontWeight: '800' },
   pageSubtitle: { fontSize: 12, marginTop: 2 },
+  orgNameBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  orgNameText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   feedbackPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -848,40 +777,6 @@ const styles = StyleSheet.create({
     borderColor: '#86EFAC',
   },
   feedbackText: { fontSize: 12, color: '#166534', fontWeight: '700' },
-  orgBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    gap: 12,
-    flexWrap: 'wrap',
-  },
-  orgPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    backgroundColor: '#FFF',
-  },
-  orgPillText: {
-    fontSize: 12,
-  },
-  customCountBadge: {
-    marginLeft: 'auto',
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  customCountText: {
-    fontSize: 11,
-    color: '#64748B',
-    fontWeight: '600',
-  },
   mainLayout: { flex: 1, flexDirection: 'column' },
   mainLayoutDesktop: { flexDirection: 'row' },
   leftNav: { width: '100%', borderRightWidth: 1, padding: 16 },
