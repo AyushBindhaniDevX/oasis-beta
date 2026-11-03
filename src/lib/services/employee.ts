@@ -256,7 +256,11 @@ export async function getEmployees(params?: {
           e.workplace?.organization_id === organization_id ||
           e.department?.organization_id === organization_id ||
           (organization_id === 'shanti-memorial-hospital' &&
-            (e.organization_id === 'smh' || e.profile?.organization_id === 'smh'))
+            (e.organization_id === 'smh' || e.profile?.organization_id === 'smh' || e.organization_id === 'gopal-trust' || e.organization_id === 'chikitsa')) ||
+          (organization_id === 'gopal-trust' &&
+            (e.hospital_unit === 'Gopal Trust' || e.workplace_id === 'wp-1793201564704' || e.organization_id === 'gopal-trust')) ||
+          (organization_id === 'chikitsa' &&
+            (e.hospital_unit === 'Chikitsa' || e.workplace_id === 'wp-1793201579968' || e.organization_id === 'chikitsa'))
       );
     }
     if (hospital_unit && hospital_unit !== 'all') {
@@ -607,7 +611,14 @@ export async function getDepartments(organizationId?: string): Promise<Departmen
     const depts: Department[] = [];
     snap.forEach((d) => {
       const dept = { id: d.id, ...d.data() } as Department;
-      if (!organizationId || dept.organization_id === organizationId || (organizationId === 'shanti-memorial-hospital' && dept.organization_id === 'smh')) {
+      if (
+        !organizationId ||
+        dept.organization_id === organizationId ||
+        (organizationId === 'shanti-memorial-hospital' &&
+          (dept.organization_id === 'smh' || dept.organization_id === 'gopal-trust' || dept.organization_id === 'chikitsa')) ||
+        (organizationId === 'gopal-trust' && (dept.organization_id === 'shanti-memorial-hospital' || dept.organization_id === 'smh')) ||
+        (organizationId === 'chikitsa' && (dept.organization_id === 'shanti-memorial-hospital' || dept.organization_id === 'smh'))
+      ) {
         depts.push(dept);
       }
     });
@@ -731,7 +742,14 @@ export async function getWorkplaces(organizationId?: string): Promise<Workplace[
     const wps: Workplace[] = [];
     snap.forEach((d) => {
       const wp = { id: d.id, ...d.data() } as Workplace;
-      if (!organizationId || wp.organization_id === organizationId || (organizationId === 'shanti-memorial-hospital' && wp.organization_id === 'smh')) {
+      if (
+        !organizationId ||
+        wp.organization_id === organizationId ||
+        (organizationId === 'shanti-memorial-hospital' &&
+          (wp.organization_id === 'smh' || wp.organization_id === 'gopal-trust' || wp.organization_id === 'chikitsa')) ||
+        (organizationId === 'gopal-trust' && (wp.organization_id === 'shanti-memorial-hospital' || wp.organization_id === 'smh')) ||
+        (organizationId === 'chikitsa' && (wp.organization_id === 'shanti-memorial-hospital' || wp.organization_id === 'smh'))
+      ) {
         wps.push(wp);
       }
     });
