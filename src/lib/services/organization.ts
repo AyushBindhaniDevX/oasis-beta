@@ -106,7 +106,13 @@ export async function updateUserRole(userId: string, role: string): Promise<void
 
 export async function updateUserProfileData(
   userId: string,
-  data: { full_name?: string; phone?: string | null; role?: string; is_hhc_enabled?: boolean }
+  data: {
+    full_name?: string;
+    phone?: string | null;
+    role?: string;
+    is_hhc_enabled?: boolean;
+    hhc_role?: string | null;
+  }
 ): Promise<void> {
   await updateDoc(doc(db, 'profiles', userId), sanitizeFirestoreData({
     ...data,
