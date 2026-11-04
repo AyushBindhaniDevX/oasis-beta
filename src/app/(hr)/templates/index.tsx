@@ -51,12 +51,72 @@ export default function TemplatesScreen() {
   const colors = useTheme();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
-  const { organization, companyName } = useTenant();
+  const { organization, companyName, allOrganizations } = useTenant();
   const { profile } = useAuth();
 
-  // Active Tenant Organization automatically linked from session context
-  const currentOrgId = organization?.id || profile?.organization_id || 'shanti-memorial-hospital';
-  const currentOrgName = organization?.name || companyName || 'Shanti Memorial Hospital';
+  // Multi-Organization & Hospital Unit Selector State
+  const initialOrgId = organization?.id || profile?.organization_id || 'shanti-memorial-hospital';
+  const [selectedOrgId, setSelectedOrgId] = useState<string>(initialOrgId);
+
+  // Compute available organizations and units (excluding demo/mock orgs like subedge)
+  const availableOrgs = useMemo(() => {
+    const list: Array<{ id: string; name: string; type?: string }> = [];
+    const seen = new Set<string>();
+
+    const addOrg = (id: string, name: string, type?: string) => {
+      if (!id || !name) return;
+      const key = id.toLowerCase().trim();
+      // Block dummy mock 'subedge' from appearing for hospital tenants
+      if (key === 'subedge' || key === 'subedge_org' || name.toLowerCase().includes('subedge')) return;
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push({ id, name, type });
+      }
+    };
+
+    // 1. Current active organization
+    if (organization?.id && organization.name) {
+      addOrg(organization.id, organization.name, 'Primary Hospital');
+    }
+
+    // 2. Child units / organizations from allOrganizations
+    if (allOrganizations && allOrganizations.length > 0) {
+      allOrganizations.forEach((o) => {
+        if (o.id && o.name) {
+          addOrg(o.id, o.name, o.parent_organization_id ? 'Unit' : 'Organization');
+        }
+      });
+    }
+
+    // 3. For Shanti Memorial Hospital, ensure all 3 verified hospital units are present
+    const isSMHGroup =
+      organization?.id === 'shanti-memorial-hospital' ||
+      organization?.id === 'smh' ||
+      profile?.organization_id === 'shanti-memorial-hospital' ||
+      list.some((o) => o.name.toLowerCase().includes('shanti') || o.name.toLowerCase().includes('memorial'));
+
+    if (isSMHGroup || list.length === 0) {
+      addOrg('shanti-memorial-hospital', 'Shanti Memorial Hospital', 'Main Hospital');
+      addOrg('gopal-trust', 'Gopal Trust', 'Healthcare Unit');
+      addOrg('chikitsa', 'Chikitsa', 'Hospital Unit');
+    }
+
+    return list;
+  }, [organization, allOrganizations, profile?.organization_id]);
+
+  const selectedOrg = useMemo(() => {
+    const match = availableOrgs.find((o) => o.id === selectedOrgId);
+    if (match) return match;
+    if (selectedOrgId === 'gopal-trust') return { id: 'gopal-trust', name: 'Gopal Trust' };
+    if (selectedOrgId === 'chikitsa') return { id: 'chikitsa', name: 'Chikitsa' };
+    if (selectedOrgId === 'shanti-memorial-hospital' || selectedOrgId === 'smh') {
+      return { id: 'shanti-memorial-hospital', name: 'Shanti Memorial Hospital' };
+    }
+    return {
+      id: selectedOrgId,
+      name: organization?.name || companyName || 'Shanti Memorial Hospital',
+    };
+  }, [availableOrgs, selectedOrgId, organization?.name, companyName]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -78,10 +138,10 @@ export default function TemplatesScreen() {
   const [signatoryTitle, setSignatoryTitle] = useState('');
   const [newClause, setNewClause] = useState('');
 
-  const loadAll = async () => {
+  const loadAll = async (targetOrgId: string, targetOrgName: string) => {
     try {
       setLoading(true);
-      const data = await getTemplates(currentOrgId, currentOrgName);
+      const data = await getTemplates(targetOrgId, targetOrgName);
       setTemplates(data);
 
       // Select matching template or first in active tab
@@ -102,8 +162,8 @@ export default function TemplatesScreen() {
   };
 
   useEffect(() => {
-    loadAll();
-  }, [currentOrgId, currentOrgName]);
+    loadAll(selectedOrgId, selectedOrg.name);
+  }, [selectedOrgId]);
 
   const selectTemplate = (tpl: DocumentTemplate) => {
     setSelectedKey(tpl.key);
@@ -165,8 +225,8 @@ export default function TemplatesScreen() {
     try {
       const updated: DocumentTemplate = {
         ...currentTemplate,
-        id: `${currentOrgId}_${currentTemplate.key}`,
-        organization_id: currentOrgId,
+        id: `${selectedOrgId}_${currentTemplate.key}`,
+        organization_id: selectedOrgId,
         name,
         subject: activeTab === 'email' ? subject : undefined,
         title: activeTab === 'document' ? title : undefined,
@@ -183,7 +243,7 @@ export default function TemplatesScreen() {
 
       await saveTemplate(updated);
       setTemplates((prev) => prev.map((t) => (t.key === updated.key ? updated : t)));
-      showNotice(`Template saved specifically for ${currentOrgName}!`);
+      showNotice(`Template saved specifically for ${selectedOrg.name}!`);
     } catch (err: any) {
       Alert.alert('Save Failed', err.message || 'Could not save template');
     } finally {
@@ -195,7 +255,7 @@ export default function TemplatesScreen() {
     if (!currentTemplate) return;
     Alert.alert(
       'Reset Template for Organization',
-      `Are you sure you want to reset "${currentTemplate.name}" to the default format for ${currentOrgName}? Custom modifications will be discarded.`,
+      `Are you sure you want to reset "${currentTemplate.name}" to the default format for ${selectedOrg.name}? Custom modifications will be discarded.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -203,10 +263,10 @@ export default function TemplatesScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const def = await resetTemplate(currentOrgId, currentTemplate.key, currentOrgName);
+              const def = await resetTemplate(selectedOrgId, currentTemplate.key, selectedOrg.name);
               setTemplates((prev) => prev.map((t) => (t.key === def.key ? def : t)));
               selectTemplate(def);
-              showNotice(`Reset template to default format for ${currentOrgName}.`);
+              showNotice(`Reset template to default format for ${selectedOrg.name}.`);
             } catch (err: any) {
               Alert.alert('Reset Failed', err.message);
             }
@@ -216,15 +276,48 @@ export default function TemplatesScreen() {
     );
   };
 
-  // Sample data dictionary for Live Preview
-  const isSMH = currentOrgId === 'shanti-memorial-hospital' || currentOrgId === 'smh';
+  // Sample data dictionary for Live Preview and PDF Export
+  const isSMH = selectedOrgId === 'shanti-memorial-hospital' || selectedOrgId === 'smh';
+  const isGopal = selectedOrgId === 'gopal-trust';
+  const isChikitsa = selectedOrgId === 'chikitsa';
+
   const sampleData: Record<string, string> = {
-    employee_name: isSMH ? 'Dr. Priya Sharma' : 'Alex Morgan',
-    employee_code: isSMH ? 'SMH-1021' : 'EMP-1021',
-    designation: isSMH ? 'Senior Consultant Physician' : 'Senior Software Engineer',
-    department: isSMH ? 'Internal Medicine & Critical Care' : 'Engineering & Technology',
-    unit: isSMH ? 'Central Hospital Campus' : 'Headquarters Campus',
-    organization_name: currentOrgName,
+    employee_name: isSMH
+      ? 'Dr. Priya Sharma'
+      : isGopal
+      ? 'Sunita Behera'
+      : isChikitsa
+      ? 'Rajesh Mohanty'
+      : 'Alex Morgan',
+    employee_code: isSMH
+      ? 'SMH-1021'
+      : isGopal
+      ? 'GT-014'
+      : isChikitsa
+      ? 'CHK-045'
+      : 'EMP-1021',
+    designation: isSMH
+      ? 'Senior Consultant Physician'
+      : isGopal
+      ? 'Healthcare Coordinator'
+      : isChikitsa
+      ? 'Staff Nurse / Clinical Care'
+      : 'Senior Operations Lead',
+    department: isSMH
+      ? 'Internal Medicine & Critical Care'
+      : isGopal
+      ? 'Patient Care & Trust Services'
+      : isChikitsa
+      ? 'Nursing & Emergency Care'
+      : 'Operations & Facilities',
+    unit: isSMH
+      ? 'Central Hospital Campus'
+      : isGopal
+      ? 'Gopal Trust Healthcare Unit'
+      : isChikitsa
+      ? 'Chikitsa Multi-Specialty Unit'
+      : 'Headquarters Campus',
+    organization_name: selectedOrg.name,
     joining_date: '15 Jan 2026',
     relieving_date: '31 Oct 2026',
     effective_date: '01 Nov 2026',
@@ -232,12 +325,24 @@ export default function TemplatesScreen() {
     gross_salary: '₹50,000',
     annual_salary: '₹6,00,000',
     net_salary: '₹47,200',
-    ref_number: isSMH ? 'SMH/HR/APT/2026/1021' : 'HR/APT/2026/EMP-1021',
-    signatory_name: signatoryName || (isSMH ? 'Medical Superintendent' : 'Sarah Jenkins'),
-    signatory_title: signatoryTitle || (isSMH ? 'Office of Medical Administration & HR' : 'Head of Human Resources'),
+    ref_number: isSMH
+      ? 'SMH/HR/APT/2026/1021'
+      : isGopal
+      ? 'GT/HR/APT/2026/014'
+      : isChikitsa
+      ? 'CSMH/HR/APT/2026/045'
+      : 'HR/APT/2026/EMP-1021',
+    signatory_name: signatoryName || (isSMH ? 'Medical Superintendent' : isGopal ? 'Gopal Trust Administration' : isChikitsa ? 'Chikitsa Administration' : 'Authorized Signatory'),
+    signatory_title: signatoryTitle || (isSMH ? 'Office of Medical Administration & HR' : isGopal ? 'Trust Administrator / HR Lead' : isChikitsa ? 'Medical Administrator / HR Lead' : 'Head of Human Resources'),
     portal_url: 'https://workforce.company.com',
-    user_email: isSMH ? 'priya.sharma@shantihospital.com' : 'alex.morgan@company.com',
-    temporary_password: 'Welcome@123',
+    user_email: isSMH
+      ? 'priya.sharma@shantihospital.com'
+      : isGopal
+      ? 'sunita.behera@gopaltrust.org'
+      : isChikitsa
+      ? 'rajesh.mohanty@chikitsa.org'
+      : 'alex.morgan@company.com',
+    temporary_password: 'Password@123',
     month: 'October',
     year: '2026',
     cycle_name: 'Annual Performance Appraisal 2026',
@@ -302,7 +407,7 @@ export default function TemplatesScreen() {
       </body>
       </html>
     `;
-    await exportOrPrintPdf(html, `${selectedKey}_${currentOrgId}.pdf`);
+    await exportOrPrintPdf(html, `${selectedKey}_${selectedOrgId}.pdf`);
   };
 
   if (loading) return <LoadingState />;
@@ -315,14 +420,10 @@ export default function TemplatesScreen() {
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <Text style={[styles.pageTitle, { color: colors.text }]}>Document & Email Templates</Text>
-              <View style={[styles.orgNameBadge, { backgroundColor: colors.primary + '15', borderColor: colors.primary + '40' }]}>
-                <Building2 size={12} color={colors.primary} />
-                <Text style={[styles.orgNameText, { color: colors.primary }]}>{currentOrgName}</Text>
-              </View>
-              <Badge label="ORGANIZATION LINKED" variant="accentLight" />
+              <Badge label="ORG SPECIFIC" variant="accentLight" />
             </View>
             <Text style={[styles.pageSubtitle, { color: colors.textSecondary }]}>
-              Official letterheads, legal clauses, and automated notification templates linked specifically to {currentOrgName}.
+              Customize official letters, clauses, and email notifications linked specifically to your organization.
             </Text>
           </View>
 
@@ -350,6 +451,51 @@ export default function TemplatesScreen() {
               style={{ backgroundColor: colors.primary }}
             />
           </View>
+        </View>
+
+        {/* Target Organization Selector Bar */}
+        <View style={[styles.orgSelectorBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+          <View style={styles.orgSelectorHeader}>
+            <Building2 size={16} color={colors.primary} />
+            <Text style={[styles.orgSelectorLabel, { color: colors.text }]}>Target Organization:</Text>
+          </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.orgPillsContainer}>
+            {availableOrgs.map((org) => {
+              const isSelected = selectedOrgId === org.id;
+              return (
+                <TouchableOpacity
+                  key={org.id}
+                  onPress={() => setSelectedOrgId(org.id)}
+                  style={[
+                    styles.orgPill,
+                    {
+                      borderColor: isSelected ? colors.primary : colors.border,
+                      backgroundColor: isSelected ? colors.primary + '15' : colors.surface,
+                    },
+                  ]}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.orgPillText,
+                      {
+                        color: isSelected ? colors.primary : colors.textSecondary,
+                        fontWeight: isSelected ? '700' : '500',
+                      },
+                    ]}
+                  >
+                    {org.name}
+                  </Text>
+                  {isSelected && <Check size={14} color={colors.primary} strokeWidth={2.5} />}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          <Text style={[styles.customCountText, { color: colors.textSecondary }]}>
+            {customTemplatesCount} customized for {selectedOrg.name}
+          </Text>
         </View>
 
         {/* Main Content Layout */}
@@ -454,11 +600,11 @@ export default function TemplatesScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Text style={[styles.editorTitle, { color: colors.text }]}>{name}</Text>
                   {currentTemplate?.is_custom && (
-                    <Badge label={`Customized for ${currentOrgName}`} variant="success" />
+                    <Badge label={`Customized for ${selectedOrg.name}`} variant="success" />
                   )}
                 </View>
                 <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-                  Linked to: <Text style={{ fontWeight: '700', color: colors.primary }}>{currentOrgName}</Text> ({currentOrgId}) • {customTemplatesCount} customized templates
+                  Linked to: <Text style={{ fontWeight: '700', color: colors.primary }}>{selectedOrg.name}</Text> ({selectedOrgId}) • {customTemplatesCount} customized templates
                 </Text>
               </View>
 
@@ -752,6 +898,45 @@ const styles = StyleSheet.create({
   },
   pageTitle: { fontSize: 20, fontWeight: '800' },
   pageSubtitle: { fontSize: 12, marginTop: 2 },
+  orgSelectorBar: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  orgSelectorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  orgSelectorLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  orgPillsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  orgPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  orgPillText: {
+    fontSize: 13,
+  },
+  customCountText: {
+    fontSize: 12,
+    marginLeft: 'auto',
+  },
   orgNameBadge: {
     flexDirection: 'row',
     alignItems: 'center',

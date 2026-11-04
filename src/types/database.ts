@@ -60,6 +60,7 @@ export interface Organization {
   id: string;
   name: string;
   slug?: string | null;
+  parent_organization_id?: string | null;
   logo_url?: string | null;
   primary_color?: string | null;
   accent_color?: string | null;

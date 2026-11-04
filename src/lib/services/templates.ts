@@ -70,6 +70,10 @@ export function getOrgAliases(orgId: string): string[] {
   const aliases = [orgId];
   if (orgId === 'shanti-memorial-hospital') aliases.push('smh');
   if (orgId === 'smh') aliases.push('shanti-memorial-hospital');
+  if (orgId === 'gopal-trust') aliases.push('gopal_trust', 'Gopal Trust');
+  if (orgId === 'gopal_trust') aliases.push('gopal-trust', 'Gopal Trust');
+  if (orgId === 'chikitsa') aliases.push('csmh', 'Chikitsa');
+  if (orgId === 'csmh') aliases.push('chikitsa', 'Chikitsa');
   if (orgId === 'subedge_org') aliases.push('subedge');
   if (orgId === 'subedge') aliases.push('subedge_org');
   return aliases;
@@ -83,22 +87,64 @@ export function getDefaultTemplatesForOrg(
   organizationId: string,
   orgNameParam?: string
 ): Record<string, Omit<DocumentTemplate, 'id' | 'organization_id' | 'updated_at'>> {
+  const normId = (organizationId || '').toLowerCase().trim();
+  const normName = (orgNameParam || '').toLowerCase().trim();
+
+  const isGopal = normId.includes('gopal') || normName.includes('gopal');
+  const isChikitsa = normId.includes('chikitsa') || normName.includes('chikitsa');
+  const isSMH =
+    normId === 'shanti-memorial-hospital' ||
+    normId === 'smh' ||
+    normName.includes('shanti') ||
+    normName.includes('memorial');
+
   const isHospital =
-    organizationId === 'shanti-memorial-hospital' ||
-    organizationId === 'smh' ||
-    (orgNameParam && orgNameParam.toLowerCase().includes('hospital')) ||
-    (orgNameParam && orgNameParam.toLowerCase().includes('shanti'));
+    isSMH ||
+    isGopal ||
+    isChikitsa ||
+    normName.includes('hospital') ||
+    normName.includes('trust') ||
+    normName.includes('clinic');
 
-  const isSubedge =
-    organizationId === 'subedge_org' ||
-    organizationId === 'subedge' ||
-    (orgNameParam && orgNameParam.toLowerCase().includes('subedge'));
+  const isSubedge = normId.includes('subedge') || normName.includes('subedge');
 
-  const orgName = orgNameParam || (isHospital ? 'Shanti Memorial Hospital' : isSubedge ? 'Subedge Technology Pvt Ltd' : 'Enterprise Workplace');
-  const unitName = isHospital ? 'Central Hospital Campus' : isSubedge ? 'Technology Development Centre' : 'Headquarters Campus';
-  const signatoryTitle = isHospital ? 'Medical Superintendent / HR Director' : 'Head of Human Resources';
-  const signatoryName = isHospital ? 'Medical Administration Board' : 'Talent Operations Director';
-  const portalName = isHospital ? 'SMH Oasis Workforce Portal' : 'Oasis Enterprise Portal';
+  let orgName = orgNameParam;
+  let unitName = 'Central Hospital Campus';
+  let signatoryTitle = 'Medical Superintendent / HR Director';
+  let signatoryName = 'Medical Administration Board';
+  let portalName = 'SMH Oasis Workforce Portal';
+
+  if (isGopal) {
+    orgName = orgNameParam || 'Gopal Trust';
+    unitName = 'Gopal Trust Healthcare Unit';
+    signatoryTitle = 'Trust Administrator / HR Lead';
+    signatoryName = 'Gopal Trust Administration';
+    portalName = 'Gopal Trust Workforce Portal';
+  } else if (isChikitsa) {
+    orgName = orgNameParam || 'Chikitsa';
+    unitName = 'Chikitsa Multi-Specialty Unit';
+    signatoryTitle = 'Medical Administrator / HR Lead';
+    signatoryName = 'Chikitsa Hospital Administration';
+    portalName = 'Chikitsa Workforce Portal';
+  } else if (isSMH) {
+    orgName = orgNameParam || 'Shanti Memorial Hospital';
+    unitName = 'Central Hospital Campus';
+    signatoryTitle = 'Medical Superintendent / HR Director';
+    signatoryName = 'Medical Administration Board';
+    portalName = 'SMH Oasis Workforce Portal';
+  } else if (isSubedge) {
+    orgName = orgNameParam || 'Subedge Technology Pvt Ltd';
+    unitName = 'Technology Development Centre';
+    signatoryTitle = 'Head of Human Resources';
+    signatoryName = 'Talent Operations Director';
+    portalName = 'Oasis Enterprise Portal';
+  } else {
+    orgName = orgNameParam || (isHospital ? 'Shanti Memorial Hospital' : 'Enterprise Workplace');
+    unitName = isHospital ? 'Central Hospital Campus' : 'Headquarters Campus';
+    signatoryTitle = isHospital ? 'Medical Superintendent / HR Director' : 'Head of Human Resources';
+    signatoryName = isHospital ? 'Medical Administration Board' : 'Talent Operations Director';
+    portalName = isHospital ? 'SMH Oasis Workforce Portal' : 'Oasis Enterprise Portal';
+  }
 
   return {
     appointment_letter: {
