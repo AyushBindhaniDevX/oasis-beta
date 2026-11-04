@@ -91,16 +91,22 @@ export default function LoginScreen() {
 
     try {
       let finalEmail = trimmedInput;
+      let matchedPhone: string | null = null;
+      let userOrgId: string | null = null;
+      let userRole: string = 'employee';
+      let userName: string = '';
+
       // If input looks like a phone number (contains numbers, optional +, -, spaces)
       const digitsOnly = trimmedInput.replace(/\D/g, '');
       const isPhoneLike = (/^\+?[0-9\-\s]+$/.test(trimmedInput) && digitsOnly.length >= 6) || /^\d{10}$/.test(trimmedInput);
 
-      if (isPhoneLike) {
-        const { collection, query, where, getDocs, limit } = await import('firebase/firestore');
-        const { db } = await import('@/lib/firebase');
+      const { collection, query, where, getDocs, limit, doc, setDoc } = await import('firebase/firestore');
+      const { db, auth } = await import('@/lib/firebase');
 
+      if (isPhoneLike) {
         // Extract clean 10-digit number
         const tenDigits = digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly;
+        matchedPhone = tenDigits.length === 10 ? tenDigits : null;
         const phoneVariants = Array.from(new Set([
           trimmedInput,
           digitsOnly,
@@ -115,7 +121,6 @@ export default function LoginScreen() {
 
         // 1. Check profiles collection
         let matchedEmail: string | null = null;
-        let matchedOrgId: string | null = null;
 
         const profQ = query(
           collection(db, 'profiles'),
@@ -127,7 +132,9 @@ export default function LoginScreen() {
         if (!profSnap.empty) {
           const profData = profSnap.docs[0].data();
           matchedEmail = profData.email;
-          matchedOrgId = profData.organization_id;
+          userOrgId = profData.organization_id;
+          userRole = profData.role || 'employee';
+          userName = profData.full_name || '';
         }
 
         // 2. If not found in profiles, check employees collection
@@ -141,7 +148,9 @@ export default function LoginScreen() {
           if (!empSnap.empty) {
             const empData = empSnap.docs[0].data();
             matchedEmail = empData.email || empData.work_email;
-            matchedOrgId = empData.organization_id;
+            userOrgId = empData.organization_id;
+            userRole = empData.role || 'employee';
+            userName = `${empData.first_name || ''} ${empData.last_name || ''}`.trim();
           }
         }
 
@@ -151,45 +160,143 @@ export default function LoginScreen() {
             collection(db, 'employees'),
             where('organization_id', 'in', ['shanti-memorial-hospital', 'smh', 'gopal-trust', 'chikitsa'])
           ));
-          for (const doc of allEmpSnap.docs) {
-            const data = doc.data();
+          for (const d of allEmpSnap.docs) {
+            const data = d.data();
             const pDigits = (data.phone ? String(data.phone).replace(/\D/g, '') : '');
             if (pDigits && pDigits.slice(-10) === tenDigits) {
               matchedEmail = data.email || data.work_email;
-              matchedOrgId = data.organization_id;
+              userOrgId = data.organization_id;
+              userRole = data.role || 'employee';
+              userName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
               break;
             }
           }
         }
 
         if (matchedEmail) {
-          if (!matchedOrgId) {
+          if (!userOrgId) {
             throw new Error('Access Denied: Your account is not linked to an organization.');
           }
           finalEmail = matchedEmail;
         } else {
           throw new Error(`Access Denied: No account found for phone number ${tenDigits}. Please check the 10-digit number or sign in with your work email.`);
         }
+      } else {
+        // Username entered as email: find phone number and org for password resolution
+        try {
+          const cleanMail = finalEmail.toLowerCase().trim();
+          const profQ = query(collection(db, 'profiles'), where('email', '==', cleanMail), limit(1));
+          const profSnap = await getDocs(profQ);
+          if (!profSnap.empty) {
+            const p = profSnap.docs[0].data()?.phone;
+            const pDigits = p ? String(p).replace(/\D/g, '') : '';
+            if (pDigits.length >= 10) matchedPhone = pDigits.slice(-10);
+            userOrgId = profSnap.docs[0].data()?.organization_id;
+            userRole = profSnap.docs[0].data()?.role || 'employee';
+            userName = profSnap.docs[0].data()?.full_name || '';
+          } else {
+            const empQ = query(collection(db, 'employees'), where('email', '==', cleanMail), limit(1));
+            const empSnap = await getDocs(empQ);
+            if (!empSnap.empty) {
+              const p = empSnap.docs[0].data()?.phone;
+              const pDigits = p ? String(p).replace(/\D/g, '') : '';
+              if (pDigits.length >= 10) matchedPhone = pDigits.slice(-10);
+              userOrgId = empSnap.docs[0].data()?.organization_id;
+              userRole = empSnap.docs[0].data()?.role || 'employee';
+              userName = `${empSnap.docs[0].data()?.first_name || ''} ${empSnap.docs[0].data()?.last_name || ''}`.trim();
+            }
+          }
+        } catch (e) {}
       }
 
-      try {
-        await signIn(finalEmail, trimmedPassword, tenant?.id);
-      } catch (authErr: any) {
-        // If password is Password@123 or Welcome@123, try fallback default password
-        if (
-          (authErr?.code === 'auth/wrong-password' ||
+      // Build prioritized candidate passwords
+      const candidatePasswords: string[] = [];
+      if (trimmedPassword) candidatePasswords.push(trimmedPassword);
+
+      // If user typed phone number into password field with spaces/+91, extract 10 digits
+      const pwdDigits = trimmedPassword.replace(/\D/g, '');
+      if (pwdDigits.length >= 10 && !candidatePasswords.includes(pwdDigits.slice(-10))) {
+        candidatePasswords.push(pwdDigits.slice(-10));
+      }
+
+      // Default password: staff's 10-digit phone number!
+      if (matchedPhone && !candidatePasswords.includes(matchedPhone)) {
+        candidatePasswords.push(matchedPhone);
+      }
+
+      // Fallback defaults for legacy or unmigrated accounts
+      if (!candidatePasswords.includes('Password@123')) candidatePasswords.push('Password@123');
+      if (!candidatePasswords.includes('Welcome@123')) candidatePasswords.push('Welcome@123');
+
+      let lastError: any = null;
+      let loggedIn = false;
+      let usedPassword = '';
+
+      for (const pwd of candidatePasswords) {
+        try {
+          await signIn(finalEmail, pwd, tenant?.id || userOrgId || undefined);
+          loggedIn = true;
+          usedPassword = pwd;
+          break;
+        } catch (authErr: any) {
+          lastError = authErr;
+          const isCredErr =
+            authErr?.code === 'auth/wrong-password' ||
             authErr?.code === 'auth/invalid-credential' ||
             authErr?.code === 'auth/invalid-login-credentials' ||
+            authErr?.code === 'auth/user-not-found' ||
             String(authErr?.message || '').toLowerCase().includes('password') ||
-            String(authErr?.message || '').toLowerCase().includes('credential')) &&
-          (trimmedPassword === 'Password@123' || trimmedPassword === 'Welcome@123')
-        ) {
-          const alternatePassword = trimmedPassword === 'Password@123' ? 'Welcome@123' : 'Password@123';
-          await signIn(finalEmail, alternatePassword, tenant?.id);
-        } else {
-          throw authErr;
+            String(authErr?.message || '').toLowerCase().includes('credential');
+
+          // If user does not exist in Firebase Auth yet, but is registered in DB, provision automatically!
+          if (authErr?.code === 'auth/user-not-found' && matchedPhone && userOrgId) {
+            try {
+              const { createUserWithEmailAndPassword } = await import('firebase/auth');
+              const newCred = await createUserWithEmailAndPassword(auth, finalEmail, matchedPhone);
+              const now = new Date().toISOString();
+              await setDoc(doc(db, 'profiles', newCred.user.uid), {
+                id: newCred.user.uid,
+                email: finalEmail,
+                phone: matchedPhone,
+                full_name: userName || finalEmail.split('@')[0],
+                role: userRole,
+                organization_id: userOrgId,
+                is_active: true,
+                created_at: now,
+                updated_at: now,
+              }, { merge: true });
+              await signIn(finalEmail, matchedPhone, tenant?.id || userOrgId);
+              loggedIn = true;
+              usedPassword = matchedPhone;
+              break;
+            } catch (createErr) {
+              // continue trying remaining passwords
+            }
+          }
+
+          if (!isCredErr) {
+            throw authErr;
+          }
         }
       }
+
+      if (!loggedIn) {
+        throw lastError || new Error('Invalid email or password. Please verify your credentials.');
+      }
+
+      // If logged in using legacy default (Password@123 or Welcome@123), and matchedPhone is known:
+      // Transparently upgrade their password in Firebase Auth to their phone number!
+      if (matchedPhone && usedPassword !== matchedPhone) {
+        try {
+          const { updatePassword } = await import('firebase/auth');
+          if (auth.currentUser) {
+            await updatePassword(auth.currentUser, matchedPhone);
+          }
+        } catch (upgErr) {
+          console.warn('[Auth]: Background password upgrade note:', upgErr);
+        }
+      }
+
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid credentials.');
@@ -326,7 +433,7 @@ export default function LoginScreen() {
                     <Lock color="#64748B" size={18} style={styles.inputIcon} />
                     <TextInput
                       style={styles.textInput}
-                      placeholder="••••••••••••"
+                      placeholder="10-digit phone number"
                       placeholderTextColor="#94A3B8"
                       value={password}
                       onChangeText={setPassword}
@@ -346,6 +453,9 @@ export default function LoginScreen() {
                       )}
                     </TouchableOpacity>
                   </View>
+                  <Text style={styles.pwdHintText}>
+                    Default password for staff is your 10-digit phone number
+                  </Text>
                 </View>
               </View>
 
@@ -583,6 +693,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#0D7377',
+  },
+  pwdHintText: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 4,
+    marginLeft: 2,
+    fontWeight: '500',
   },
   inputContainer: {
     flexDirection: 'row',
