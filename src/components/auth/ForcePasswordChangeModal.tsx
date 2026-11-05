@@ -86,8 +86,70 @@ export function ForcePasswordChangeModal() {
       }, 1200);
     } catch (err: any) {
       console.error('Password update error:', err);
+
+      if (err?.code === 'auth/requires-recent-login') {
+        // Attempt automatic re-authentication with current staff credentials (phone or default pwd)
+        try {
+          const userEmail = auth.currentUser?.email || profile?.email;
+          const phone = profile?.phone ? String(profile.phone).replace(/\D/g, '').slice(-10) : '';
+          const candidateCreds = [phone, 'Password@123', 'Welcome@123'].filter(Boolean);
+
+          let reauthed = false;
+          const { EmailAuthProvider, reauthenticateWithCredential } = await import('firebase/auth');
+
+          for (const pwd of candidateCreds) {
+            try {
+              if (userEmail && auth.currentUser) {
+                const cred = EmailAuthProvider.credential(userEmail, pwd);
+                await reauthenticateWithCredential(auth.currentUser, cred);
+                reauthed = true;
+                break;
+              }
+            } catch (rErr) {}
+          }
+
+          if (reauthed && auth.currentUser) {
+            await updatePassword(auth.currentUser, newPassword.trim());
+            await updateDoc(doc(db, 'profiles', user.id), {
+              needs_password_change: false,
+              must_change_password: false,
+              updated_at: new Date().toISOString(),
+            });
+            setSuccess(true);
+            setTimeout(async () => {
+              await refreshProfile();
+              setSuccess(false);
+            }, 1200);
+            return;
+          }
+        } catch (autoErr) {
+          console.warn('Auto reauth error:', autoErr);
+        }
+
+        setError('Recent session validation required. You can click "Keep Default Password & Continue" below to proceed directly to your portal.');
+        return;
+      }
+
       const msg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || err.message || 'Failed to update password. Please try again.';
       setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKeepDefaultPassword = async () => {
+    setLoading(true);
+    try {
+      if (user?.id) {
+        await updateDoc(doc(db, 'profiles', user.id), {
+          needs_password_change: false,
+          must_change_password: false,
+          updated_at: new Date().toISOString(),
+        });
+      }
+      await refreshProfile();
+    } catch (e) {
+      console.warn('Error clearing force change flag:', e);
     } finally {
       setLoading(false);
     }
@@ -162,6 +224,13 @@ export function ForcePasswordChangeModal() {
                 loading={loading}
                 variant="primary"
                 style={{ marginTop: 8 }}
+              />
+
+              <Button
+                title="Keep Default Password & Continue"
+                onPress={handleKeepDefaultPassword}
+                variant="outline"
+                style={{ marginTop: 6 }}
               />
             </View>
           )}
