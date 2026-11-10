@@ -397,261 +397,11 @@ let JOBS_STORE: JobOpening[] = [
 ];
 
 // ----------------------------------------------------
-// SEED CANDIDATES (CANDIDATE 360 & AI MATCH)
+// REAL-TIME FIRESTORE DATA STORES (Zero Mock Data)
 // ----------------------------------------------------
-let CANDIDATES_STORE: Candidate[] = [
-  {
-    id: 'cand_1',
-    job_id: 'job_1',
-    organization_id: 'subedge_org',
-    full_name: 'Priya Sundaram',
-    email: 'priya.sundaram@example.com',
-    phone: '+91 98765 43210',
-    current_location: 'Bengaluru, Karnataka',
-    stage: 'interview',
-    rating: 5,
-    experience_years: 7,
-    current_company: 'Infosys Innovation Labs',
-    expected_salary: '₹32,00,000',
-    notice_period_days: 15,
-    location: 'Bengaluru',
-    education: 'B.Tech in Computer Science, NIT Trichy',
-    skills: ['React Native', 'TypeScript', 'Node.js', 'Go', 'GraphQL', 'AWS'],
-    source: 'LinkedIn Direct',
-    resume_url: 'https://subedge.vercel.app/resumes/priya_sundaram_cv.pdf',
-    linkedin_url: 'https://linkedin.com/in/priyasundaram',
-    portfolio_url: 'https://github.com/priyasundaram',
-    knockout_passed: true,
-    scorecard_notes: 'Exceptional system architecture and TypeScript depth. Solved live concurrency challenge with 100% test coverage.',
-    ai_match: {
-      overall: 94,
-      skills: 96,
-      experience: 92,
-      education: 95,
-      location: 100,
-      salary: 88,
-      strengths: ['Expert in React Native & TypeScript', '15 days immediate notice period', 'Strong microservices background'],
-      gaps: ['Minor: Less experience with Google Cloud compared to AWS'],
-    },
-    evaluation: {
-      technical_score: 5,
-      problem_solving_score: 5,
-      communication_score: 4.5,
-      culture_fit_score: 5,
-      recommendation: 'strong_hire',
-      interviewer_notes: 'Top 1% technical candidate. Recommend fast-tracking to final managerial round.',
-      evaluator_name: 'Ayush B. (Principal Architect)',
-      evaluated_at: '2026-03-08',
-    },
-    timeline: [
-      { id: 't1', type: 'applied', title: 'Application Received', description: 'Applied via LinkedIn Direct referral', actor_name: 'System', created_at: '2026-03-02' },
-      { id: 't2', type: 'stage_change', title: 'Screening Passed', description: 'Recruiter verified CTC & Notice period', actor_name: 'Recruiter Lead', created_at: '2026-03-04' },
-      { id: 't3', type: 'interview_scheduled', title: 'Technical Round 1 Scheduled', description: 'Live coding on React Native architecture', actor_name: 'Ayush B.', created_at: '2026-03-06' },
-      { id: 't4', type: 'scorecard_added', title: 'Scorecard Submitted: 4.9 / 5.0', description: 'Strong Hire recommendation given', actor_name: 'Ayush B.', created_at: '2026-03-08' },
-    ],
-    applied_at: new Date(Date.now() - 6 * 86400000).toISOString(),
-  },
-  {
-    id: 'cand_2',
-    job_id: 'job_1',
-    organization_id: 'subedge_org',
-    full_name: 'Rahul Sharma',
-    email: 'rahul.sharma@example.com',
-    phone: '+91 98451 23456',
-    current_location: 'Bengaluru, Karnataka',
-    stage: 'assessment',
-    rating: 4,
-    experience_years: 5.5,
-    current_company: 'Wipro Digital',
-    expected_salary: '₹26,00,000',
-    notice_period_days: 30,
-    location: 'Bengaluru',
-    education: 'B.E in Information Technology, PES University',
-    skills: ['React Native', 'JavaScript', 'Node.js', 'Redux', 'REST APIs'],
-    source: 'Career Portal',
-    resume_url: 'https://subedge.vercel.app/resumes/rahul_sharma_cv.pdf',
-    linkedin_url: 'https://linkedin.com/in/rahulsharma',
-    knockout_passed: true,
-    scorecard_notes: 'Good coding foundations. Currently completing take-home architecture test.',
-    ai_match: {
-      overall: 84,
-      skills: 82,
-      experience: 85,
-      education: 88,
-      location: 100,
-      salary: 95,
-      strengths: ['Great match for salary bracket', 'Solid React ecosystem experience'],
-      gaps: ['Needs stronger Go / backend microservices depth'],
-    },
-    applied_at: new Date(Date.now() - 4 * 86400000).toISOString(),
-  },
-  {
-    id: 'cand_3',
-    job_id: 'job_2',
-    organization_id: 'subedge_org',
-    full_name: 'Ananya Verma',
-    email: 'ananya.verma@example.com',
-    phone: '+91 97123 45678',
-    current_location: 'Bhubaneswar, Odisha',
-    stage: 'offer',
-    rating: 5,
-    experience_years: 6.5,
-    current_company: 'Paladion Security Networks',
-    expected_salary: '₹24,00,000',
-    notice_period_days: 30,
-    location: 'Bhubaneswar / Remote',
-    education: 'M.Tech in Cybersecurity, IIT Bhubaneswar',
-    skills: ['SOC 2', 'HIPAA', 'ISO 27001', 'SIEM', 'Cloud IAM', 'VAPT'],
-    source: 'Employee Referral',
-    resume_url: 'https://subedge.vercel.app/resumes/ananya_verma_cv.pdf',
-    linkedin_url: 'https://linkedin.com/in/ananyaverma',
-    knockout_passed: true,
-    scorecard_notes: 'Formal offer letter generated for Lead Security Auditor.',
-    ai_match: {
-      overall: 96,
-      skills: 98,
-      experience: 95,
-      education: 98,
-      location: 95,
-      salary: 90,
-      strengths: ['Master’s in Cybersec from Tier 1 IIT', 'Direct experience leading SOC 2 Type II audit certifications'],
-      gaps: ['None identified'],
-    },
-    evaluation: {
-      technical_score: 5,
-      problem_solving_score: 5,
-      communication_score: 5,
-      culture_fit_score: 5,
-      recommendation: 'strong_hire',
-      interviewer_notes: 'Outstanding candidate. Offered position immediately.',
-      evaluator_name: 'CISO Office',
-      evaluated_at: '2026-03-05',
-    },
-    applied_at: new Date(Date.now() - 12 * 86400000).toISOString(),
-  },
-  {
-    id: 'cand_4',
-    job_id: 'job_3',
-    organization_id: 'subedge_org',
-    full_name: 'David Wilson',
-    email: 'david.wilson@example.com',
-    phone: '+91 99887 76655',
-    current_location: 'Bengaluru, Karnataka',
-    stage: 'screening',
-    rating: 4,
-    experience_years: 4,
-    current_company: 'Freelance Lead UI Designer',
-    expected_salary: '₹18,00,000',
-    notice_period_days: 0,
-    location: 'Bengaluru',
-    education: 'B.Des in Interaction Design, NID',
-    skills: ['Figma', 'UI/UX', 'Design Tokens', 'Prototyping', 'Framer'],
-    source: 'Indeed',
-    resume_url: 'https://subedge.vercel.app/resumes/david_wilson_portfolio.pdf',
-    portfolio_url: 'https://dribbble.com/davidwilson',
-    knockout_passed: true,
-    ai_match: {
-      overall: 89,
-      skills: 94,
-      experience: 82,
-      education: 95,
-      location: 100,
-      salary: 90,
-      strengths: ['Immediate joining (0 notice period)', 'Stunning portfolio design system'],
-      gaps: ['Slightly fewer years in large enterprise environments'],
-    },
-    applied_at: new Date(Date.now() - 2 * 86400000).toISOString(),
-  },
-  {
-    id: 'cand_5',
-    job_id: 'job_1',
-    organization_id: 'subedge_org',
-    full_name: 'Vikramaditya Sengupta',
-    email: 'vikram.sengupta@example.com',
-    phone: '+91 91234 56780',
-    current_location: 'Hyderabad, Telangana',
-    stage: 'talent_pool',
-    rating: 4.8,
-    experience_years: 9,
-    current_company: 'Oracle Cloud Infrastructure',
-    expected_salary: '₹42,00,000',
-    notice_period_days: 60,
-    location: 'Hyderabad / Remote',
-    education: 'B.Tech CS, BITS Pilani',
-    skills: ['Go', 'Distributed Systems', 'Kubernetes', 'PostgreSQL', 'Redis'],
-    source: 'Naukri',
-    resume_url: 'https://subedge.vercel.app/resumes/vikram_cv.pdf',
-    linkedin_url: 'https://linkedin.com/in/vikramsengupta',
-    knockout_passed: true,
-    is_silver_medalist: true,
-    talent_pool_tags: ['Silver Medalist', 'Distributed Systems Specialist', 'Fast-Track Lead'],
-    scorecard_notes: 'Silver Medalist for Principal Architect role. Top-tier engineering acumen; archived for Q3 High-Capacity Expansion.',
-    ai_match: {
-      overall: 93,
-      skills: 97,
-      experience: 98,
-      education: 95,
-      location: 90,
-      salary: 80,
-      strengths: ['Deep Go & distributed microservices expert', 'BITS Pilani alumnus'],
-      gaps: ['Expected CTC slightly higher than initial budget bracket'],
-    },
-    applied_at: new Date(Date.now() - 20 * 86400000).toISOString(),
-  },
-];
-
-// ----------------------------------------------------
-// SEED INTERVIEW SCHEDULES
-// ----------------------------------------------------
-let INTERVIEWS_STORE: InterviewSchedule[] = [
-  {
-    id: 'int_1',
-    candidate_id: 'cand_1',
-    candidate_name: 'Priya Sundaram',
-    job_id: 'job_1',
-    job_title: 'Principal Full Stack Architect',
-    round_name: 'Technical Round 2: System Concurrency',
-    interviewer_name: 'Ayush B. (Principal Architect)',
-    scheduled_time: '2026-03-10T14:30:00Z',
-    duration_minutes: 60,
-    meeting_link: 'https://meet.google.com/sub-tech-arch',
-    status: 'scheduled',
-    notes: 'Focus on distributed lock design and geofencing caching.',
-  },
-  {
-    id: 'int_2',
-    candidate_id: 'cand_2',
-    candidate_name: 'Rahul Sharma',
-    job_id: 'job_1',
-    job_title: 'Principal Full Stack Architect',
-    round_name: 'Technical Screening & Code Review',
-    interviewer_name: 'Engineering Lead',
-    scheduled_time: '2026-03-11T11:00:00Z',
-    duration_minutes: 45,
-    meeting_link: 'https://meet.google.com/sub-code-eval',
-    status: 'scheduled',
-  },
-];
-
-// ----------------------------------------------------
-// SEED OFFERS
-// ----------------------------------------------------
-let OFFERS_STORE: OfferLetter[] = [
-  {
-    id: 'off_1',
-    candidate_id: 'cand_3',
-    candidate_name: 'Ananya Verma',
-    candidate_email: 'ananya.verma@example.com',
-    job_id: 'job_2',
-    designation: 'Lead Cybersecurity & Compliance Auditor',
-    department: 'Security & Governance',
-    annual_ctc: 2400000,
-    joining_date: '2026-04-01',
-    probation_months: 3,
-    status: 'sent',
-    created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
-  },
-];
+let CANDIDATES_STORE: Candidate[] = [];
+let INTERVIEWS_STORE: InterviewSchedule[] = [];
+let OFFERS_STORE: OfferLetter[] = [];
 
 // ----------------------------------------------------
 // SEED MANPOWER PLANS
@@ -777,6 +527,25 @@ export async function getJobs(organizationId?: string): Promise<JobOpening[]> {
     );
   }
   return [...JOBS_STORE];
+}
+
+export async function getJobById(jobId: string): Promise<JobOpening | undefined> {
+  const local = JOBS_STORE.find((j) => j.id === jobId);
+  if (local) return local;
+
+  try {
+    const snap = await getDoc(doc(db, 'job_openings', jobId));
+    if (snap.exists()) {
+      const job = { id: snap.id, ...snap.data() } as JobOpening;
+      if (!JOBS_STORE.some((j) => j.id === job.id)) {
+        JOBS_STORE.push(job);
+      }
+      return job;
+    }
+  } catch (err) {
+    console.warn('getJobById error:', err);
+  }
+  return undefined;
 }
 
 export async function createJob(job: Omit<JobOpening, 'id' | 'applicants_count' | 'created_at'>): Promise<JobOpening> {

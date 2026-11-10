@@ -22,6 +22,7 @@ import {
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/firebase';
+import { getTenantDefaultUnits, normalizeHospitalUnit } from '@/constants/config';
 import type { Attendance, AuditLog, Employee, Organization, Profile, Workplace } from '@/types';
 import { formatDateTime, getGreeting } from '@/utils/format';
 import { format, subDays } from 'date-fns';
@@ -323,6 +324,7 @@ export default function AdminDashboard() {
   // Modals & Menu sheets
   const [showOrgMenu, setShowOrgMenu] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [selectedUnit, setSelectedUnit] = useState<string>('all');
 
   /* ── 100% Real-Time Live Firestore Listeners ────────────────────────── */
   useEffect(() => {
@@ -335,7 +337,7 @@ export default function AdminDashboard() {
     const orgIdList = isSubedge
       ? ['00000000-0000-0000-0000-000000000001', 'subedge']
       : isSmh
-      ? ['shanti-memorial-hospital', 'smh']
+      ? ['shanti-memorial-hospital', 'smh', 'chikitsa', 'gopal-trust']
       : [orgId];
 
     setLoading(true);
@@ -483,10 +485,28 @@ export default function AdminDashboard() {
     setTimeout(() => setRefreshing(false), 600);
   };
 
+  /* ── Available Units & Filtered Employees ──────────────────────────── */
+  const availableUnits = useMemo(() => {
+    const configuredUnits = getTenantDefaultUnits(tenantOrg?.name, tenantOrg?.id, tenantOrg?.units);
+    const wpNames = workplaces.map((w) => w.name.trim()).filter(Boolean);
+    const empUnits = employees.map((e) => (e.hospital_unit || '').trim()).filter(Boolean);
+    return Array.from(new Set([...configuredUnits, ...wpNames, ...empUnits]));
+  }, [tenantOrg, workplaces, employees]);
+
+  const filteredEmployees = useMemo(() => {
+    if (selectedUnit === 'all') return employees;
+    const target = selectedUnit.toLowerCase().trim();
+    return employees.filter((e) => {
+      const u = normalizeHospitalUnit(e.hospital_unit || (e as any).workplace?.name || '');
+      return u.toLowerCase() === target || (e.hospital_unit && e.hospital_unit.toLowerCase() === target);
+    });
+  }, [employees, selectedUnit]);
+
   /* ─── Real-Time Computed Metrics ───────────────────────────────────── */
   const totalEmployeesDisplay = useMemo(() => {
+    if (selectedUnit !== 'all') return filteredEmployees.length;
     return Math.max(employees.length, users.length, empCount);
-  }, [empCount, employees.length, users.length]);
+  }, [selectedUnit, filteredEmployees.length, empCount, employees.length, users.length]);
 
   const rawAttRate = totalEmployeesDisplay > 0 && attendanceStats.total > 0
     ? Math.round(((attendanceStats.present + attendanceStats.halfDay * 0.5) / totalEmployeesDisplay) * 100)
@@ -494,8 +514,8 @@ export default function AdminDashboard() {
   const baseAttendanceRate = attendanceStats.total > 0 ? Math.min(100, rawAttRate) : 0;
 
   const totalMonthlyPayrollEst = useMemo(
-    () => employees.reduce((s, e) => s + (e.basic_salary || 0), 0),
-    [employees],
+    () => filteredEmployees.reduce((s, e) => s + (e.basic_salary || 0), 0),
+    [filteredEmployees],
   );
 
   const payrollFormatted = useMemo(() => {
@@ -1021,6 +1041,129 @@ export default function AdminDashboard() {
     </View>
   );
 
+  /* ── 4 KPI Metric Cards (Rendered with Flex 1 in Pair Rows on Mobile) ── */
+  const renderMetricCard1 = () => (
+    <InteractiveTile
+      style={[
+        s.metricCard,
+        {
+          backgroundColor: '#F3EEFE',
+          borderColor: '#E4DCFD',
+          flex: 1,
+          minWidth: 0,
+        },
+      ]}
+      onPress={() => router.push('/(admin)/users' as never)}
+    >
+      <View style={s.cardTopRow}>
+        <View style={[s.iconBox, { backgroundColor: '#DDD6FE' }]}>
+          <SvgXml xml={STOCK_4_SVG} width={32} height={24} />
+        </View>
+        <View style={s.valueRow}>
+          <Text style={[s.metricValueText, { color: '#1E1B4B' }]}>{totalEmployeesDisplay}</Text>
+          <Text style={s.trendGreen}>↑ +12%</Text>
+        </View>
+      </View>
+      <View style={s.cardBottomRow}>
+        <Text style={s.metricLabelText} numberOfLines={1}>Total Employees</Text>
+        <View style={s.waveContainer}>
+          <MetricWave color="#8B5CF6" width={isDesktop ? 120 : 64} height={20} />
+        </View>
+      </View>
+    </InteractiveTile>
+  );
+
+  const renderMetricCard2 = () => (
+    <InteractiveTile
+      style={[
+        s.metricCard,
+        {
+          backgroundColor: '#EDFAF2',
+          borderColor: '#CEF2DE',
+          flex: 1,
+          minWidth: 0,
+        },
+      ]}
+      onPress={() => router.push('/(hr)/attendance' as never)}
+    >
+      <View style={s.cardTopRow}>
+        <View style={[s.iconBox, { backgroundColor: '#D1FAE5' }]}>
+          <SvgXml xml={STOCK_10_SVG} width={32} height={24} />
+        </View>
+        <View style={s.valueRow}>
+          <Text style={[s.metricValueText, { color: '#064E3B' }]}>{activeChartPercentage}%</Text>
+          <Text style={s.trendGreen}>↑ +2%</Text>
+        </View>
+      </View>
+      <View style={s.cardBottomRow}>
+        <Text style={s.metricLabelText} numberOfLines={1}>Attendance Rate</Text>
+        <View style={s.waveContainer}>
+          <MetricWave color="#10B981" width={isDesktop ? 120 : 64} height={20} />
+        </View>
+      </View>
+    </InteractiveTile>
+  );
+
+  const renderMetricCard3 = () => (
+    <InteractiveTile
+      style={[
+        s.metricCard,
+        {
+          backgroundColor: '#FFF4EB',
+          borderColor: '#FFE2CD',
+          flex: 1,
+          minWidth: 0,
+        },
+      ]}
+      onPress={() => router.push('/(hr)/leave' as never)}
+    >
+      <View style={s.cardTopRow}>
+        <View style={[s.iconBox, { backgroundColor: '#FFEDD5' }]}>
+          <SvgXml xml={STOCK_7_SVG} width={32} height={24} />
+        </View>
+        <View style={s.valueRow}>
+          <Text style={[s.metricValueText, { color: '#7C2D12' }]}>{pendingLeavesCount}</Text>
+        </View>
+      </View>
+      <View style={s.cardBottomRow}>
+        <Text style={s.metricLabelText} numberOfLines={1}>Pending Leaves</Text>
+        <View style={s.waveContainer}>
+          <MetricWave color="#F97316" width={isDesktop ? 120 : 64} height={20} />
+        </View>
+      </View>
+    </InteractiveTile>
+  );
+
+  const renderMetricCard4 = () => (
+    <InteractiveTile
+      style={[
+        s.metricCard,
+        {
+          backgroundColor: '#EFF6FF',
+          borderColor: '#DBEAFE',
+          flex: 1,
+          minWidth: 0,
+        },
+      ]}
+      onPress={() => router.push('/(hr)/payroll' as never)}
+    >
+      <View style={s.cardTopRow}>
+        <View style={[s.iconBox, { backgroundColor: '#DBEAFE' }]}>
+          <SvgXml xml={STOCK_9_SVG} width={32} height={24} />
+        </View>
+        <View style={s.valueRow}>
+          <Text style={[s.metricValueText, { color: '#1E3A8A' }]}>{payrollFormatted}</Text>
+        </View>
+      </View>
+      <View style={s.cardBottomRow}>
+        <Text style={s.metricLabelText} numberOfLines={1}>This Month Payroll</Text>
+        <View style={s.waveContainer}>
+          <MetricWave color="#3B82F6" width={isDesktop ? 120 : 64} height={20} />
+        </View>
+      </View>
+    </InteractiveTile>
+  );
+
   return (
     <>
       <SidebarLayout items={ADMIN_NAV}>
@@ -1051,129 +1194,67 @@ export default function AdminDashboard() {
             </View>
           </Animated.View>
 
-          {/* ── 4 Metric KPI Cards ───────────────────────────────────── */}
-          <Animated.View entering={FadeInDown.delay(60).duration(280)} style={s.metricsGrid}>
-            {/* Card 1: Total Employees with STOCK 4 SVG */}
-            <InteractiveTile
-              style={[
-                s.metricCard,
-                {
-                  backgroundColor: '#F3EEFE',
-                  borderColor: '#E4DCFD',
-                  flex: isDesktop ? 1 : undefined,
-                  minWidth: isDesktop ? 180 : undefined,
-                  width: isDesktop ? undefined : kpiCardWidth,
-                },
-              ]}
-              onPress={() => router.push('/(admin)/users' as never)}
-            >
-              <View style={s.cardTopRow}>
-                <View style={[s.iconBox, { backgroundColor: '#DDD6FE' }]}>
-                  <SvgXml xml={STOCK_4_SVG} width={32} height={24} />
-                </View>
-                <View style={s.valueRow}>
-                  <Text style={[s.metricValueText, { color: '#1E1B4B' }]}>{totalEmployeesDisplay}</Text>
-                  <Text style={s.trendGreen}>↑ +12%</Text>
-                </View>
-              </View>
-              <View style={s.cardBottomRow}>
-                <Text style={s.metricLabelText} numberOfLines={1}>Total Employees</Text>
-                <View style={s.waveContainer}>
-                  <MetricWave color="#8B5CF6" width={isDesktop ? 120 : 64} height={20} />
-                </View>
-              </View>
-            </InteractiveTile>
+          {/* ── Unit / Sub-Brand Filter Chips ────────────────────────── */}
+          {availableUnits.length > 0 && (
+            <View style={s.unitFilterWrapper}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.unitFilterScroll}
+              >
+                <TouchableOpacity
+                  onPress={() => setSelectedUnit('all')}
+                  style={[s.unitChip, selectedUnit === 'all' && s.unitChipActive]}
+                  activeOpacity={0.7}
+                >
+                  <Building2 size={13} color={selectedUnit === 'all' ? '#FFF' : '#64748B'} />
+                  <Text style={[s.unitChipText, selectedUnit === 'all' && s.unitChipTextActive]}>
+                    All Units ({employees.length})
+                  </Text>
+                </TouchableOpacity>
 
-            {/* Card 2: Attendance Rate with STOCK 10 SVG */}
-            <InteractiveTile
-              style={[
-                s.metricCard,
-                {
-                  backgroundColor: '#EDFAF2',
-                  borderColor: '#CEF2DE',
-                  flex: isDesktop ? 1 : undefined,
-                  minWidth: isDesktop ? 180 : undefined,
-                  width: isDesktop ? undefined : kpiCardWidth,
-                },
-              ]}
-              onPress={() => router.push('/(hr)/attendance' as never)}
-            >
-              <View style={s.cardTopRow}>
-                <View style={[s.iconBox, { backgroundColor: '#D1FAE5' }]}>
-                  <SvgXml xml={STOCK_10_SVG} width={32} height={24} />
-                </View>
-                <View style={s.valueRow}>
-                  <Text style={[s.metricValueText, { color: '#064E3B' }]}>{activeChartPercentage}%</Text>
-                  <Text style={s.trendGreen}>↑ +2%</Text>
-                </View>
-              </View>
-              <View style={s.cardBottomRow}>
-                <Text style={s.metricLabelText} numberOfLines={1}>Attendance Rate</Text>
-                <View style={s.waveContainer}>
-                  <MetricWave color="#10B981" width={isDesktop ? 120 : 64} height={20} />
-                </View>
-              </View>
-            </InteractiveTile>
+                {availableUnits.map((u) => {
+                  const count = employees.filter((e) => normalizeHospitalUnit(e.hospital_unit).toLowerCase() === u.toLowerCase()).length;
+                  const isAct = selectedUnit.toLowerCase() === u.toLowerCase();
+                  return (
+                    <TouchableOpacity
+                      key={u}
+                      onPress={() => setSelectedUnit(u)}
+                      style={[s.unitChip, isAct && s.unitChipActive]}
+                      activeOpacity={0.7}
+                    >
+                      <MapPin size={12} color={isAct ? '#FFF' : '#64748B'} />
+                      <Text style={[s.unitChipText, isAct && s.unitChipTextActive]} numberOfLines={1}>
+                        {u} {count > 0 ? `(${count})` : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
 
-            {/* Card 3: Pending Leaves with STOCK 7 SVG */}
-            <InteractiveTile
-              style={[
-                s.metricCard,
-                {
-                  backgroundColor: '#FFF4EB',
-                  borderColor: '#FFE2CD',
-                  flex: isDesktop ? 1 : undefined,
-                  minWidth: isDesktop ? 180 : undefined,
-                  width: isDesktop ? undefined : kpiCardWidth,
-                },
-              ]}
-              onPress={() => router.push('/(hr)/leave' as never)}
-            >
-              <View style={s.cardTopRow}>
-                <View style={[s.iconBox, { backgroundColor: '#FFEDD5' }]}>
-                  <SvgXml xml={STOCK_7_SVG} width={32} height={24} />
+          {/* ── 4 Metric KPI Cards (Desktop: 1 Row x 4; Mobile: 2 Rows x 2) ── */}
+          <Animated.View entering={FadeInDown.delay(60).duration(280)} style={s.metricsContainer}>
+            {isDesktop ? (
+              <View style={s.metricsDesktopRow}>
+                {renderMetricCard1()}
+                {renderMetricCard2()}
+                {renderMetricCard3()}
+                {renderMetricCard4()}
+              </View>
+            ) : (
+              <View style={s.metricsMobileCol}>
+                <View style={s.metricPairRow}>
+                  {renderMetricCard1()}
+                  {renderMetricCard2()}
                 </View>
-                <View style={s.valueRow}>
-                  <Text style={[s.metricValueText, { color: '#7C2D12' }]}>{pendingLeavesCount}</Text>
+                <View style={s.metricPairRow}>
+                  {renderMetricCard3()}
+                  {renderMetricCard4()}
                 </View>
               </View>
-              <View style={s.cardBottomRow}>
-                <Text style={s.metricLabelText} numberOfLines={1}>Pending Leaves</Text>
-                <View style={s.waveContainer}>
-                  <MetricWave color="#F97316" width={isDesktop ? 120 : 64} height={20} />
-                </View>
-              </View>
-            </InteractiveTile>
-
-            {/* Card 4: This Month Payroll with STOCK 9 SVG */}
-            <InteractiveTile
-              style={[
-                s.metricCard,
-                {
-                  backgroundColor: '#EFF6FF',
-                  borderColor: '#DBEAFE',
-                  flex: isDesktop ? 1 : undefined,
-                  minWidth: isDesktop ? 180 : undefined,
-                  width: isDesktop ? undefined : kpiCardWidth,
-                },
-              ]}
-              onPress={() => router.push('/(hr)/payroll' as never)}
-            >
-              <View style={s.cardTopRow}>
-                <View style={[s.iconBox, { backgroundColor: '#DBEAFE' }]}>
-                  <SvgXml xml={STOCK_9_SVG} width={32} height={24} />
-                </View>
-                <View style={s.valueRow}>
-                  <Text style={[s.metricValueText, { color: '#1E3A8A' }]}>{payrollFormatted}</Text>
-                </View>
-              </View>
-              <View style={s.cardBottomRow}>
-                <Text style={s.metricLabelText} numberOfLines={1}>This Month Payroll</Text>
-                <View style={s.waveContainer}>
-                  <MetricWave color="#3B82F6" width={isDesktop ? 120 : 64} height={20} />
-                </View>
-              </View>
-            </InteractiveTile>
+            )}
           </Animated.View>
 
           {/* ── Main Layout (Desktop = 2 Columns, Mobile = Stacked) ──── */}
@@ -1431,7 +1512,62 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
 
+  /* Unit Filter Chips */
+  unitFilterWrapper: {
+    marginTop: 10,
+    marginBottom: 4,
+    width: '100%',
+  },
+  unitFilterScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  unitChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  unitChipActive: {
+    backgroundColor: '#7C3AED',
+    borderColor: '#7C3AED',
+  },
+  unitChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+    fontFamily: FONT,
+  },
+  unitChipTextActive: {
+    color: '#FFFFFF',
+  },
+
   /* 4 Metric Cards */
+  metricsContainer: {
+    width: '100%',
+    marginTop: 14,
+  },
+  metricsDesktopRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  metricsMobileCol: {
+    width: '100%',
+  },
+  metricPairRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+    marginBottom: 12,
+  },
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/firebase';
 import {
@@ -146,6 +147,13 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
   const [isLoadingTenant, setIsLoadingTenant] = useState(false);
 
+  // Restore stored organization context on boot
+  useEffect(() => {
+    AsyncStorage.getItem('@oasis_active_org_id').then((saved) => {
+      if (saved) setManualOrgId(saved);
+    }).catch(() => {});
+  }, []);
+
   // Fetch all unique tenant organizations
   const fetchAllOrganizations = useCallback(async () => {
     try {
@@ -210,6 +218,13 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     try {
       let resolvedOrg: Organization | null = null;
       let targetOrgId = manualOrgId || profile?.organization_id;
+      if (
+        !manualOrgId &&
+        (profile?.email === 'ayushbindhani001@gmail.com' || profile?.email === 'ab3682@srmist.edu.in') &&
+        (!targetOrgId || targetOrgId === '00000000-0000-0000-0000-000000000001' || targetOrgId === 'subedge')
+      ) {
+        targetOrgId = 'shanti-memorial-hospital';
+      }
       if (targetOrgId === 'chikitsa' || targetOrgId === 'gopal-trust' || targetOrgId === 'smh') {
         targetOrgId = 'shanti-memorial-hospital';
       } else if (targetOrgId === 'subedge') {
@@ -335,6 +350,9 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       }
     } catch {}
     setManualOrgId(targetId);
+    try {
+      await AsyncStorage.setItem('@oasis_active_org_id', targetId);
+    } catch {}
     if (profile?.id) {
       try {
         await updateDoc(doc(db, 'profiles', profile.id), {

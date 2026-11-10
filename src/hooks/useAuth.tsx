@@ -227,12 +227,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // 4. Primary Bootstrap Admin Exception
     if (cleanEmail === 'ayushbindhani001@gmail.com' || cleanEmail === 'ab3682@srmist.edu.in') {
-      let adminOrgId = 'shanti-memorial-hospital';
-      try {
-        const orgsQ = query(collection(db, 'organizations'), limit(1));
-        const orgsSnap = await getDocs(orgsQ);
-        if (!orgsSnap.empty) adminOrgId = orgsSnap.docs[0].id;
-      } catch {}
+      const adminOrgId = 'shanti-memorial-hospital';
 
       const now = new Date().toISOString();
       const adminPayload: Profile = {

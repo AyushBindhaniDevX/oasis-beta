@@ -430,131 +430,259 @@ export default function EmployeeDashboard() {
         </View>
       </Animated.View>
 
-      {/* ── 4 Metric KPI Cards ─────────────────────────────────────────── */}
-      <Animated.View entering={FadeInDown.delay(60).duration(280)} style={s.metricsGrid}>
-        {/* Card 1: Attendance Rate with STOCK 10 SVG */}
-        <InteractiveTile
-          style={[
-            s.metricCard,
-            {
-              backgroundColor: '#EDFAF2',
-              borderColor: '#CEF2DE',
-              flex: isDesktop ? 1 : undefined,
-              minWidth: isDesktop ? 160 : undefined,
-              width: isDesktop ? undefined : kpiCardWidth,
-            },
-          ]}
-          onPress={() => router.push('/(employee)/attendance' as never)}
-        >
-          <View style={s.cardTopRow}>
-            <View style={[s.iconBox, { backgroundColor: '#D1FAE5' }]}>
-              <SvgXml xml={STOCK_10_SVG} width={32} height={24} />
-            </View>
-            <View style={s.valueRow}>
-              <Text style={[s.metricValueText, { color: '#064E3B' }]}>{monthlyStats.percent}%</Text>
-              <Text style={s.trendGreen}>{monthlyStats.isOnTrack ? '↑ On Track' : 'Needs Review'}</Text>
-            </View>
-          </View>
-          <View style={s.cardBottomRow}>
-            <Text style={s.metricLabelText} numberOfLines={1}>Monthly Attendance</Text>
-            <View style={s.waveContainer}>
-              <MetricWave color="#10B981" width={isDesktop ? 120 : 64} height={20} />
-            </View>
-          </View>
-        </InteractiveTile>
+      {/* ── 4 Metric KPI Cards (Desktop: 1 Row x 4; Mobile: 2 Rows x 2) ── */}
+      <Animated.View entering={FadeInDown.delay(60).duration(280)} style={s.metricsContainer}>
+        {isDesktop ? (
+          <View style={s.metricsDesktopRow}>
+            {/* Card 1: Attendance Rate */}
+            <InteractiveTile
+              style={[
+                s.metricCard,
+                {
+                  backgroundColor: '#EDFAF2',
+                  borderColor: '#CEF2DE',
+                  flex: 1,
+                  minWidth: 0,
+                },
+              ]}
+              onPress={() => router.push('/(employee)/attendance' as never)}
+            >
+              <View style={s.cardTopRow}>
+                <View style={[s.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                  <SvgXml xml={STOCK_10_SVG} width={32} height={24} />
+                </View>
+                <View style={s.valueRow}>
+                  <Text style={[s.metricValueText, { color: '#064E3B' }]}>{monthlyStats.percent}%</Text>
+                  <Text style={s.trendGreen}>{monthlyStats.isOnTrack ? '↑ On Track' : 'Needs Review'}</Text>
+                </View>
+              </View>
+              <View style={s.cardBottomRow}>
+                <Text style={s.metricLabelText} numberOfLines={1}>Monthly Attendance</Text>
+                <View style={s.waveContainer}>
+                  <MetricWave color="#10B981" width={isDesktop ? 120 : 64} height={20} />
+                </View>
+              </View>
+            </InteractiveTile>
 
-        {/* Card 2: Leave Balance with STOCK 7 SVG */}
-        <InteractiveTile
-          style={[
-            s.metricCard,
-            {
-              backgroundColor: '#FFF4EB',
-              borderColor: '#FFE2CD',
-              flex: isDesktop ? 1 : undefined,
-              minWidth: isDesktop ? 160 : undefined,
-              width: isDesktop ? undefined : kpiCardWidth,
-            },
-          ]}
-          onPress={() => router.push('/(employee)/leave' as never)}
-        >
-          <View style={s.cardTopRow}>
-            <View style={[s.iconBox, { backgroundColor: '#FFEDD5' }]}>
-              <SvgXml xml={STOCK_7_SVG} width={32} height={24} />
-            </View>
-            <View style={s.valueRow}>
-              <Text style={[s.metricValueText, { color: '#7C2D12' }]}>{leaveBalanceTotal}</Text>
-              <Text style={[s.trendGreen, { color: '#EA580C' }]}>Days Left</Text>
-            </View>
-          </View>
-          <View style={s.cardBottomRow}>
-            <Text style={s.metricLabelText} numberOfLines={1}>Paid Leave Balance</Text>
-            <View style={s.waveContainer}>
-              <MetricWave color="#F97316" width={isDesktop ? 120 : 64} height={20} />
-            </View>
-          </View>
-        </InteractiveTile>
+            {/* Card 2: Leave Balance */}
+            <InteractiveTile
+              style={[
+                s.metricCard,
+                {
+                  backgroundColor: '#FFF4EB',
+                  borderColor: '#FFE2CD',
+                  flex: 1,
+                  minWidth: 0,
+                },
+              ]}
+              onPress={() => router.push('/(employee)/leave' as never)}
+            >
+              <View style={s.cardTopRow}>
+                <View style={[s.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                  <SvgXml xml={STOCK_7_SVG} width={32} height={24} />
+                </View>
+                <View style={s.valueRow}>
+                  <Text style={[s.metricValueText, { color: '#7C2D12' }]}>{leaveBalanceTotal}</Text>
+                  <Text style={[s.trendGreen, { color: '#EA580C' }]}>Days Left</Text>
+                </View>
+              </View>
+              <View style={s.cardBottomRow}>
+                <Text style={s.metricLabelText} numberOfLines={1}>Paid Leave Balance</Text>
+                <View style={s.waveContainer}>
+                  <MetricWave color="#F97316" width={isDesktop ? 120 : 64} height={20} />
+                </View>
+              </View>
+            </InteractiveTile>
 
-        {/* Card 3: Shift Hours with STOCK 4 SVG */}
-        <InteractiveTile
-          style={[
-            s.metricCard,
-            {
-              backgroundColor: '#F3EEFE',
-              borderColor: '#E4DCFD',
-              flex: isDesktop ? 1 : undefined,
-              minWidth: isDesktop ? 160 : undefined,
-              width: isDesktop ? undefined : kpiCardWidth,
-            },
-          ]}
-          onPress={() => router.push('/(employee)/attendance' as never)}
-        >
-          <View style={s.cardTopRow}>
-            <View style={[s.iconBox, { backgroundColor: '#DDD6FE' }]}>
-              <SvgXml xml={STOCK_4_SVG} width={32} height={24} />
-            </View>
-            <View style={s.valueRow}>
-              <Text style={[s.metricValueText, { color: '#1E1B4B' }]}>{monthlyStats.hours}h</Text>
-              <Text style={s.trendGreen}>{monthlyStats.hours > 0 ? `${monthlyStats.hours}h Logged` : 'Active Shift'}</Text>
-            </View>
-          </View>
-          <View style={s.cardBottomRow}>
-            <Text style={s.metricLabelText} numberOfLines={1}>Monthly Shift Hours</Text>
-            <View style={s.waveContainer}>
-              <MetricWave color="#8B5CF6" width={isDesktop ? 120 : 64} height={20} />
-            </View>
-          </View>
-        </InteractiveTile>
+            {/* Card 3: Shift Hours */}
+            <InteractiveTile
+              style={[
+                s.metricCard,
+                {
+                  backgroundColor: '#F3EEFE',
+                  borderColor: '#E4DCFD',
+                  flex: 1,
+                  minWidth: 0,
+                },
+              ]}
+              onPress={() => router.push('/(employee)/attendance' as never)}
+            >
+              <View style={s.cardTopRow}>
+                <View style={[s.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                  <SvgXml xml={STOCK_4_SVG} width={32} height={24} />
+                </View>
+                <View style={s.valueRow}>
+                  <Text style={[s.metricValueText, { color: '#1E1B4B' }]}>{monthlyStats.hours}h</Text>
+                  <Text style={s.trendGreen}>{monthlyStats.hours > 0 ? `${monthlyStats.hours}h Logged` : 'Active Shift'}</Text>
+                </View>
+              </View>
+              <View style={s.cardBottomRow}>
+                <Text style={s.metricLabelText} numberOfLines={1}>Monthly Shift Hours</Text>
+                <View style={s.waveContainer}>
+                  <MetricWave color="#8B5CF6" width={isDesktop ? 120 : 64} height={20} />
+                </View>
+              </View>
+            </InteractiveTile>
 
-        {/* Card 4: Salary & Payslips with STOCK 9 SVG */}
-        <InteractiveTile
-          style={[
-            s.metricCard,
-            {
-              backgroundColor: '#EFF6FF',
-              borderColor: '#DBEAFE',
-              flex: isDesktop ? 1 : undefined,
-              minWidth: isDesktop ? 160 : undefined,
-              width: isDesktop ? undefined : kpiCardWidth,
-            },
-          ]}
-          onPress={() => router.push('/(employee)/payslips' as never)}
-        >
-          <View style={s.cardTopRow}>
-            <View style={[s.iconBox, { backgroundColor: '#DBEAFE' }]}>
-              <SvgXml xml={STOCK_9_SVG} width={32} height={24} />
+            {/* Card 4: Salary & Payslips */}
+            <InteractiveTile
+              style={[
+                s.metricCard,
+                {
+                  backgroundColor: '#EFF6FF',
+                  borderColor: '#DBEAFE',
+                  flex: 1,
+                  minWidth: 0,
+                },
+              ]}
+              onPress={() => router.push('/(employee)/payslips' as never)}
+            >
+              <View style={s.cardTopRow}>
+                <View style={[s.iconBox, { backgroundColor: '#DBEAFE' }]}>
+                  <SvgXml xml={STOCK_9_SVG} width={32} height={24} />
+                </View>
+                <View style={s.valueRow}>
+                  <Text style={[s.metricValueText, { color: '#1E3A8A' }]} numberOfLines={1}>{salaryDisplay}</Text>
+                  <Text style={[s.trendGreen, { color: '#2563EB' }]}>Payslip Ready</Text>
+                </View>
+              </View>
+              <View style={s.cardBottomRow}>
+                <Text style={s.metricLabelText} numberOfLines={1}>Payroll & Payslips</Text>
+                <View style={s.waveContainer}>
+                  <MetricWave color="#3B82F6" width={isDesktop ? 120 : 64} height={20} />
+                </View>
+              </View>
+            </InteractiveTile>
+          </View>
+        ) : (
+          <View style={s.metricsMobileCol}>
+            {/* Mobile Pair Row 1 */}
+            <View style={s.metricPairRow}>
+              {/* Card 1: Attendance Rate */}
+              <InteractiveTile
+                style={[
+                  s.metricCard,
+                  {
+                    backgroundColor: '#EDFAF2',
+                    borderColor: '#CEF2DE',
+                    flex: 1,
+                    minWidth: 0,
+                  },
+                ]}
+                onPress={() => router.push('/(employee)/attendance' as never)}
+              >
+                <View style={s.cardTopRow}>
+                  <View style={[s.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                    <SvgXml xml={STOCK_10_SVG} width={32} height={24} />
+                  </View>
+                  <View style={s.valueRow}>
+                    <Text style={[s.metricValueText, { color: '#064E3B' }]}>{monthlyStats.percent}%</Text>
+                    <Text style={s.trendGreen}>{monthlyStats.isOnTrack ? '↑ On Track' : 'Review'}</Text>
+                  </View>
+                </View>
+                <View style={s.cardBottomRow}>
+                  <Text style={s.metricLabelText} numberOfLines={1}>Monthly Attendance</Text>
+                  <View style={s.waveContainer}>
+                    <MetricWave color="#10B981" width={64} height={20} />
+                  </View>
+                </View>
+              </InteractiveTile>
+
+              {/* Card 2: Leave Balance */}
+              <InteractiveTile
+                style={[
+                  s.metricCard,
+                  {
+                    backgroundColor: '#FFF4EB',
+                    borderColor: '#FFE2CD',
+                    flex: 1,
+                    minWidth: 0,
+                  },
+                ]}
+                onPress={() => router.push('/(employee)/leave' as never)}
+              >
+                <View style={s.cardTopRow}>
+                  <View style={[s.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                    <SvgXml xml={STOCK_7_SVG} width={32} height={24} />
+                  </View>
+                  <View style={s.valueRow}>
+                    <Text style={[s.metricValueText, { color: '#7C2D12' }]}>{leaveBalanceTotal}</Text>
+                    <Text style={[s.trendGreen, { color: '#EA580C' }]}>Days Left</Text>
+                  </View>
+                </View>
+                <View style={s.cardBottomRow}>
+                  <Text style={s.metricLabelText} numberOfLines={1}>Paid Leave Balance</Text>
+                  <View style={s.waveContainer}>
+                    <MetricWave color="#F97316" width={64} height={20} />
+                  </View>
+                </View>
+              </InteractiveTile>
             </View>
-            <View style={s.valueRow}>
-              <Text style={[s.metricValueText, { color: '#1E3A8A' }]} numberOfLines={1}>{salaryDisplay}</Text>
-              <Text style={[s.trendGreen, { color: '#2563EB' }]}>Payslip Ready</Text>
+
+            {/* Mobile Pair Row 2 */}
+            <View style={s.metricPairRow}>
+              {/* Card 3: Shift Hours */}
+              <InteractiveTile
+                style={[
+                  s.metricCard,
+                  {
+                    backgroundColor: '#F3EEFE',
+                    borderColor: '#E4DCFD',
+                    flex: 1,
+                    minWidth: 0,
+                  },
+                ]}
+                onPress={() => router.push('/(employee)/attendance' as never)}
+              >
+                <View style={s.cardTopRow}>
+                  <View style={[s.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                    <SvgXml xml={STOCK_4_SVG} width={32} height={24} />
+                  </View>
+                  <View style={s.valueRow}>
+                    <Text style={[s.metricValueText, { color: '#1E1B4B' }]}>{monthlyStats.hours}h</Text>
+                    <Text style={s.trendGreen}>{monthlyStats.hours > 0 ? `${monthlyStats.hours}h Logged` : 'Active Shift'}</Text>
+                  </View>
+                </View>
+                <View style={s.cardBottomRow}>
+                  <Text style={s.metricLabelText} numberOfLines={1}>Monthly Shift Hours</Text>
+                  <View style={s.waveContainer}>
+                    <MetricWave color="#8B5CF6" width={64} height={20} />
+                  </View>
+                </View>
+              </InteractiveTile>
+
+              {/* Card 4: Salary & Payslips */}
+              <InteractiveTile
+                style={[
+                  s.metricCard,
+                  {
+                    backgroundColor: '#EFF6FF',
+                    borderColor: '#DBEAFE',
+                    flex: 1,
+                    minWidth: 0,
+                  },
+                ]}
+                onPress={() => router.push('/(employee)/payslips' as never)}
+              >
+                <View style={s.cardTopRow}>
+                  <View style={[s.iconBox, { backgroundColor: '#DBEAFE' }]}>
+                    <SvgXml xml={STOCK_9_SVG} width={32} height={24} />
+                  </View>
+                  <View style={s.valueRow}>
+                    <Text style={[s.metricValueText, { color: '#1E3A8A' }]} numberOfLines={1}>{salaryDisplay}</Text>
+                    <Text style={[s.trendGreen, { color: '#2563EB' }]}>Payslip Ready</Text>
+                  </View>
+                </View>
+                <View style={s.cardBottomRow}>
+                  <Text style={s.metricLabelText} numberOfLines={1}>Payroll & Payslips</Text>
+                  <View style={s.waveContainer}>
+                    <MetricWave color="#3B82F6" width={64} height={20} />
+                  </View>
+                </View>
+              </InteractiveTile>
             </View>
           </View>
-          <View style={s.cardBottomRow}>
-            <Text style={s.metricLabelText} numberOfLines={1}>Payroll & Payslips</Text>
-            <View style={s.waveContainer}>
-              <MetricWave color="#3B82F6" width={isDesktop ? 120 : 64} height={20} />
-            </View>
-          </View>
-        </InteractiveTile>
+        )}
       </Animated.View>
 
       {/* ── Today's Shift Punch Card ───────────────────────────────────── */}
@@ -965,6 +1093,24 @@ const s = StyleSheet.create({
   },
 
   /* 4 Metric Cards */
+  metricsContainer: {
+    width: '100%',
+    marginTop: 14,
+  },
+  metricsDesktopRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  metricsMobileCol: {
+    width: '100%',
+  },
+  metricPairRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+    marginBottom: 12,
+  },
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

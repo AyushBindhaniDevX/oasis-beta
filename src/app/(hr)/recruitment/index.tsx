@@ -214,6 +214,25 @@ export default function ModernRecruitmentWorkspaceScreen() {
     return { activeJobs, totalApplicants, inPipeline, offersCount, hiredCount };
   }, [jobs, candidates]);
 
+  const [copiedJobId, setCopiedJobId] = useState<string | null>(null);
+
+  // Copy Per-Job Specific Public Application Link
+  const handleCopyJobUrl = (jobId: string) => {
+    const origin =
+      Platform.OS === 'web' && typeof window !== 'undefined'
+        ? window.location.origin
+        : 'http://localhost:8081';
+    const url = `${origin}/careers/${jobId}`;
+
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(url);
+      setCopiedJobId(jobId);
+      setTimeout(() => setCopiedJobId(null), 2500);
+    } else {
+      Alert.alert('Per-Job Application URL', url);
+    }
+  };
+
   // Copy Public Careers Link
   const handleCopyPublicUrl = () => {
     const url =
@@ -667,8 +686,30 @@ export default function ModernRecruitmentWorkspaceScreen() {
                       <Text style={styles.applicantLabel}>Applicants</Text>
                     </View>
 
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                      <TouchableOpacity
+                        style={styles.copyJobBtn}
+                        onPress={() => handleCopyJobUrl(job.id)}
+                        activeOpacity={0.75}
+                      >
+                        {copiedJobId === job.id ? <Check size={12} color="#059669" /> : <Copy size={12} color="#0D7377" />}
+                        <Text style={[styles.copyJobBtnText, copiedJobId === job.id && { color: '#059669' }]}>
+                          {copiedJobId === job.id ? 'Copied Link!' : 'Copy Direct URL'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.previewJobBtn}
+                        onPress={() => router.push(`/careers/${job.id}` as never)}
+                        activeOpacity={0.75}
+                      >
+                        <ExternalLink size={12} color="#6D28D9" />
+                        <Text style={styles.previewJobBtnText}>View</Text>
+                      </TouchableOpacity>
+                    </View>
+
                     <TouchableOpacity
-                      style={styles.togglePublishBtn}
+                      style={[styles.togglePublishBtn, { marginTop: 6 }]}
                       onPress={() => toggleJobPortalPublishing(job.id, 'careers_page', job.status !== 'published')}
                     >
                       <Text style={styles.togglePublishText}>
@@ -1720,6 +1761,38 @@ const styles = StyleSheet.create({
   applicantLabel: {
     fontSize: 10,
     color: '#64748B',
+  },
+  copyJobBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#E6FFFA',
+    borderWidth: 1,
+    borderColor: '#B2F5EA',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  copyJobBtnText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#0D7377',
+  },
+  previewJobBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F3EEFE',
+    borderWidth: 1,
+    borderColor: '#E4DCFD',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  previewJobBtnText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#6D28D9',
   },
   togglePublishBtn: {
     backgroundColor: '#F1F5F9',
