@@ -94,7 +94,8 @@ import {
   TextInput,
   TouchableOpacity,
   useWindowDimensions,
-  View
+  View,
+  Platform,
 } from 'react-native';
 
 function MetricWave({ color, width = 85, height = 28 }: { color: string; width?: number; height?: number }) {
@@ -118,6 +119,11 @@ export default function UserManagementScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
+  const kpiCardWidth = isDesktop
+    ? undefined
+    : Platform.OS === 'web'
+    ? 'calc(50% - 6px)'
+    : Math.floor((width - 40 - 18) / 2);
 
   const [users, setUsers] = useState<Profile[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -1185,7 +1191,7 @@ export default function UserManagementScreen() {
         )}
 
         {/* 4 Pastel KPI Metric Cards with InteractiveTile & MetricWave */}
-        <Animated.View entering={FadeInDown.delay(50).duration(280)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 12, width: '100%' }}>
+        <Animated.View entering={FadeInDown.delay(50).duration(280)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 12, width: '100%' }}>
           {/* Tile 1: Total Accounts */}
           <InteractiveTile
             style={[
@@ -1195,7 +1201,7 @@ export default function UserManagementScreen() {
                 borderColor: '#E4DCFD',
                 flex: isDesktop ? 1 : undefined,
                 minWidth: isDesktop ? 180 : undefined,
-                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+                width: isDesktop ? undefined : kpiCardWidth,
               },
             ]}
           >
@@ -1223,7 +1229,7 @@ export default function UserManagementScreen() {
                 borderColor: '#CEF2DE',
                 flex: isDesktop ? 1 : undefined,
                 minWidth: isDesktop ? 180 : undefined,
-                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+                width: isDesktop ? undefined : kpiCardWidth,
               },
             ]}
             onPress={() => setRoleFilter('admin')}
@@ -1252,7 +1258,7 @@ export default function UserManagementScreen() {
                 borderColor: '#FFE2CD',
                 flex: isDesktop ? 1 : undefined,
                 minWidth: isDesktop ? 180 : undefined,
-                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+                width: isDesktop ? undefined : kpiCardWidth,
               },
             ]}
             onPress={() => setRoleFilter('hr')}
@@ -1281,7 +1287,7 @@ export default function UserManagementScreen() {
                 borderColor: '#DBEAFE',
                 flex: isDesktop ? 1 : undefined,
                 minWidth: isDesktop ? 180 : undefined,
-                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+                width: isDesktop ? undefined : kpiCardWidth,
               },
             ]}
             onPress={() => setStatusFilter('active')}

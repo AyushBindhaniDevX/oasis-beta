@@ -8,6 +8,7 @@ import {
   TextInput,
   RefreshControl,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import Svg, { Path, SvgXml } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -131,7 +132,11 @@ export default function EmployeeHolidaysScreen() {
 
   if (loading) return <LoadingState />;
 
-  const kpiCardWidth = isDesktop ? undefined : (width - 32 - 12) / 2;
+  const kpiCardWidth = isDesktop
+    ? undefined
+    : Platform.OS === 'web'
+    ? 'calc(50% - 6px)'
+    : Math.floor((width - 32 - 18) / 2);
 
   return (
     <ScrollView

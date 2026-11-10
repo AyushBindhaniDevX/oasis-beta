@@ -715,7 +715,11 @@ export default function AdminDashboard() {
   };
 
   /* ── Responsive widths ────────────────────────────────────────────── */
-  const kpiCardWidth = isDesktop ? undefined : (width - 40 - 12) / 2;
+  const kpiCardWidth = isDesktop
+    ? undefined
+    : Platform.OS === 'web'
+    ? 'calc(50% - 6px)'
+    : Math.floor((width - 40 - 18) / 2);
   const splineChartWidth = isDesktop
     ? 340
     : isTablet
@@ -1065,16 +1069,18 @@ export default function AdminDashboard() {
             >
               <View style={s.cardTopRow}>
                 <View style={[s.iconBox, { backgroundColor: '#DDD6FE' }]}>
-                  <SvgXml xml={STOCK_4_SVG} width={34} height={25} />
+                  <SvgXml xml={STOCK_4_SVG} width={32} height={24} />
                 </View>
                 <View style={s.valueRow}>
                   <Text style={[s.metricValueText, { color: '#1E1B4B' }]}>{totalEmployeesDisplay}</Text>
                   <Text style={s.trendGreen}>↑ +12%</Text>
                 </View>
               </View>
-              <Text style={s.metricLabelText}>Total Employees</Text>
-              <View style={s.waveContainer}>
-                <MetricWave color="#8B5CF6" width={isDesktop ? 160 : 85} height={26} />
+              <View style={s.cardBottomRow}>
+                <Text style={s.metricLabelText} numberOfLines={1}>Total Employees</Text>
+                <View style={s.waveContainer}>
+                  <MetricWave color="#8B5CF6" width={isDesktop ? 120 : 64} height={20} />
+                </View>
               </View>
             </InteractiveTile>
 
@@ -1094,16 +1100,18 @@ export default function AdminDashboard() {
             >
               <View style={s.cardTopRow}>
                 <View style={[s.iconBox, { backgroundColor: '#D1FAE5' }]}>
-                  <SvgXml xml={STOCK_10_SVG} width={34} height={25} />
+                  <SvgXml xml={STOCK_10_SVG} width={32} height={24} />
                 </View>
                 <View style={s.valueRow}>
                   <Text style={[s.metricValueText, { color: '#064E3B' }]}>{activeChartPercentage}%</Text>
                   <Text style={s.trendGreen}>↑ +2%</Text>
                 </View>
               </View>
-              <Text style={s.metricLabelText}>Attendance Rate</Text>
-              <View style={s.waveContainer}>
-                <MetricWave color="#10B981" width={isDesktop ? 160 : 85} height={26} />
+              <View style={s.cardBottomRow}>
+                <Text style={s.metricLabelText} numberOfLines={1}>Attendance Rate</Text>
+                <View style={s.waveContainer}>
+                  <MetricWave color="#10B981" width={isDesktop ? 120 : 64} height={20} />
+                </View>
               </View>
             </InteractiveTile>
 
@@ -1123,15 +1131,17 @@ export default function AdminDashboard() {
             >
               <View style={s.cardTopRow}>
                 <View style={[s.iconBox, { backgroundColor: '#FFEDD5' }]}>
-                  <SvgXml xml={STOCK_7_SVG} width={34} height={25} />
+                  <SvgXml xml={STOCK_7_SVG} width={32} height={24} />
                 </View>
                 <View style={s.valueRow}>
                   <Text style={[s.metricValueText, { color: '#7C2D12' }]}>{pendingLeavesCount}</Text>
                 </View>
               </View>
-              <Text style={s.metricLabelText}>Pending Leaves</Text>
-              <View style={s.waveContainer}>
-                <MetricWave color="#F97316" width={isDesktop ? 160 : 85} height={26} />
+              <View style={s.cardBottomRow}>
+                <Text style={s.metricLabelText} numberOfLines={1}>Pending Leaves</Text>
+                <View style={s.waveContainer}>
+                  <MetricWave color="#F97316" width={isDesktop ? 120 : 64} height={20} />
+                </View>
               </View>
             </InteractiveTile>
 
@@ -1151,15 +1161,17 @@ export default function AdminDashboard() {
             >
               <View style={s.cardTopRow}>
                 <View style={[s.iconBox, { backgroundColor: '#DBEAFE' }]}>
-                  <SvgXml xml={STOCK_9_SVG} width={34} height={25} />
+                  <SvgXml xml={STOCK_9_SVG} width={32} height={24} />
                 </View>
                 <View style={s.valueRow}>
                   <Text style={[s.metricValueText, { color: '#1E3A8A' }]}>{payrollFormatted}</Text>
                 </View>
               </View>
-              <Text style={s.metricLabelText}>This Month Payroll</Text>
-              <View style={s.waveContainer}>
-                <MetricWave color="#3B82F6" width={isDesktop ? 160 : 85} height={26} />
+              <View style={s.cardBottomRow}>
+                <Text style={s.metricLabelText} numberOfLines={1}>This Month Payroll</Text>
+                <View style={s.waveContainer}>
+                  <MetricWave color="#3B82F6" width={isDesktop ? 120 : 64} height={20} />
+                </View>
               </View>
             </InteractiveTile>
           </Animated.View>
@@ -1423,21 +1435,23 @@ const s = StyleSheet.create({
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 14,
+    gap: 12,
     marginTop: 14,
     width: '100%',
   },
   metricCard: {
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1,
-    padding: 16,
-    paddingBottom: 10,
+    padding: 14,
+    paddingBottom: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
     shadowRadius: 4,
     elevation: 1,
     overflow: 'hidden',
+    justifyContent: 'space-between',
+    minHeight: 96,
   },
   cardTopRow: {
     flexDirection: 'row',
@@ -1445,9 +1459,9 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
   },
   iconBox: {
-    width: 38,
-    height: 34,
-    borderRadius: 10,
+    width: 36,
+    height: 32,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1458,27 +1472,33 @@ const s = StyleSheet.create({
   },
   metricValueText: {
     fontFamily: FONT,
-    fontSize: 21,
+    fontSize: 20,
     fontWeight: '800',
     letterSpacing: -0.5,
   },
   trendGreen: {
     fontFamily: FONT,
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '700',
     color: '#10B981',
   },
+  cardBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    gap: 4,
+  },
   metricLabelText: {
     fontFamily: FONT,
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 11.5,
+    fontWeight: '600',
     color: '#6B7280',
-    marginTop: 6,
+    flexShrink: 1,
   },
   waveContainer: {
     alignItems: 'flex-end',
-    marginTop: 4,
-    marginRight: -4,
+    justifyContent: 'flex-end',
   },
 
   /* Desktop Grid Layout (65% / 35%) */

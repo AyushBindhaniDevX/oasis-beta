@@ -287,7 +287,11 @@ export default function ApprovalWorkflowsScreen() {
     { label: 'Super Admin', value: 'Admin' },
   ];
 
-  const kpiCardWidth = isDesktop ? undefined : (width - 40 - 12) / 2;
+  const kpiCardWidth = isDesktop
+    ? undefined
+    : Platform.OS === 'web'
+    ? 'calc(50% - 6px)'
+    : Math.floor((width - 40 - 18) / 2);
 
   return (
     <SidebarLayout items={ADMIN_NAV}>

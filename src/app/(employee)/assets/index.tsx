@@ -214,7 +214,11 @@ export default function EmployeeAssetsScreen() {
 
   if (loading) return <LoadingState />;
 
-  const kpiCardWidth = isDesktop ? undefined : (width - 40 - 12) / 2;
+  const kpiCardWidth = isDesktop
+    ? undefined
+    : Platform.OS === 'web'
+    ? 'calc(50% - 6px)'
+    : Math.floor((width - 40 - 18) / 2);
 
   return (
     <ScrollView

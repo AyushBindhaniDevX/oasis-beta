@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions, Alert, TextInput, Modal as RNModal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions, Alert, TextInput, Modal as RNModal, Platform } from 'react-native';
 import Svg, { Path, SvgXml } from 'react-native-svg';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { InteractiveTile } from '@/components/ui/InteractiveTile';
@@ -119,7 +119,11 @@ export default function DataManagementScreen() {
     }
   };
 
-  const kpiCardWidth = isDesktop ? undefined : (width - 40 - 12) / 2;
+  const kpiCardWidth = isDesktop
+    ? undefined
+    : Platform.OS === 'web'
+    ? 'calc(50% - 6px)'
+    : Math.floor((width - 40 - 18) / 2);
 
   return (
     <SidebarLayout items={ADMIN_NAV}>

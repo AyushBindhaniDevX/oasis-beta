@@ -10,6 +10,7 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import Svg, { Path, SvgXml } from 'react-native-svg';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -623,7 +624,11 @@ export default function ShiftsScreen() {
 
   if (loading) return <LoadingState />;
 
-  const kpiCardWidth = isDesktop ? undefined : (width - 40 - 12) / 2;
+  const kpiCardWidth = isDesktop
+    ? undefined
+    : Platform.OS === 'web'
+    ? 'calc(50% - 6px)'
+    : Math.floor((width - 40 - 18) / 2);
 
   return (
     <SidebarLayout items={getNavForRole(profile?.role || 'hr', profile?.email)}>

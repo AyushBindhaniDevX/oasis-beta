@@ -129,7 +129,11 @@ export function HelpCenter() {
 
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
-  const kpiCardWidth = isDesktop ? '23.5%' : (width - 40 - 12) / 2;
+  const kpiCardWidth = isDesktop
+    ? '23.5%'
+    : Platform.OS === 'web'
+    ? 'calc(50% - 6px)'
+    : Math.floor((width - 40 - 18) / 2);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#FAF9FD' }}>

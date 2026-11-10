@@ -121,6 +121,11 @@ export default function DepartmentsAndHierarchyScreen() {
 
   const isDesktop = width >= 1024;
   const isTablet = width >= 640 && width < 1024;
+  const kpiCardWidth = isDesktop
+    ? undefined
+    : Platform.OS === 'web'
+    ? 'calc(50% - 6px)'
+    : Math.floor((width - 40 - 18) / 2);
 
   const navItems = getNavForRole(role, profile?.email);
 
@@ -687,7 +692,7 @@ export default function DepartmentsAndHierarchyScreen() {
                 borderColor: '#E4DCFD',
                 flex: isDesktop ? 1 : undefined,
                 minWidth: isDesktop ? 180 : undefined,
-                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+                width: isDesktop ? undefined : kpiCardWidth,
               },
             ]}
             onPress={() => setActiveMode('directory')}
@@ -713,7 +718,7 @@ export default function DepartmentsAndHierarchyScreen() {
                 borderColor: '#CEF2DE',
                 flex: isDesktop ? 1 : undefined,
                 minWidth: isDesktop ? 180 : undefined,
-                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+                width: isDesktop ? undefined : kpiCardWidth,
               },
             ]}
             onPress={() => setActiveMode('departments')}
@@ -739,7 +744,7 @@ export default function DepartmentsAndHierarchyScreen() {
                 borderColor: '#FFE2CD',
                 flex: isDesktop ? 1 : undefined,
                 minWidth: isDesktop ? 180 : undefined,
-                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+                width: isDesktop ? undefined : kpiCardWidth,
               },
             ]}
             onPress={() => setActiveMode('org-chart')}
@@ -765,7 +770,7 @@ export default function DepartmentsAndHierarchyScreen() {
                 borderColor: '#DBEAFE',
                 flex: isDesktop ? 1 : undefined,
                 minWidth: isDesktop ? 180 : undefined,
-                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+                width: isDesktop ? undefined : kpiCardWidth,
               },
             ]}
             onPress={() => setActiveMode('departments')}

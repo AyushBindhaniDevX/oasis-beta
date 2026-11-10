@@ -17,11 +17,134 @@ import {
 } from '@/types/database';
 import { createEmployee } from './employee';
 import { sendApplicationReceivedEmail, sendBulkCandidateUpdateEmail, sendRejectionEmail, sendResendEmail } from './resend';
+import { db } from '@/lib/firebase';
+import {
+  collection,
+  doc,
+  getDocs,
+  getDoc,
+  setDoc,
+  updateDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+} from 'firebase/firestore';
 
 // ----------------------------------------------------
 // SEED JOBS REQUISITIONS
 // ----------------------------------------------------
 let JOBS_STORE: JobOpening[] = [
+  {
+    id: 'job_smh_1',
+    organization_id: 'shanti-memorial-hospital',
+    title: 'Senior Healthcare Operations Coordinator',
+    department: 'Hospital Administration & Directorate',
+    location: 'Shanti Memorial Hospital - Cuttack',
+    type: 'full-time',
+    priority: 'urgent',
+    experience_level: '3 - 6 Years',
+    salary_range: '₹35,000 - ₹50,000 / month + Medical Cover',
+    positions_count: 2,
+    target_joining_date: '2026-04-01',
+    hiring_manager: 'Medical Director',
+    about_team: 'Overseeing multi-departmental patient admission workflows, bed allocation logistics, and daily administrative protocols at Shanti Memorial Hospital.',
+    description: 'Lead hospital inpatient reception coordination, discharge audits, and ward administrative liaison across our Manglabag campus.',
+    responsibilities: [
+      'Coordinate patient admissions, bed management, and discharge documentation with clinical wards.',
+      'Maintain daily inpatient occupancy registers and coordinate statutory reporting.',
+      'Supervise billing handover, insurance desk approvals, and patient feedback surveys.',
+    ],
+    requirements: [
+      'Bachelor’s or Master’s in Hospital Administration (MHA/BHA) or equivalent healthcare experience.',
+      '3+ years in hospital operations, ward management, or clinical coordination.',
+      'Strong communication skills in Odia, Hindi, and English.',
+    ],
+    skills: ['Hospital Administration', 'Patient Flow Management', 'EMR/HIS Systems', 'Billing Coordination'],
+    perks_and_benefits: [
+      'Comprehensive Medical Cover at Shanti Memorial Hospital for family',
+      'Provident Fund (PF) & ESIC benefits',
+      'Subsidized Canteen & Staff Transportation',
+    ],
+    status: 'published',
+    applicants_count: 14,
+    published_portals: ['careers_page', 'linkedin', 'naukri'],
+    pipeline_id: 'pipe_operations',
+    created_at: new Date(Date.now() - 3 * 86400000).toISOString(),
+  },
+  {
+    id: 'job_csmh_1',
+    organization_id: 'shanti-memorial-hospital',
+    title: 'Staff Nurse / Clinical Ward Supervisor',
+    department: 'Nursing & Patient Care',
+    location: 'Chikitsa',
+    type: 'full-time',
+    priority: 'high',
+    experience_level: '2 - 5 Years',
+    salary_range: '₹22,000 - ₹32,000 / month + Shift Allowances',
+    positions_count: 5,
+    target_joining_date: '2026-03-25',
+    hiring_manager: 'Nursing Superintendent',
+    about_team: 'Chikitsa specialized outpatient and daycare treatment center dedicated to compassionate, protocol-driven nursing care.',
+    description: 'Provide direct patient nursing care, medication administration, and vital signs monitoring under NABH clinical protocols.',
+    responsibilities: [
+      'Administer physician-prescribed medications and monitor patient vitals.',
+      'Maintain clinical charts, intake/output records, and nursing handovers across rotating shifts.',
+      'Coordinate with the pharmacy and laboratory for timely specimen delivery and drug dispensation.',
+    ],
+    requirements: [
+      'B.Sc Nursing or GNM registered with Odisha Nursing Council.',
+      '2+ years clinical bedside or daycare nursing experience.',
+      'Basic Life Support (BLS) certified.',
+    ],
+    skills: ['Bedside Nursing', 'Medication Administration', 'Patient Vitals', 'BLS', 'Infection Control'],
+    perks_and_benefits: [
+      'Shift & Night Duty Allowances',
+      'ESI & Provident Fund (PF) eligible',
+      'Continuing Nursing Education (CNE) sponsorship',
+    ],
+    status: 'published',
+    applicants_count: 21,
+    published_portals: ['careers_page', 'indeed'],
+    pipeline_id: 'pipe_clinical',
+    created_at: new Date(Date.now() - 5 * 86400000).toISOString(),
+  },
+  {
+    id: 'job_gopal_1',
+    organization_id: 'shanti-memorial-hospital',
+    title: 'Dining & Support Services Supervisor',
+    department: 'Dining & Facility Services',
+    location: 'Gopal Trust',
+    type: 'full-time',
+    priority: 'normal',
+    experience_level: '2 - 4 Years',
+    salary_range: '₹18,000 - ₹25,000 / month + Food & Uniform',
+    positions_count: 1,
+    target_joining_date: '2026-04-10',
+    hiring_manager: 'Gopal Trust Administrator',
+    about_team: 'Gopal Trust provides dedicated canteen, hospitality, and facility logistics supporting the hospital complex.',
+    description: 'Oversee dining service inventory, meal schedules for staff and patients, and hygiene compliance across the central facility.',
+    responsibilities: [
+      'Supervise daily kitchen operations, pantry cleanliness, and staff meal schedules.',
+      'Maintain grocery inventories, vendor supply orders, and billing receipts.',
+      'Ensure FSSAI food hygiene and sanitation standards.',
+    ],
+    requirements: [
+      '2+ years supervising food service, cafeteria, or institutional hospitality operations.',
+      'Knowledge of food safety, hygiene protocols, and inventory logging.',
+    ],
+    skills: ['Facility Supervision', 'Food Service Management', 'Inventory Control', 'Hygiene Standards'],
+    perks_and_benefits: [
+      'Complimentary on-duty meals and uniforms',
+      'PF & ESI statutory coverage',
+      'Annual Festival Bonus',
+    ],
+    status: 'published',
+    applicants_count: 9,
+    published_portals: ['careers_page'],
+    pipeline_id: 'pipe_operations',
+    created_at: new Date(Date.now() - 7 * 86400000).toISOString(),
+  },
   {
     id: 'job_1',
     organization_id: 'subedge_org',
@@ -631,18 +754,46 @@ let CUSTOM_PIPELINES_STORE: CustomPipeline[] = [
 // ----------------------------------------------------
 // SERVICE METHODS: JOBS
 // ----------------------------------------------------
-export async function getJobs(): Promise<JobOpening[]> {
+export async function getJobs(organizationId?: string): Promise<JobOpening[]> {
+  try {
+    const snap = await getDocs(collection(db, 'job_openings'));
+    if (!snap.empty) {
+      const dbJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as JobOpening);
+      for (const dj of dbJobs) {
+        if (!JOBS_STORE.some((j) => j.id === dj.id)) {
+          JOBS_STORE.unshift(dj);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Firestore jobs fetch fallback:', err);
+  }
+
+  if (organizationId) {
+    return JOBS_STORE.filter(
+      (j) =>
+        j.organization_id === organizationId ||
+        (organizationId === 'shanti-memorial-hospital' && (j.organization_id === 'smh' || j.organization_id === 'subedge_org'))
+    );
+  }
   return [...JOBS_STORE];
 }
 
 export async function createJob(job: Omit<JobOpening, 'id' | 'applicants_count' | 'created_at'>): Promise<JobOpening> {
+  const newJobId = `job_${Date.now()}`;
   const newJob: JobOpening = {
     ...job,
-    id: `job_${Date.now()}`,
+    id: newJobId,
     applicants_count: 0,
     created_at: new Date().toISOString(),
     published_portals: job.published_portals || ['careers_page', 'linkedin', 'indeed'],
   };
+
+  try {
+    await setDoc(doc(db, 'job_openings', newJobId), newJob);
+  } catch (err) {
+    console.warn('Firestore job creation fallback:', err);
+  }
 
   JOBS_STORE.unshift(newJob);
   return newJob;
@@ -664,36 +815,82 @@ export async function toggleJobPortalPublishing(
     job.published_portals = job.published_portals.filter((p) => p !== portal);
   }
 
+  try {
+    await updateDoc(doc(db, 'job_openings', jobId), {
+      published_portals: job.published_portals,
+    });
+  } catch (err) {
+    console.warn('Firestore toggle publishing fallback:', err);
+  }
+
   return { ...job };
 }
 
 // ----------------------------------------------------
 // SERVICE METHODS: CANDIDATES
 // ----------------------------------------------------
-export async function getCandidates(jobId?: string): Promise<Candidate[]> {
-  if (jobId) {
-    return CANDIDATES_STORE.filter((c) => c.job_id === jobId);
+export async function getCandidates(jobId?: string, organizationId?: string): Promise<Candidate[]> {
+  try {
+    const snap = await getDocs(collection(db, 'job_applications'));
+    if (!snap.empty) {
+      const dbCandidates = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Candidate);
+      for (const dc of dbCandidates) {
+        if (!CANDIDATES_STORE.some((c) => c.id === dc.id)) {
+          CANDIDATES_STORE.unshift(dc);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Firestore candidates fetch fallback:', err);
   }
-  return [...CANDIDATES_STORE];
+
+  let result = [...CANDIDATES_STORE];
+  if (jobId) {
+    result = result.filter((c) => c.job_id === jobId);
+  }
+  if (organizationId) {
+    result = result.filter(
+      (c) =>
+        c.organization_id === organizationId ||
+        (organizationId === 'shanti-memorial-hospital' && (c.organization_id === 'smh' || c.organization_id === 'subedge_org'))
+    );
+  }
+  return result;
 }
 
 export async function getCandidateById(candidateId: string): Promise<Candidate | undefined> {
   return CANDIDATES_STORE.find((c) => c.id === candidateId);
 }
 
-export async function updateCandidateStage(candidateId: string, stage: CandidateStage): Promise<Candidate> {
+export async function updateCandidateStage(
+  candidateId: string,
+  stage: CandidateStage,
+  actorName: string = 'HR Recruiter',
+  notes?: string
+): Promise<Candidate> {
   const candidate = CANDIDATES_STORE.find((c) => c.id === candidateId);
   if (!candidate) throw new Error('Candidate not found');
   candidate.stage = stage;
   if (!candidate.timeline) candidate.timeline = [];
-  candidate.timeline.unshift({
+  const event = {
     id: `t_${Date.now()}`,
-    type: 'stage_change',
+    type: 'stage_change' as const,
     title: `Stage Updated to: ${stage.replace('_', ' ').toUpperCase()}`,
-    description: `Candidate advanced to ${stage} stage by HR Recruitment team`,
-    actor_name: 'HR Recruiter',
+    description: notes || `Candidate moved to ${stage} stage by ${actorName}`,
+    actor_name: actorName,
     created_at: new Date().toISOString(),
-  });
+  };
+  candidate.timeline.unshift(event);
+
+  try {
+    await updateDoc(doc(db, 'job_applications', candidateId), {
+      stage,
+      timeline: candidate.timeline,
+      updated_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn('Firestore candidate stage update fallback:', err);
+  }
 
   return candidate;
 }
@@ -775,6 +972,17 @@ export async function submitJobApplication(
 
   // Increment applicants count on job
   if (job) job.applicants_count += 1;
+
+  try {
+    await setDoc(doc(db, 'job_applications', newCandId), newCand);
+    if (job) {
+      await updateDoc(doc(db, 'job_openings', job.id), {
+        applicants_count: job.applicants_count,
+      });
+    }
+  } catch (err) {
+    console.warn('Firestore application save fallback:', err);
+  }
 
   // Automatic Resend Trigger: Dispatch confirmation receipt email
   try {
@@ -1077,28 +1285,70 @@ export async function getManpowerPlans(): Promise<ManpowerPlan[]> {
   return [...MANPOWER_STORE];
 }
 
-export async function convertCandidateToEmployee(candidateId: string): Promise<{ success: boolean; employeeId: string }> {
+export async function convertCandidateToEmployee(
+  candidateId: string,
+  options?: {
+    unitName?: string;
+    workplaceId?: string;
+    department?: string;
+    designation?: string;
+    salary?: number;
+    employeeCode?: string;
+  }
+): Promise<{ success: boolean; employeeId: string; employeeCode: string }> {
   const candidate = CANDIDATES_STORE.find((c) => c.id === candidateId);
   if (!candidate) throw new Error('Candidate not found');
 
-  const empCode = `SUB-EMP-${Math.floor(100 + Math.random() * 900)}`;
+  const unitName = options?.unitName || (candidate.job?.location?.includes('Chikitsa') ? 'Chikitsa' : candidate.job?.location?.includes('Gopal') ? 'Gopal Trust' : 'Shanti Memorial Hospital - Cuttack');
+  const wpId = options?.workplaceId || (unitName === 'Chikitsa' ? 'wp-1793201579968' : unitName === 'Gopal Trust' ? 'wp-1793201564704' : 'wp-smh-main');
+  const prefix = unitName === 'Chikitsa' ? 'CSMH' : 'SMH';
+  const empCode = options?.employeeCode || `${prefix}-${Math.floor(2000 + Math.random() * 7000)}`;
 
+  const cleanPhone = (candidate.phone || '').replace(/\D/g, '').slice(-10) || '9876543210';
+  const grossSalary = options?.salary || (candidate.expected_salary ? parseInt(candidate.expected_salary.replace(/\D/g, ''), 10) || 35000 : 35000);
+  const basicSalary = Math.round(grossSalary * 0.5);
+
+  let newEmpId = empCode;
   try {
-    await createEmployee({
+    const created = await createEmployee({
       email: candidate.email,
-      password: 'TemporaryPassword123!',
+      password: cleanPhone,
       full_name: candidate.full_name,
-      phone: candidate.phone,
+      phone: cleanPhone,
       role: 'employee',
-      organization_id: 'subedge_org',
+      organization_id: candidate.organization_id || 'shanti-memorial-hospital',
       employee_code: empCode,
-      designation: candidate.job?.title || 'Specialist',
-      basic_salary: 150000,
+      department_id: options?.department || candidate.job?.department || 'Operations',
+      designation: options?.designation || candidate.job?.title || 'Staff Specialist',
+      basic_salary: basicSalary,
+      hospital_unit: unitName,
+      workplace_id: wpId,
+      employment_type: 'Regular',
     });
+    newEmpId = `emp-${candidate.id}`;
   } catch (err) {
-    console.warn('Simulated employee creation in offline/demo mode:', err);
+    console.warn('Employee record creation:', err);
   }
 
   candidate.stage = 'hired';
-  return { success: true, employeeId: empCode };
+  if (!candidate.timeline) candidate.timeline = [];
+  candidate.timeline.unshift({
+    id: `t_${Date.now()}`,
+    type: 'stage_change',
+    title: 'Candidate Formally Onboarded as Employee',
+    description: `Official Employee Code assigned: ${empCode} at ${unitName}. Staff login credentials active.`,
+    actor_name: 'HR Talent Acquisition',
+    created_at: new Date().toISOString(),
+  });
+
+  try {
+    await updateDoc(doc(db, 'job_applications', candidateId), {
+      stage: 'hired',
+      timeline: candidate.timeline,
+      onboarded_employee_code: empCode,
+      updated_at: new Date().toISOString(),
+    });
+  } catch {}
+
+  return { success: true, employeeId: newEmpId, employeeCode: empCode };
 }
