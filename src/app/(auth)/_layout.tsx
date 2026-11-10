@@ -10,5 +10,14 @@ export default function AuthLayout() {
     return <Redirect href="/(employee)/dashboard" />;
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        gestureEnabled: false,
+        fullScreenGestureEnabled: false,
+        animation: 'fade',
+      }}
+    />
+  );
 }

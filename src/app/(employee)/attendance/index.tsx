@@ -1,72 +1,299 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { FaceVerificationModal } from '@/components/attendance/FaceVerificationModal';
+import { RegularizationModal } from '@/components/attendance/RegularizationModal';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  useWindowDimensions,
-  TextInput,
-  RefreshControl,
-  Platform,
-  Image,
-  StatusBar,
-  Alert,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuth } from '@/hooks/useAuth';
+  CraftButton,
+  CraftCard,
+  CraftHeader,
+  Typography,
+  T,
+  S,
+} from '@/components/ui/CraftKit';
+import { MONTHS } from '@/constants/config';
 import { useTenant } from '@/context/TenantContext';
-import { useTheme } from '@/hooks/use-theme';
-import { Badge } from '@/components/ui/Badge';
-import { LoadingState } from '@/components/ui/States';
-import { HeroBalanceCard } from '@/components/ui/HeroBalanceCard';
-import { ActivityCard } from '@/components/ui/ActivityCard';
+import { useAuth } from '@/hooks/useAuth';
 import {
-  getAttendanceHistory,
-  getTodayAttendance,
-  clockIn,
-  clockOut,
-  startBreak,
+  clockIn, clockOut,
   endBreak,
+  getAttendanceHistory, getTodayAttendance,
+  startBreak,
 } from '@/lib/services/attendance';
 import { getEmployeeByProfileId } from '@/lib/services/employee';
-import { getCurrentLocation, calculateDistance } from '@/lib/services/location';
-import { formatTime, formatMinutes } from '@/utils/format';
+import { calculateDistance, getCurrentLocation } from '@/lib/services/location';
 import type { Attendance, Employee } from '@/types';
+import { formatMinutes, formatTime } from '@/utils/format';
 import {
-  CheckCircle2,
-  Clock,
   AlertTriangle,
-  Search,
-  TrendingUp,
-  TrendingDown,
-  CalendarX,
-  ChevronRight,
-  LogIn,
-  LogOut as LogOutIcon,
-  Coffee,
-  Play,
-  ScanFace,
-  Fingerprint,
-  Sparkles,
-  ShieldCheck,
-  MapPin,
   CalendarClock,
+  CalendarX,
+  CheckCircle2,
+  ChevronDown, ChevronUp,
+  Clock,
+  Coffee,
   Globe,
-  Building2,
   Lock,
+  LogOut as LogOutIcon,
+  Play, ScanFace,
+  Search,
+  ShieldCheck,
 } from 'lucide-react-native';
-import { MONTHS } from '@/constants/config';
-import { FaceVerificationModal } from '@/components/attendance/FaceVerificationModal';
-import { MOBILE } from '@/constants/mobile';
-import { FlashList } from '@shopify/flash-list';
-import * as Haptics from 'expo-haptics';
-import { RegularizationModal } from '@/components/attendance/RegularizationModal';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
-import { DEFAULT_SUBEDGE_LOGO as SUBEDGE_LOGO } from '@/components/ui/SubedgeBrand';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View
+} from 'react-native';
+import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+/* ─── Notion tokens ──────────────────────────────────────────────────── */
+const N = {
+  primary: '#5645d4',
+  onPrimary: '#ffffff',
+  ink: '#1a1a1a',
+  charcoal: '#37352f',
+  steel: '#787671',
+  muted: '#bbb8b1',
+  canvas: '#ffffff',
+  surface: '#f6f5f4',
+  surfaceSoft: '#fafaf9',
+  hairline: '#e5e3df',
+  hairlineSoft: '#ede9e4',
+  hairlineStrong: '#c8c4be',
+  tintPeach: '#ffe8d4',
+  tintRose: '#fde0ec',
+  tintMint: '#d9f3e1',
+  tintLavender: '#e6e0f5',
+  tintSky: '#dcecfa',
+  brandOrange: '#dd5b00',
+  brandOrangeDeep: '#793400',
+  brandPurple800: '#391c57',
+  brandGreen: '#1aae39',
+  semanticError: '#e03131',
+  linkBlue: '#0075de',
+} as const;
+
+const FONT = Platform.select({
+  ios: 'System',
+  android: 'sans-serif',
+  web: '"Inter", -apple-system, system-ui, "Segoe UI", Helvetica, sans-serif',
+}) as string;
+
+/* ─── Static helpers & isolated components ────────────────────────────── */
+const formatShortDate = (dateStr: string) => {
+  try {
+    const d = new Date(dateStr);
+    return `${MONTHS[d.getMonth()].substring(0, 3)} ${d.getDate()}, ${d.toLocaleDateString('en-US', { weekday: 'short' })}`;
+  } catch {
+    return dateStr;
+  }
+};
+
+const formatTimer = (s: number) => {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+};
+
+export interface MonthGroup {
+  key: string;
+  label: string;
+  monthShort: string;
+  year: string;
+  items: Attendance[];
+  stats: {
+    present: number;
+    late: number;
+    absent: number;
+    total: number;
+  };
+}
+
+const LiveShiftTimer = React.memo(function LiveShiftTimer({ clockIn }: { clockIn?: string | null }) {
+  const [elapsed, setElapsed] = useState(() => {
+    if (!clockIn) return 0;
+    return Math.max(0, Math.floor((Date.now() - new Date(clockIn).getTime()) / 1000));
+  });
+
+  useEffect(() => {
+    if (!clockIn) {
+      setElapsed(0);
+      return;
+    }
+    const start = new Date(clockIn).getTime();
+    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - start) / 1000)));
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [clockIn]);
+
+  return (
+    <View style={sv.timerPill}>
+      <Clock size={11} color={N.brandGreen} />
+      <Text style={sv.timerText}>{formatTimer(elapsed)}</Text>
+    </View>
+  );
+});
+
+const StatusTag = React.memo(function StatusTag({ item }: { item: Attendance }) {
+  const map: Record<string, { bg: string; fg: string; label: string }> = {
+    present: { bg: N.tintMint, fg: N.brandGreen, label: 'Present' },
+    late: { bg: N.tintPeach, fg: N.brandOrangeDeep, label: 'Late' },
+    absent: { bg: N.tintRose, fg: N.semanticError, label: 'Absent' },
+  };
+  const c = map[item.status] || map.present;
+  return (
+    <View style={[sv.tag, { backgroundColor: c.bg }]}>
+      <Text style={[sv.tagText, { color: c.fg }]}>{c.label}</Text>
+    </View>
+  );
+});
+
+const MonthSectionItem = React.memo(function MonthSectionItem({
+  group,
+  expanded,
+  onToggle,
+  onRegularize,
+}: {
+  group: MonthGroup;
+  expanded: boolean;
+  onToggle: (key: string) => void;
+  onRegularize: (date: string) => void;
+}) {
+  return (
+    <Animated.View
+      entering={FadeInDown.duration(250)}
+      layout={Layout.springify().damping(18)}
+    >
+      <CraftCard variant="base" style={sv.monthCard} padding={0}>
+        <TouchableOpacity
+          onPress={() => onToggle(group.key)}
+          style={sv.monthHeader}
+          activeOpacity={0.75}
+        >
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+              <Text style={sv.monthTitle}>{group.label}</Text>
+              <Text style={sv.monthCount}>{group.items.length} entries</Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+              <View style={[sv.miniChip, { backgroundColor: N.tintMint }]}>
+                <View style={[sv.miniDot, { backgroundColor: N.brandGreen }]} />
+                <Text style={[sv.miniChipText, { color: N.brandGreen }]}>
+                  {group.stats.present} present
+                </Text>
+              </View>
+              {group.stats.late > 0 && (
+                <View style={[sv.miniChip, { backgroundColor: N.tintPeach }]}>
+                  <View style={[sv.miniDot, { backgroundColor: N.brandOrangeDeep }]} />
+                  <Text style={[sv.miniChipText, { color: N.brandOrangeDeep }]}>
+                    {group.stats.late} late
+                  </Text>
+                </View>
+              )}
+              {group.stats.absent > 0 && (
+                <View style={[sv.miniChip, { backgroundColor: N.tintRose }]}>
+                  <View style={[sv.miniDot, { backgroundColor: N.semanticError }]} />
+                  <Text style={[sv.miniChipText, { color: N.semanticError }]}>
+                    {group.stats.absent} absent
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+          <View style={sv.chevronWrap}>
+            {expanded ? (
+              <ChevronUp size={16} color={N.steel} />
+            ) : (
+              <ChevronDown size={16} color={N.steel} />
+            )}
+          </View>
+        </TouchableOpacity>
+
+        {expanded && (
+          <Animated.View entering={FadeInDown.duration(180)} style={sv.monthBody}>
+            {group.items.map((item, idx) => (
+              <View
+                key={item.id || `${item.date}-${idx}`}
+                style={[
+                  sv.row,
+                  idx < group.items.length - 1 && {
+                    borderBottomWidth: 1,
+                    borderBottomColor: N.hairlineSoft,
+                  },
+                ]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={sv.rowDate}>{formatShortDate(item.date)}</Text>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      marginTop: 2,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <Clock size={11} color={N.steel} />
+                    <Text style={sv.rowTime}>
+                      {item.clock_in ? formatTime(item.clock_in) : '--:--'} →{' '}
+                      {item.clock_out ? formatTime(item.clock_out) : '--:--'}
+                    </Text>
+                    {item.working_minutes > 0 && (
+                      <Text style={sv.rowDuration}>
+                        ({formatMinutes(item.working_minutes)})
+                      </Text>
+                    )}
+                    {item.is_remote && (
+                      <View style={[sv.tag, { backgroundColor: N.tintSky }]}>
+                        <Globe size={9} color={N.linkBlue} />
+                        <Text style={[sv.tagText, { color: N.linkBlue, fontSize: 9 }]}>
+                          Remote
+                        </Text>
+                      </View>
+                    )}
+                    {item.face_verified && (
+                      <View style={[sv.tag, { backgroundColor: N.tintLavender }]}>
+                        <ShieldCheck size={9} color={N.brandPurple800} />
+                        <Text
+                          style={[
+                            sv.tagText,
+                            { color: N.brandPurple800, fontSize: 9 },
+                          ]}
+                        >
+                          Face
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                  <StatusTag item={item} />
+                  <TouchableOpacity
+                    onPress={() => onRegularize(item.date)}
+                    style={sv.rowAction}
+                    activeOpacity={0.7}
+                  >
+                    <CalendarClock size={10} color={N.brandPurple800} />
+                    <Text style={sv.rowActionText}>Fix</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </Animated.View>
+        )}
+      </CraftCard>
+    </Animated.View>
+  );
+});
 
 export default function AttendanceScreen() {
-  const colors = useTheme();
   const { profile } = useAuth();
   const { isFeatureEnabled, organization, employee: tenantEmp, workplace: tenantWp } = useTenant();
   const activeOrgId = organization?.id || tenantEmp?.organization_id || profile?.organization_id;
@@ -74,52 +301,44 @@ export default function AttendanceScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
-  const topPadding = Math.max(insets.top, Platform.OS === 'ios' ? 44 : 20);
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [todayAttendance, setTodayAttendance] = useState<Attendance | null>(null);
   const [records, setRecords] = useState<Attendance[]>([]);
-  const [filtered, setFiltered] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [clockLoading, setClockLoading] = useState(false);
   const [clockError, setClockError] = useState('');
 
-  // Location & Geofencing
   const [currentLoc, setCurrentLoc] = useState<{ latitude: number; longitude: number } | null>(null);
   const [distance, setDistance] = useState<number | null>(null);
   const [isRemoteMode, setIsRemoteMode] = useState(false);
-  const [remoteReason, setRemoteReason] = useState('Work From Home');
+  const [remoteReason] = useState('Work From Home');
 
-  // Elapsed working seconds
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-
-  // Face Verification Modal
   const [showFaceModal, setShowFaceModal] = useState(false);
   const [faceModalType, setFaceModalType] = useState<'in' | 'out'>('in');
-  const [pendingLoc, setPendingLoc] = useState<{ latitude: number; longitude: number }>({ latitude: 0, longitude: 0 });
+  const [pendingLoc, setPendingLoc] = useState({ latitude: 0, longitude: 0 });
   const [statusFilter, setStatusFilter] = useState<'all' | 'present' | 'late' | 'absent'>('all');
 
-  // Attendance Regularization Modal
   const [showRegularize, setShowRegularize] = useState(false);
   const [regularizeDate, setRegularizeDate] = useState<string | null>(null);
+
+  /* ── Month collapsible state ─────────────────────────────── */
+  const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
 
   const loadData = useCallback(async () => {
     if (!profile) return;
     try {
       const emp = tenantEmp || (await getEmployeeByProfileId(profile.id, activeOrgId));
-      if (emp && !emp.workplace && tenantWp) {
-        emp.workplace = tenantWp;
-      }
+      if (emp && !emp.workplace && tenantWp) emp.workplace = tenantWp;
       setEmployee(emp);
       if (emp) {
         const [history, today] = await Promise.all([
-          getAttendanceHistory(emp.id, 60),
+          getAttendanceHistory(emp.id, 90),
           getTodayAttendance(emp.id),
         ]);
         setRecords(history);
-        setFiltered(history);
         setTodayAttendance(today);
       }
     } catch (e) {
@@ -129,54 +348,26 @@ export default function AttendanceScreen() {
     }
   }, [profile, activeOrgId, tenantEmp, tenantWp]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
 
-  // Periodic and on-load GPS location fetch
   useEffect(() => {
     const fetchLoc = () => {
       getCurrentLocation()
         .then((loc) => {
           setCurrentLoc(loc);
           if (employee?.workplace?.latitude && employee?.workplace?.longitude) {
-            const dist = calculateDistance(
-              loc.latitude,
-              loc.longitude,
-              employee.workplace.latitude,
-              employee.workplace.longitude
-            );
-            setDistance(Math.round(dist));
+            setDistance(Math.round(calculateDistance(
+              loc.latitude, loc.longitude,
+              employee.workplace.latitude, employee.workplace.longitude,
+            )));
           }
         })
-        .catch((e) => {
-          console.warn('Attendance location warning:', e);
-        });
+        .catch(() => { });
     };
-
     fetchLoc();
     const interval = setInterval(fetchLoc, 45000);
     return () => clearInterval(interval);
   }, [employee]);
-
-  // Live timer for active shift
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    if (todayAttendance?.clock_in && !todayAttendance?.clock_out) {
-      const startTime = new Date(todayAttendance.clock_in).getTime();
-      const updateTimer = () => {
-        const now = Date.now();
-        setElapsedSeconds(Math.max(0, Math.floor((now - startTime) / 1000)));
-      };
-      updateTimer();
-      interval = setInterval(updateTimer, 1000);
-    } else {
-      setElapsedSeconds(0);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [todayAttendance]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -189,13 +380,18 @@ export default function AttendanceScreen() {
     distance !== null &&
     employee?.workplace?.latitude &&
     employee?.workplace?.longitude &&
-    distance > geofenceRadius
+    distance > geofenceRadius,
   );
 
-  const handleInitiateClock = async (type: 'in' | 'out', remote: boolean = false) => {
+  const handleInitiateClock = async (type: 'in' | 'out', remote = false) => {
     setClockError('');
+    const profileId = profile?.id;
+    if (!profileId) {
+      setClockError('Authentication required to record shift.');
+      return;
+    }
     if (remote && !isWfhEnabled) {
-      setClockError('Work From Home (WFH) remote clock-in is locked for your organization. You must clock in on-site.');
+      setClockError('Remote clock-in is locked for your organization.');
       return;
     }
     setClockLoading(true);
@@ -205,42 +401,73 @@ export default function AttendanceScreen() {
       try {
         loc = await getCurrentLocation();
         setCurrentLoc(loc);
-      } catch (locErr) {
+      } catch {
         if (!remote && type === 'in') {
-          throw new Error('GPS location required. Please enable device location or use Remote Clock-In.');
+          throw new Error('GPS location required. Enable location or use Remote Clock-In.');
         }
       }
-
       const activeLoc = loc || { latitude: 0, longitude: 0 };
       setPendingLoc(activeLoc);
-
-      if (employee?.workplace?.latitude && employee?.workplace?.longitude && activeLoc.latitude && activeLoc.longitude) {
-        const dist = Math.round(
-          calculateDistance(
-            activeLoc.latitude,
-            activeLoc.longitude,
-            employee.workplace.latitude,
-            employee.workplace.longitude
-          )
-        );
+      if (employee?.workplace?.latitude && activeLoc.latitude) {
+        const dist = Math.round(calculateDistance(
+          activeLoc.latitude, activeLoc.longitude,
+          employee.workplace.latitude, employee.workplace.longitude,
+        ));
         setDistance(dist);
-
-        // If trying normal in-office clock-in while outside geofence, reject with clear error!
         if (type === 'in' && !remote && dist > geofenceRadius) {
-          setClockError(
-            `You are outside your assigned workplace (${dist}m away from ${employee.workplace.name}). Office clock-in requires being within ${geofenceRadius}m. Please move closer or use "Remote Clock In".`
-          );
+          setClockError(`Outside workplace (${dist}m). Move closer or use Remote Clock-In.`);
           setClockLoading(false);
           return;
         }
-      } else if (type === 'in' && !remote && employee?.workplace?.latitude) {
-        setClockError('Unable to verify your office GPS location. Please turn on location services or use Remote Clock-In.');
-        setClockLoading(false);
+      }
+      // On Web: Execute punch directly with instantaneous feedback (no modal barrier)
+      if (Platform.OS === 'web') {
+        if (type === 'in') {
+          await clockIn(activeLoc.latitude, activeLoc.longitude, 'web_verified', profileId, {
+            isRemote: remote,
+            remoteReason: remote ? remoteReason : undefined,
+          });
+        } else {
+          await clockOut(activeLoc.latitude, activeLoc.longitude, 'web_verified', profileId);
+        }
+        await loadData();
         return;
       }
 
-      setFaceModalType(type);
-      setShowFaceModal(true);
+      // On Native Mobile: Check for enrolled biometrics (Face ID / Fingerprint)
+      try {
+        const LocalAuthentication = await import('expo-local-authentication');
+        const hasHw = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+        if (hasHw && isEnrolled) {
+          const bioResult = await LocalAuthentication.authenticateAsync({
+            promptMessage: `Verify identity to Clock ${type === 'in' ? 'In' : 'Out'}`,
+            cancelLabel: 'Cancel',
+            disableDeviceFallback: false,
+          });
+
+          if (!bioResult.success) {
+            if (bioResult.error !== 'user_cancel' && bioResult.error !== 'app_cancel') {
+              setClockError('Biometric verification failed.');
+            }
+            return;
+          }
+        }
+      } catch (bioErr) {
+        console.warn('Native biometric check skipped:', bioErr);
+      }
+
+      // Record punch directly on mobile
+      if (type === 'in') {
+        await clockIn(activeLoc.latitude, activeLoc.longitude, 'device_biometric_verified', profileId, {
+          isRemote: remote,
+          remoteReason: remote ? remoteReason : undefined,
+        });
+      } else {
+        await clockOut(activeLoc.latitude, activeLoc.longitude, 'device_biometric_verified', profileId);
+      }
+      await loadData();
     } catch (err: unknown) {
       setClockError(err instanceof Error ? err.message : 'Could not prepare attendance.');
     } finally {
@@ -273,11 +500,8 @@ export default function AttendanceScreen() {
     if (!employee) return;
     setClockLoading(true);
     try {
-      if (action === 'start') {
-        await startBreak(employee.id, 'Tea / Rest Break');
-      } else {
-        await endBreak(employee.id);
-      }
+      if (action === 'start') await startBreak(employee.id, 'Tea / Rest Break');
+      else await endBreak(employee.id);
       await loadData();
     } catch (err: unknown) {
       setClockError(err instanceof Error ? err.message : 'Break action failed.');
@@ -286,423 +510,406 @@ export default function AttendanceScreen() {
     }
   };
 
-  const handleSearch = (text: string) => {
-    setSearch(text);
-    if (!text.trim()) {
-      setFiltered(records);
-      return;
-    }
-    const t = text.toLowerCase();
-    setFiltered(
-      records.filter(
-        (r) =>
-          r.date.includes(t) ||
-          r.status.includes(t) ||
-          formatShortDate(r.date).toLowerCase().includes(t)
-      )
+  /* ── Group records by month ───────────────────────────────── */
+  const groupedByMonth = useMemo(() => {
+    const filteredRecords = records.filter((r) => {
+      if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+      if (!search.trim()) return true;
+      const t = search.toLowerCase();
+      return (
+        r.date.includes(t) ||
+        r.status.includes(t) ||
+        formatShortDate(r.date).toLowerCase().includes(t)
+      );
+    });
+
+    const groups: Record<string, Attendance[]> = {};
+    filteredRecords.forEach((r) => {
+      const d = new Date(r.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(r);
+    });
+
+    return Object.entries(groups)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([key, items]) => {
+        const [y, m] = key.split('-');
+        const monthDate = new Date(Number(y), Number(m) - 1, 1);
+        const label = `${MONTHS[monthDate.getMonth()]} ${y}`;
+        return {
+          key,
+          label,
+          monthShort: MONTHS[monthDate.getMonth()].substring(0, 3),
+          year: y,
+          items: items.sort((a, b) => b.date.localeCompare(a.date)),
+          stats: {
+            present: items.filter((i) => i.status === 'present').length,
+            late: items.filter((i) => i.status === 'late').length,
+            absent: items.filter((i) => i.status === 'absent').length,
+            total: items.length,
+          },
+        };
+      });
+  }, [records, statusFilter, search]);
+
+  const toggleMonth = useCallback((key: string, isDefaultFirst: boolean) => {
+    setExpandedMonths((prev) => {
+      const current = prev[key] ?? isDefaultFirst;
+      return { ...prev, [key]: !current };
+    });
+  }, []);
+
+  const handleOpenRegularize = useCallback((date?: string | null) => {
+    setRegularizeDate(date || null);
+    setShowRegularize(true);
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: N.canvas, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: N.steel, fontFamily: FONT }}>Loading attendance…</Text>
+      </View>
     );
-  };
-
-  const formatShortDate = (dateStr: string) => {
-    try {
-      const d = new Date(dateStr);
-      const day = d.toLocaleDateString('en-US', { weekday: 'short' });
-      const m = MONTHS[d.getMonth()].substring(0, 3);
-      return `${m} ${d.getDate()}, ${day}`;
-    } catch {
-      return dateStr;
-    }
-  };
-
-  const formatTimerDisplay = (seconds: number) => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  if (loading) return <LoadingState />;
+  }
 
   const isClockedIn = Boolean(todayAttendance?.clock_in && !todayAttendance?.clock_out);
   const isClockedOut = Boolean(todayAttendance?.clock_in && todayAttendance?.clock_out);
   const activeBreak = todayAttendance?.breaks?.find((b: any) => !b.end);
 
-  const presentDays = records.filter((r) => r.status === 'present').length;
-  const lateDays = records.filter((r) => r.status === 'late').length;
-  const absentDays = records.filter((r) => r.status === 'absent').length;
-  const totalDays = records.length;
-  const totalMins = records.reduce((acc, r) => acc + (r.working_minutes || 0), 0);
-  const avgHours = totalDays > 0 ? totalMins / totalDays / 60 : 0;
-  const exceptions = lateDays + absentDays;
-  const attendanceRate = totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0;
-
-  const now = new Date();
-  const currentMonthLabel = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
-
-  const displayedRecords = filtered.filter((r) => {
-    if (statusFilter === 'all') return true;
-    return r.status === statusFilter;
+  const currentMonthRecords = records.filter((r) => {
+    const d = new Date(r.date);
+    const now = new Date();
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
+  const presentDays = currentMonthRecords.filter((r) => r.status === 'present').length;
+  const lateDays = currentMonthRecords.filter((r) => r.status === 'late').length;
+  const absentDays = currentMonthRecords.filter((r) => r.status === 'absent').length;
+  const attendanceRate = currentMonthRecords.length > 0
+    ? Math.round((presentDays / currentMonthRecords.length) * 100)
+    : 0;
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // MOBILE LAYOUT
-  // ─────────────────────────────────────────────────────────────────────────────
+  /* ─── HERO CARD ───────────────────────────────────────────── */
+  const HeroCard = () => (
+    <CraftCard variant="base" style={sv.hero}>
+      <View style={sv.heroTopRow}>
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View
+            style={[
+              sv.statusDot,
+              {
+                backgroundColor: isClockedIn
+                  ? N.brandGreen
+                  : isClockedOut
+                    ? N.steel
+                    : N.brandOrange,
+              },
+            ]}
+          />
+          <Text style={sv.heroStatus}>
+            {isClockedIn
+              ? activeBreak
+                ? 'On Break'
+                : 'Shift Active'
+              : isClockedOut
+                ? 'Shift Complete'
+                : 'Not Clocked In'}
+          </Text>
+        </View>
+        {isClockedIn && <LiveShiftTimer clockIn={todayAttendance?.clock_in} />}
+      </View>
+
+      <View style={sv.heroGrid}>
+        {[
+          {
+            label: 'Clock In',
+            value: todayAttendance?.clock_in ? formatTime(todayAttendance.clock_in) : '--:--',
+          },
+          {
+            label: 'Clock Out',
+            value: todayAttendance?.clock_out ? formatTime(todayAttendance.clock_out) : '--:--',
+          },
+          {
+            label: 'Duration',
+            value: todayAttendance?.working_minutes
+              ? formatMinutes(todayAttendance.working_minutes)
+              : '0h 0m',
+            accent: true,
+          },
+        ].map((s) => (
+          <View key={s.label} style={sv.heroCell}>
+            <Text style={sv.heroCellLabel}>{s.label}</Text>
+            <Text style={[sv.heroCellValue, s.accent && { color: N.brandGreen }]}>
+              {s.value}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      {distance !== null && employee?.workplace?.latitude && (
+        <View
+          style={[
+            sv.geofenceBadge,
+            { backgroundColor: isOutsideGeofence ? N.tintPeach : N.tintMint },
+          ]}
+        >
+          {isOutsideGeofence ? (
+            <AlertTriangle size={11} color={N.brandOrangeDeep} />
+          ) : (
+            <CheckCircle2 size={11} color={N.brandGreen} />
+          )}
+          <Text
+            style={[
+              sv.geofenceText,
+              { color: isOutsideGeofence ? N.brandOrangeDeep : N.brandGreen },
+            ]}
+          >
+            {isOutsideGeofence
+              ? `${distance}m away · Remote only`
+              : `Inside ${employee.workplace.name || 'office'} · ${distance}m`}
+          </Text>
+        </View>
+      )}
+
+      <View style={{ marginTop: 12, gap: 8 }}>
+        {!isClockedIn && !isClockedOut && (
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <CraftButton
+              title="Office Clock In"
+              variant="primary"
+              size="md"
+              icon={<ScanFace size={15} color={N.onPrimary} />}
+              onPress={() => handleInitiateClock('in', false)}
+              disabled={clockLoading}
+              style={{ flex: 1 }}
+            />
+            {isWfhEnabled ? (
+              <CraftButton
+                title="Remote"
+                variant="secondary"
+                size="md"
+                icon={<Globe size={15} color={N.ink} />}
+                onPress={() => handleInitiateClock('in', true)}
+                disabled={clockLoading}
+                style={{ flex: 1 }}
+              />
+            ) : (
+              <View style={[sv.btnSecondary, { flex: 1, opacity: 0.55 }]}>
+                <Lock size={13} color={N.steel} />
+                <Text style={[sv.btnSecondaryText, { color: N.steel }]}>WFH Locked</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {isClockedIn && (
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <CraftButton
+              title={activeBreak ? 'Resume' : 'Break'}
+              variant="secondary"
+              size="md"
+              icon={
+                activeBreak ? (
+                  <Play size={15} color={N.ink} />
+                ) : (
+                  <Coffee size={15} color={N.ink} />
+                )
+              }
+              onPress={() => handleBreak(activeBreak ? 'end' : 'start')}
+              disabled={clockLoading}
+              style={{ flex: 1 }}
+            />
+            <CraftButton
+              title={clockLoading ? 'Processing…' : 'Clock Out'}
+              variant="danger"
+              size="md"
+              icon={<LogOutIcon size={15} color={N.onPrimary} />}
+              onPress={() => handleInitiateClock('out')}
+              disabled={clockLoading}
+              style={{ flex: 1.4 }}
+            />
+          </View>
+        )}
+
+        {isClockedOut && (
+          <View
+            style={[
+              sv.tag,
+              {
+                backgroundColor: N.tintMint,
+                paddingVertical: 10,
+                justifyContent: 'center',
+              },
+            ]}
+          >
+            <CheckCircle2 size={13} color={N.brandGreen} />
+            <Text style={[sv.tagText, { color: N.brandGreen, fontSize: 12 }]}>
+              Today's attendance recorded
+            </Text>
+          </View>
+        )}
+
+        {clockError ? (
+          <View
+            style={[
+              sv.tag,
+              {
+                backgroundColor: N.tintRose,
+                paddingVertical: 8,
+                justifyContent: 'center',
+              },
+            ]}
+          >
+            <AlertTriangle size={11} color={N.semanticError} />
+            <Text
+              style={[sv.tagText, { color: N.semanticError, flex: 1 }]}
+              numberOfLines={2}
+            >
+              {clockError}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </CraftCard>
+  );
+
+  /* ─── STAT STRIP ──────────────────────────────────────────── */
+  const StatStrip = () => (
+    <View style={sv.statStrip}>
+      {[
+        { label: 'Rate', value: `${attendanceRate}%`, fg: N.brandGreen },
+        { label: 'Present', value: `${presentDays}`, fg: N.linkBlue },
+        { label: 'Late', value: `${lateDays}`, fg: N.brandOrangeDeep },
+        { label: 'Absent', value: `${absentDays}`, fg: N.semanticError },
+      ].map((s) => (
+        <View key={s.label} style={sv.statCell}>
+          <Text style={[sv.statValue, { color: s.fg }]}>{s.value}</Text>
+          <Text style={sv.statLabel}>{s.label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+
+  /* ─── FILTER BAR ──────────────────────────────────────────── */
+  const FilterBar = () => (
+    <View style={sv.filterBar}>
+      <View style={sv.searchBox}>
+        <Search size={13} color={N.steel} />
+        <TextInput
+          placeholder="Search date, month, status…"
+          placeholderTextColor={N.muted}
+          value={search}
+          onChangeText={setSearch}
+          style={sv.searchInput}
+        />
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: 6 }}
+      >
+        {(['all', 'present', 'late', 'absent'] as const).map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            onPress={() => setStatusFilter(tab)}
+            style={[sv.filterChip, statusFilter === tab && sv.filterChipActive]}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                sv.filterChipText,
+                statusFilter === tab && sv.filterChipTextActive,
+              ]}
+            >
+              {tab === 'all' ? 'All' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
+  /* ══════════════════════════════════════════════════════════
+     MOBILE
+  ══════════════════════════════════════════════════════════ */
   if (!isDesktop) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.primaryDark }}>
-        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-        <View style={{ flex: 1, backgroundColor: colors.background }}>
-          {/* Top bounce underlay matching header card */}
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: colors.primaryDark }} />
-
-          <FlashList
-            data={displayedRecords}
-            // @ts-ignore - Type definition issue with estimatedItemSize
-            estimatedItemSize={120}
-            contentContainerStyle={{ paddingBottom: 100 }}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" colors={[colors.primaryDark]} />}
-            showsVerticalScrollIndicator={false}
-            ListHeaderComponent={
-              <View>
-            {/* ── Mobile Gradient Header ── */}
-            <View style={[mAttStyles.heroGradient, { paddingTop: topPadding + 10, backgroundColor: colors.primaryDark }]}>
-              <View style={mAttStyles.heroTop}>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                    <Text style={mAttStyles.heroTag}>TODAY'S SHIFT</Text>
-                    {todayAttendance?.is_remote && (
-                      <View style={{ backgroundColor: 'rgba(2, 132, 199, 0.35)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                        <Text style={{ color: '#7DD3FC', fontSize: 10, fontWeight: '800' }}>REMOTE / WFH</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={mAttStyles.heroTitle}>
-                    {isClockedIn
-                      ? activeBreak
-                        ? 'On Break'
-                        : todayAttendance?.is_remote
-                        ? 'Remote Shift Active'
-                        : 'Shift Active'
-                      : isClockedOut
-                      ? 'Shift Completed'
-                      : 'Ready to Clock In'}
-                  </Text>
-                </View>
-                {isClockedIn && (
-                  <View style={mAttStyles.timerPill}>
-                    <Clock size={14} color="#6EE7B7" />
-                    <Text style={mAttStyles.timerPillText}>{formatTimerDisplay(elapsedSeconds)}</Text>
-                  </View>
-                )}
-              </View>
-
-              {/* In/Out Times Strip */}
-              <View style={mAttStyles.timeStrip}>
-                <View style={mAttStyles.timeCol}>
-                  <Text style={mAttStyles.timeLabel}>Clock In</Text>
-                  <Text style={mAttStyles.timeVal}>
-                    {todayAttendance?.clock_in ? formatTime(todayAttendance.clock_in) : '--:--'}
-                  </Text>
-                </View>
-                <View style={mAttStyles.timeDivider} />
-                <View style={mAttStyles.timeCol}>
-                  <Text style={mAttStyles.timeLabel}>Clock Out</Text>
-                  <Text style={mAttStyles.timeVal}>
-                    {todayAttendance?.clock_out ? formatTime(todayAttendance.clock_out) : '--:--'}
-                  </Text>
-                </View>
-                <View style={mAttStyles.timeDivider} />
-                <View style={mAttStyles.timeCol}>
-                  <Text style={mAttStyles.timeLabel}>Duration</Text>
-                  <Text style={[mAttStyles.timeVal, { color: '#6EE7B7' }]}>
-                    {todayAttendance?.working_minutes ? formatMinutes(todayAttendance.working_minutes) : '0h 0m'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Action Button Row */}
-              <View style={mAttStyles.heroBtnRow}>
-                {!isClockedIn && !isClockedOut && (
-                  <View style={{ width: '100%', gap: 8 }}>
-                    <View style={{ flexDirection: 'row', gap: 10 }}>
-                      <TouchableOpacity
-                        style={[
-                          mAttStyles.punchBtn,
-                          {
-                            backgroundColor: isOutsideGeofence ? 'rgba(255,255,255,0.75)' : '#FFFFFF',
-                            flex: 1,
-                          },
-                        ]}
-                        onPress={() => handleInitiateClock('in', false)}
-                        disabled={clockLoading}
-                        activeOpacity={0.85}
-                      >
-                        <ScanFace size={16} color="#006a61" />
-                        <Text style={[mAttStyles.punchBtnText, { color: '#006a61', fontSize: 13 }]}>
-                          Office Clock In
-                        </Text>
-                      </TouchableOpacity>
-
-                      {isWfhEnabled ? (
-                        <TouchableOpacity
-                          style={[mAttStyles.punchBtn, { backgroundColor: 'rgba(255,255,255,0.18)', flex: 1 }]}
-                          onPress={() => handleInitiateClock('in', true)}
-                          disabled={clockLoading}
-                          activeOpacity={0.85}
-                        >
-                          <Globe size={16} color="#FFFFFF" />
-                          <Text style={[mAttStyles.punchBtnText, { color: '#FFFFFF', fontSize: 13 }]}>
-                            Remote Clock In
-                          </Text>
-                        </TouchableOpacity>
-                      ) : (
-                        <TouchableOpacity
-                          style={[mAttStyles.punchBtn, { backgroundColor: 'rgba(255,255,255,0.08)', flex: 1 }]}
-                          onPress={() =>
-                            Alert.alert(
-                              'WFH Feature Locked',
-                              'Work From Home (WFH) remote clock-in is locked for your organization. Please clock in on-site.'
-                            )
-                          }
-                          activeOpacity={0.85}
-                        >
-                          <Lock size={14} color="#CBD5E1" />
-                          <Text style={[mAttStyles.punchBtnText, { color: '#CBD5E1', fontSize: 12 }]}>
-                            WFH Locked
-                          </Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-
-                    {/* Workplace Geofence Status notice */}
-                    {distance !== null && employee?.workplace?.latitude ? (
-                      <View style={mAttStyles.geofenceNotice}>
-                        {isOutsideGeofence ? (
-                          <>
-                            <AlertTriangle size={13} color="#FDE68A" />
-                            <Text style={mAttStyles.geofenceNoticeText}>
-                              Outside Office ({distance}m away • Limit {geofenceRadius}m). Clock in remotely if working from home.
-                            </Text>
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 size={13} color="#6EE7B7" />
-                            <Text style={[mAttStyles.geofenceNoticeText, { color: '#D1FAE5' }]}>
-                              Inside Office Geofence ({distance}m from {employee.workplace.name || 'Office'})
-                            </Text>
-                          </>
-                        )}
-                      </View>
-                    ) : null}
-
-                    {clockError ? (
-                      <View style={[mAttStyles.geofenceNotice, { backgroundColor: 'rgba(220, 38, 38, 0.45)' }]}>
-                        <AlertTriangle size={14} color="#FCA5A5" />
-                        <Text style={[mAttStyles.geofenceNoticeText, { color: '#FEE2E2' }]}>{clockError}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                )}
-
-                {isClockedIn && (
-                  <>
-                    {!activeBreak ? (
-                      <TouchableOpacity
-                        style={[mAttStyles.punchBtn, { backgroundColor: 'rgba(255,255,255,0.18)', flex: 1 }]}
-                        onPress={() => handleBreak('start')}
-                        disabled={clockLoading}
-                      >
-                        <Coffee size={16} color="#FFF" />
-                        <Text style={mAttStyles.punchBtnText}>Break</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity
-                        style={[mAttStyles.punchBtn, { backgroundColor: '#059669', flex: 1 }]}
-                        onPress={() => handleBreak('end')}
-                        disabled={clockLoading}
-                      >
-                        <Play size={16} color="#FFF" />
-                        <Text style={mAttStyles.punchBtnText}>Resume</Text>
-                      </TouchableOpacity>
-                    )}
-
-                    <TouchableOpacity
-                      style={[mAttStyles.punchBtn, { backgroundColor: '#EF4444', flex: 1.4 }]}
-                      onPress={() => handleInitiateClock('out')}
-                      disabled={clockLoading}
-                    >
-                      <LogOutIcon size={16} color="#FFF" />
-                      <Text style={mAttStyles.punchBtnText}>
-                        {clockLoading ? 'Processing...' : 'Clock Out'}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-
-                {isClockedOut && (
-                  <View style={mAttStyles.shiftCompletedPill}>
-                    <CheckCircle2 size={16} color="#6EE7B7" />
-                    <Text style={{ color: '#6EE7B7', fontWeight: '700', fontSize: 13 }}>
-                      Today's Attendance Recorded
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-
-          {/* ── Summary Stat Row ── */}
-          <Animated.View entering={FadeInDown.delay(80).duration(350).springify()} style={mAttStyles.statRow}>
-            <View style={mAttStyles.statChip}>
-              <Text style={mAttStyles.statChipVal}>{attendanceRate}%</Text>
-              <Text style={mAttStyles.statChipLabel}>On-Time</Text>
-            </View>
-            <View style={mAttStyles.statChip}>
-              <Text style={[mAttStyles.statChipVal, { color: '#006a61' }]}>{presentDays}d</Text>
-              <Text style={mAttStyles.statChipLabel}>Present</Text>
-            </View>
-            <View style={mAttStyles.statChip}>
-              <Text style={[mAttStyles.statChipVal, { color: '#D97706' }]}>{lateDays}d</Text>
-              <Text style={mAttStyles.statChipLabel}>Late</Text>
-            </View>
-            <View style={mAttStyles.statChip}>
-              <Text style={[mAttStyles.statChipVal, { color: '#DC2626' }]}>{absentDays}d</Text>
-              <Text style={mAttStyles.statChipLabel}>Absent</Text>
-            </View>
-          </Animated.View>
-
-          {/* ── Search & Filter Tabs ── */}
-          <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
-            <View style={mAttStyles.searchWrap}>
-              <Search size={16} color="#94A3B8" />
-              <TextInput
-                placeholder="Search by date or month..."
-                placeholderTextColor="#94A3B8"
-                value={search}
-                onChangeText={handleSearch}
-                style={mAttStyles.searchInput}
-              />
-            </View>
-
-            {/* Filter Pills */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }} contentContainerStyle={{ gap: 8 }}>
-              {(['all', 'present', 'late', 'absent'] as const).map((tab) => (
-                <TouchableOpacity
-                  key={tab}
-                  onPress={() => setStatusFilter(tab)}
-                  style={[mAttStyles.filterPill, statusFilter === tab && mAttStyles.filterPillActive]}
-                >
-                  <Text style={[mAttStyles.filterPillText, statusFilter === tab && mAttStyles.filterPillTextActive]}>
-                    {tab.toUpperCase()} {tab === 'all' ? `(${records.length})` : ''}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-
-          {/* ── Attendance History Cards ── */}
-          <View style={{ paddingHorizontal: 20, marginTop: 16, gap: 10, paddingBottom: 10 }}>
-            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>History Logs</Text>
-          </View>
-        </View>
-      }
-      ListEmptyComponent={
-        <View style={mAttStyles.emptyBox}>
-          <CalendarX size={36} color="#94A3B8" />
-          <Text style={mAttStyles.emptyText}>No attendance records found</Text>
-        </View>
-      }
-      renderItem={({ item, index: idx }) => (
-        <Animated.View style={{ paddingHorizontal: 20, marginBottom: 10 }} entering={FadeInDown.delay(Math.min(idx * 40, 300)).duration(300)}>
-                  <View style={mAttStyles.historyCard}>
-                    <View style={mAttStyles.cardLeft}>
-                      <Text style={mAttStyles.cardDate}>{formatShortDate(item.date)}</Text>
-                      <View style={mAttStyles.cardTimeRow}>
-                        <Clock size={13} color="#64748B" />
-                        <Text style={mAttStyles.cardTimeText}>
-                          {item.clock_in ? formatTime(item.clock_in) : '--:--'} → {item.clock_out ? formatTime(item.clock_out) : '--:--'}
-                        </Text>
-                        {item.working_minutes > 0 && (
-                          <Text style={mAttStyles.cardDurationText}>
-                            ({formatMinutes(item.working_minutes)})
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-
-                    <View style={mAttStyles.cardRight}>
-                      <Badge
-                        label={String(item.status || 'present').toUpperCase()}
-                        variant={
-                          item.status === 'present'
-                            ? 'successLight'
-                            : item.status === 'late'
-                            ? 'warningLight'
-                            : 'dangerLight'
-                        }
-                      />
-                      <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
-                        {item.is_remote && (
-                          <View style={mAttStyles.remoteTag}>
-                            <Globe size={10} color="#0284C7" />
-                            <Text style={mAttStyles.remoteTagText}>Remote</Text>
-                          </View>
-                        )}
-                        {item.face_verified && (
-                          <View style={mAttStyles.faceTag}>
-                            <ShieldCheck size={11} color="#006a61" />
-                            <Text style={mAttStyles.faceTagText}>Face ID</Text>
-                          </View>
-                        )}
-                      </View>
-                      <TouchableOpacity
-                        onPress={() => {
-                          setRegularizeDate(item.date);
-                          setShowRegularize(true);
-                        }}
-                        style={mAttStyles.itemRegularizeBtn}
-                        activeOpacity={0.7}
-                      >
-                        <CalendarClock size={11} color="#006a61" />
-                        <Text style={mAttStyles.itemRegularizeText}>Regularize</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-        </Animated.View>
-      )}
-    />
-
-        {/* ── Floating Regularize CTA ── */}
-        <Animated.View 
-          entering={FadeInDown.delay(400).springify()}
-          style={{ position: 'absolute', bottom: MOBILE.FAB_BOTTOM_OFFSET, left: 20, right: 20 }}
+      <View style={{ flex: 1, backgroundColor: T.canvas }}>
+        <CraftHeader
+          title="Attendance & Logs"
+          subtitle="Biometric punch logs, workplace shifts & regularizations"
+          right={
+            <CraftButton
+              title="Fix attendance"
+              variant="secondary"
+              size="sm"
+              icon={<CalendarClock size={12} color={T.ink} />}
+              onPress={() => {
+                setRegularizeDate(null);
+                setShowRegularize(true);
+              }}
+            />
+          }
+        />
+        <ScrollView
+          contentContainerStyle={{
+            paddingTop: 16,
+            paddingBottom: 40,
+          }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={T.ink}
+            />
+          }
+          showsVerticalScrollIndicator={false}
         >
-          <TouchableOpacity
-            onPress={() => {
-              setRegularizeDate(null);
-              setShowRegularize(true);
-            }}
-            activeOpacity={0.85}
-            style={[mAttStyles.regularizeBtn, { shadowColor: '#006a61', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 8 }]}
-          >
-            <CalendarClock size={16} color="#006a61" />
-            <Text style={mAttStyles.regularizeBtnText}>Request Attendance Regularization</Text>
-          </TouchableOpacity>
-        </Animated.View>
+          <View style={{ paddingHorizontal: 16 }}>
+            <HeroCard />
+            <StatStrip />
+          </View>
+
+          <View style={{ marginTop: 20 }}>
+            <FilterBar />
+          </View>
+
+          <View style={{ paddingHorizontal: 16, marginTop: 16, gap: 10 }}>
+            {groupedByMonth.length === 0 ? (
+              <View style={sv.emptyBox}>
+                <CalendarX size={28} color={N.steel} strokeWidth={1.5} />
+                <Text style={sv.emptyText}>No attendance records</Text>
+              </View>
+            ) : (
+              groupedByMonth.map((g, idx) => {
+                const isDefaultFirst = idx === 0;
+                const isExpanded = expandedMonths[g.key] ?? isDefaultFirst;
+                return (
+                  <MonthSectionItem
+                    key={g.key}
+                    group={g}
+                    expanded={isExpanded}
+                    onToggle={(k) => toggleMonth(k, isDefaultFirst)}
+                    onRegularize={handleOpenRegularize}
+                  />
+                );
+              })
+            )}
+          </View>
+        </ScrollView>
 
         <FaceVerificationModal
           visible={showFaceModal}
           onClose={() => setShowFaceModal(false)}
           onVerified={handleVerifiedFace}
-          employeeName={profile?.full_name || 'Staff Member'}
-          officeName={employee?.workplace?.name || 'Office Workplace'}
+          employeeName={profile?.full_name || 'Staff'}
+          officeName={employee?.workplace?.name || 'Office'}
           isClockingIn={faceModalType === 'in'}
           isRemote={isRemoteMode}
           remoteReason={remoteReason}
           enrolledFaceUrl={employee?.profile?.avatar_url || null}
           profileId={profile?.id}
         />
-
         <RegularizationModal
           visible={showRegularize}
           onClose={() => {
@@ -713,368 +920,103 @@ export default function AttendanceScreen() {
           defaultDate={regularizeDate}
           onSubmitted={loadData}
         />
-        </View>
       </View>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // DESKTOP LAYOUT (unchanged)
-  // ─────────────────────────────────────────────────────────────────────────────
+  /* ══════════════════════════════════════════════════════════
+     DESKTOP
+  ══════════════════════════════════════════════════════════ */
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={[styles.content, styles.contentDesktop]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#006a61" />}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* ── Header Frame ───────────────────────────────────────────────────── */}
-      <Animated.View entering={FadeInDown.duration(300).springify()}>
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Image source={SUBEDGE_LOGO} style={styles.headerLogo} resizeMode="contain" />
-            <View style={styles.welcomeContainer}>
-              <Text style={styles.welcomeText}>Attendance Hub</Text>
-              <Text style={styles.usernameText}>Biometric Logs & Shifts</Text>
-            </View>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-            <TouchableOpacity
-              style={[styles.headerActionBtn, { backgroundColor: '#F1F5F9' }]}
+    <View style={{ flex: 1, backgroundColor: T.canvas }}>
+      <CraftHeader
+        title="Attendance & Shifts"
+        subtitle={`${profile?.full_name || 'Staff'} · ${employee?.designation || employee?.department?.name || 'Team member'}`}
+        right={
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <CraftButton
+              title="Fix attendance"
+              variant="secondary"
+              size="sm"
+              icon={<CalendarClock size={14} color={T.ink} />}
               onPress={() => {
                 setRegularizeDate(null);
                 setShowRegularize(true);
               }}
-            >
-              <CalendarClock size={15} color="#0F172A" />
-              <Text style={[styles.headerActionBtnText, { color: '#0F172A' }]}>Regularize</Text>
-            </TouchableOpacity>
-
-            {!isClockedIn && !isClockedOut ? (
-              <>
-                <TouchableOpacity
-                  style={[styles.headerActionBtn, { backgroundColor: isOutsideGeofence ? '#64748B' : '#006a61' }]}
-                  onPress={() => handleInitiateClock('in', false)}
-                  disabled={clockLoading}
-                >
-                  <ScanFace size={16} color="#FFF" />
-                  <Text style={styles.headerActionBtnText}>Office Clock In</Text>
-                </TouchableOpacity>
-
-                {isWfhEnabled ? (
-                  <TouchableOpacity
-                    style={[styles.headerActionBtn, { backgroundColor: '#0284C7' }]}
-                    onPress={() => handleInitiateClock('in', true)}
-                    disabled={clockLoading}
-                  >
-                    <Globe size={16} color="#FFF" />
-                    <Text style={styles.headerActionBtnText}>Remote Clock In</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.headerActionBtn, { backgroundColor: '#E2E8F0' }]}
-                    onPress={() =>
-                      Alert.alert(
-                        'WFH Feature Locked',
-                        'Work From Home (WFH) remote clock-in is locked for your organization.'
-                      )
-                    }
-                  >
-                    <Lock size={14} color="#64748B" />
-                    <Text style={[styles.headerActionBtnText, { color: '#64748B' }]}>WFH Locked</Text>
-                  </TouchableOpacity>
-                )}
-              </>
-            ) : isClockedIn ? (
-              <TouchableOpacity
-                style={[styles.headerActionBtn, { backgroundColor: '#DC2626' }]}
-                onPress={() => handleInitiateClock('out')}
-                disabled={clockLoading}
-              >
-                <LogOutIcon size={16} color="#FFF" />
-                <Text style={styles.headerActionBtnText}>Clock Out</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.headerDonePill}>
-                <CheckCircle2 size={15} color="#006a61" />
-                <Text style={styles.headerDoneText}>Shift Done</Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </Animated.View>
-
-      {/* ── Hero Balance Card Frame (matching /mobile balanceCard) ─────────── */}
-      <Animated.View entering={FadeInDown.delay(60).duration(300).springify()}>
-        <HeroBalanceCard
-          title="MONTHLY ATTENDANCE SUMMARY"
-          primaryValue={`${attendanceRate}% On-Time`}
-          badge={attendanceRate >= 90 ? 'EXCELLENT' : 'STANDARD'}
-          badgeColor={attendanceRate >= 90 ? '#006a61' : '#F59E0B'}
-          stats={[
-            { label: 'Present Days', value: `${presentDays}/${totalDays}d`, color: '#006a61' },
-            { label: 'Avg Shift', value: `${avgHours.toFixed(1)}h`, color: '#0369A1' },
-            { label: 'Late Arrivals', value: `${lateDays}d`, color: '#D97706' },
-            { label: 'Absences', value: `${absentDays}d`, color: '#DC2626' },
-          ]}
-        />
-      </Animated.View>
-
-      {/* ── Today's Live Clock-In / Clock-Out Hero Card ───────────────────── */}
-      <Animated.View entering={FadeInDown.delay(120).duration(350).springify()}>
-        <View style={[styles.heroCard, { backgroundColor: '#0b1c30' }]}>
-          <View style={styles.heroTop}>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <View style={[styles.liveDot, { backgroundColor: isClockedIn ? '#10B981' : '#F59E0B' }]} />
-                <Text style={styles.heroTag}>TODAY'S SHIFT STATUS</Text>
-              </View>
-              <Text style={styles.heroTitle}>
-                {isClockedIn
-                  ? activeBreak
-                    ? 'On Scheduled Break'
-                    : 'Currently Working'
-                  : isClockedOut
-                  ? 'Shift Completed'
-                  : 'Ready to Clock In'}
-              </Text>
-              <Text style={styles.heroSub}>
-                {isClockedIn
-                  ? `Clocked in at ${formatTime(todayAttendance!.clock_in!)} • Biometrics Verified`
-                  : isClockedOut
-                  ? `Clocked out at ${formatTime(todayAttendance!.clock_out!)} • ${Math.round((todayAttendance!.working_minutes || 0) / 60)}h worked`
-                  : 'Capture face or device biometrics to record today\'s attendance'}
-              </Text>
-            </View>
-
-            {/* Live Clock Timer */}
-            {isClockedIn && (
-              <View style={styles.timerBadge}>
-                <Text style={styles.timerLabel}>SHIFT DURATION</Text>
-                <Text style={styles.timerValue}>{formatTimerDisplay(elapsedSeconds)}</Text>
-              </View>
-            )}
-          </View>
-
-          {clockError ? (
-            <View style={styles.errorBanner}>
-              <AlertTriangle size={15} color="#F87171" />
-              <Text style={styles.errorBannerText}>{clockError}</Text>
-            </View>
-          ) : null}
-
-          {/* Action Buttons */}
-          <View style={styles.heroActionsRow}>
-            {!isClockedIn && !isClockedOut && (
-              <View style={{ flexDirection: 'row', gap: 12, flex: 1 }}>
-                <TouchableOpacity
-                  style={[
-                    styles.clockActionBtn,
-                    { backgroundColor: isOutsideGeofence ? '#475569' : '#006a61', flex: 1 },
-                  ]}
-                  onPress={() => handleInitiateClock('in', false)}
-                  disabled={clockLoading}
-                >
-                  <ScanFace size={18} color="#FFF" />
-                  <Text style={styles.clockActionBtnText}>
-                    {clockLoading ? 'Preparing...' : 'Face ID Office Clock In'}
-                  </Text>
-                </TouchableOpacity>
-
-                {isWfhEnabled ? (
-                  <TouchableOpacity
-                    style={[styles.clockActionBtn, { backgroundColor: '#0284C7', flex: 1 }]}
-                    onPress={() => handleInitiateClock('in', true)}
-                    disabled={clockLoading}
-                  >
-                    <Globe size={18} color="#FFF" />
-                    <Text style={styles.clockActionBtnText}>
-                      Remote Clock In (WFH)
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.clockActionBtn, { backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1', flex: 1 }]}
-                    onPress={() =>
-                      Alert.alert(
-                        'WFH Feature Locked',
-                        'Work From Home (WFH) remote clock-in is locked for your organization.'
-                      )
-                    }
-                  >
-                    <Lock size={16} color="#94A3B8" />
-                    <Text style={[styles.clockActionBtnText, { color: '#94A3B8' }]}>
-                      Remote (WFH Locked)
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-
-            {isClockedIn && (
-              <>
-                {!activeBreak ? (
-                  <TouchableOpacity
-                    style={[styles.breakBtn, { backgroundColor: 'rgba(255,255,255,0.15)' }]}
-                    onPress={() => handleBreak('start')}
-                    disabled={clockLoading}
-                  >
-                    <Coffee size={16} color="#FFF" />
-                    <Text style={styles.breakBtnText}>Take Break</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.breakBtn, { backgroundColor: '#059669' }]}
-                    onPress={() => handleBreak('end')}
-                    disabled={clockLoading}
-                  >
-                    <Play size={16} color="#FFF" />
-                    <Text style={styles.breakBtnText}>Resume Shift</Text>
-                  </TouchableOpacity>
-                )}
-
-                <TouchableOpacity
-                  style={[styles.clockActionBtn, { backgroundColor: '#ba1a1a', flex: 1 }]}
-                  onPress={() => handleInitiateClock('out')}
-                  disabled={clockLoading}
-                >
-                  <LogOutIcon size={18} color="#FFF" />
-                  <Text style={styles.clockActionBtnText}>
-                    {clockLoading ? 'Verifying...' : 'Face ID Clock Out'}
-                  </Text>
-                </TouchableOpacity>
-              </>
-            )}
-
-            {isClockedOut && (
-              <View style={styles.completedPill}>
-                <CheckCircle2 size={16} color="#34D399" />
-                <Text style={{ color: '#34D399', fontWeight: '700', fontSize: 13 }}>
-                  Today's Attendance Confirmed & Sealed
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </Animated.View>
-
-      {/* ── Daily Records Section ─────────────────────────────────────────── */}
-      <View style={[styles.tableCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-        <View style={[styles.tableHeader, { borderBottomColor: '#f1f5f9' }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>{currentMonthLabel} Attendance Logs</Text>
-          <View style={[styles.searchBox, { borderColor: '#e2e8f0' }]}>
-            <Search size={14} color={colors.textSecondary} />
-            <TextInput
-              placeholder="Search date or status..."
-              placeholderTextColor={colors.textSecondary}
-              value={search}
-              onChangeText={handleSearch}
-              style={[styles.searchInput, { color: colors.text }]}
             />
+            {!isClockedIn && !isClockedOut && (
+              <CraftButton
+                title="Clock In"
+                variant="primary"
+                size="sm"
+                icon={<ScanFace size={14} color={T.card} />}
+                onPress={() => handleInitiateClock('in', false)}
+              />
+            )}
+            {isClockedIn && (
+              <CraftButton
+                title="Clock Out"
+                variant="danger"
+                size="sm"
+                icon={<LogOutIcon size={14} color={T.card} />}
+                onPress={() => handleInitiateClock('out')}
+              />
+            )}
           </View>
-        </View>
+        }
+      />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={ds.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={T.ink}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        <HeroCard />
+        <StatStrip />
 
-        {filtered.length === 0 ? (
-          <View style={styles.emptyTable}>
-            <CalendarX size={36} color={colors.textSecondary} />
-            <Text style={{ color: colors.textSecondary, marginTop: 8 }}>No attendance records found</Text>
+        <FilterBar />
+
+      <View style={{ gap: 12 }}>
+        {groupedByMonth.length === 0 ? (
+          <View style={sv.emptyBox}>
+            <CalendarX size={28} color={N.steel} strokeWidth={1.5} />
+            <Text style={sv.emptyText}>No attendance records</Text>
           </View>
         ) : (
-          <View style={{ padding: 8 }}>
-            {filtered.map((item, idx) => (
-              <View
-                key={item.id || idx}
-                style={[
-                  styles.tableRow,
-                  idx !== filtered.length - 1 && { borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-                ]}
-              >
-                <View style={styles.dateCol}>
-                  <Text style={[styles.dateText, { color: colors.text }]}>{formatShortDate(item.date)}</Text>
-                  <Text style={[styles.rawDate, { color: colors.textSecondary }]}>{item.date}</Text>
-                </View>
-
-                <View style={{ flex: 1, paddingHorizontal: 12, gap: 2 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>
-                      {item.clock_in ? `In: ${formatTime(item.clock_in)}` : 'No In Punch'}
-                    </Text>
-                    {item.clock_out && (
-                      <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-                        • Out: {formatTime(item.clock_out)}
-                      </Text>
-                    )}
-                  </View>
-                  <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-                    Total: {formatMinutes(item.working_minutes || 0)}
-                  </Text>
-                </View>
-
-                <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                  <Badge
-                    label={String(item.status || 'present').toUpperCase()}
-                    variant={
-                      item.status === 'present'
-                        ? 'successLight'
-                        : item.status === 'late'
-                        ? 'warningLight'
-                        : 'dangerLight'
-                    }
-                  />
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    {item.is_remote && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#E0F2FE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                        <Globe size={11} color="#0284C7" />
-                        <Text style={{ fontSize: 10, color: '#0284C7', fontWeight: '700' }}>Remote</Text>
-                      </View>
-                    )}
-                    {item.face_verified && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#EDF8F6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                        <ShieldCheck size={11} color="#006a61" />
-                        <Text style={{ fontSize: 10, color: '#006a61', fontWeight: '700' }}>Face Verified</Text>
-                      </View>
-                    )}
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setRegularizeDate(item.date);
-                      setShowRegularize(true);
-                    }}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 4,
-                      backgroundColor: '#F1F5F9',
-                      paddingHorizontal: 8,
-                      paddingVertical: 3,
-                      borderRadius: 6,
-                    }}
-                  >
-                    <CalendarClock size={11} color="#475569" />
-                    <Text style={{ fontSize: 10, color: '#475569', fontWeight: '700' }}>Regularize</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </View>
+          groupedByMonth.map((g, idx) => {
+            const isDefaultFirst = idx === 0;
+            const isExpanded = expandedMonths[g.key] ?? isDefaultFirst;
+            return (
+              <MonthSectionItem
+                key={g.key}
+                group={g}
+                expanded={isExpanded}
+                onToggle={(k) => toggleMonth(k, isDefaultFirst)}
+                onRegularize={handleOpenRegularize}
+              />
+            );
+          })
         )}
       </View>
 
-      {/* ── Face ID & Biometrics Verification Modal ──────────────────────── */}
       <FaceVerificationModal
         visible={showFaceModal}
         onClose={() => setShowFaceModal(false)}
         onVerified={handleVerifiedFace}
-        employeeName={profile?.full_name || 'Staff Member'}
-        officeName={employee?.workplace?.name || 'Office Workplace'}
+        employeeName={profile?.full_name || 'Staff'}
+        officeName={employee?.workplace?.name || 'Office'}
         isClockingIn={faceModalType === 'in'}
         isRemote={isRemoteMode}
         remoteReason={remoteReason}
         enrolledFaceUrl={employee?.profile?.avatar_url || null}
         profileId={profile?.id}
       />
-
-      {/* ── Attendance Regularization Modal ─────────────────────────────── */}
       <RegularizationModal
         visible={showRegularize}
         onClose={() => {
@@ -1085,539 +1027,375 @@ export default function AttendanceScreen() {
         defaultDate={regularizeDate}
         onSubmitted={loadData}
       />
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  content: { padding: 16, gap: 20, paddingBottom: 60 },
-  contentDesktop: { padding: 32, maxWidth: 1300, alignSelf: 'center', width: '100%', gap: 24 },
-
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-    paddingTop: 4,
-    paddingBottom: 2,
-  },
-  headerLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  headerLogo: {
-    width: 44,
-    height: 44,
-  },
-  welcomeContainer: {
-    flex: 1,
-  },
-  welcomeText: {
-    fontSize: 12,
-    color: '#64748B',
+/* ─── STYLES ───────────────────────────────────────────────────────── */
+const sv = StyleSheet.create({
+  pageEyebrow: {
+    fontFamily: FONT,
+    fontSize: 10,
     fontWeight: '600',
-    marginBottom: 2,
+    color: N.steel,
+    letterSpacing: 1.2,
   },
-  usernameText: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#0F172A',
-    letterSpacing: -0.3,
-  },
-  headerActionBtn: {
-    backgroundColor: '#006a61',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 22,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    ...Platform.select({
-      web: { boxShadow: '0 2px 6px rgba(0, 106, 97, 0.25)' },
-      default: {
-        shadowColor: '#006a61',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        elevation: 3,
-      },
-    }),
-  },
-  headerActionBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  headerDonePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 18,
-    backgroundColor: '#EDF8F6',
-  },
-  headerDoneText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#006a61',
+  pageTitle: {
+    fontFamily: FONT,
+    fontSize: 24,
+    fontWeight: '600',
+    color: N.ink,
+    letterSpacing: -0.8,
+    marginTop: 3,
   },
 
-  heroCard: {
-    padding: 22,
-    borderRadius: 20,
-    gap: 18,
-  },
-  heroTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 16,
-    flexWrap: 'wrap',
-  },
-  liveDot: { width: 8, height: 8, borderRadius: 4 },
-  heroTag: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
-  heroTitle: { color: '#FFF', fontSize: 22, fontWeight: '800', marginTop: 4 },
-  heroSub: { color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 4, maxWidth: 600 },
-  timerBadge: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 14,
+  /* Hero */
+  hero: {
+    backgroundColor: N.canvas,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
+    borderColor: N.hairline,
+    padding: 16,
   },
-  timerLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
-  timerValue: { color: '#FFF', fontSize: 20, fontWeight: '800', marginTop: 2, fontVariant: ['tabular-nums'] },
-  errorBanner: {
+  heroTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
-    padding: 10,
-    borderRadius: 8,
-  },
-  errorBannerText: { color: '#FCA5A5', fontSize: 12, flex: 1 },
-  heroActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flexWrap: 'wrap',
-  },
-  clockActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  clockActionBtnText: { color: '#FFF', fontSize: 14, fontWeight: '700' },
-  breakBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  breakBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
-  completedPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(52, 211, 153, 0.15)',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-
-  tableCard: {
-    borderRadius: 20,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  tableHeader: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 18,
-    borderBottomWidth: 1,
-    gap: 12,
-    flexWrap: 'wrap',
+    marginBottom: 14,
   },
-  sectionTitle: { fontSize: 16, fontWeight: '800' },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    minWidth: 200,
-  },
-  searchInput: { fontSize: 13, padding: 0, flex: 1 },
-  emptyTable: { padding: 40, alignItems: 'center', justifyContent: 'center' },
-  tableRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-  },
-  dateCol: { minWidth: 110 },
-  dateText: { fontSize: 14, fontWeight: '700' },
-  rawDate: { fontSize: 11, marginTop: 1 },
-});
-
-// ─── MOBILE ATTENDANCE STYLES ────────────────────────────────────────────────
-const mAttStyles = StyleSheet.create({
-  heroGradient: {
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 56 : 20,
-    paddingBottom: 24,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    ...Platform.select({
-      web: {
-        backgroundImage: 'linear-gradient(135deg, #006a61 0%, #004D47 50%, #003D38 100%)',
-        boxShadow: '0 8px 32px rgba(0, 77, 71, 0.3)',
-      },
-      default: {
-        shadowColor: '#004D47',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
-        shadowRadius: 16,
-        elevation: 12,
-      },
-    }),
-  },
-  heroTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  heroTag: {
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  heroTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.3,
-    marginTop: 2,
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  heroStatus: {
+    fontFamily: FONT,
+    fontSize: 13,
+    fontWeight: '600',
+    color: N.ink,
   },
   timerPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
+    gap: 5,
+    backgroundColor: N.tintMint,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 9999,
   },
-  timerPillText: {
-    color: '#6EE7B7',
-    fontSize: 18,
-    fontWeight: '800',
+  timerText: {
+    fontFamily: FONT,
+    fontSize: 12,
+    fontWeight: '700',
+    color: N.brandGreen,
     fontVariant: ['tabular-nums'],
-    letterSpacing: 1,
   },
-  timeStrip: {
+  heroGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 16,
-    paddingVertical: 14,
-    marginBottom: 20,
-  },
-  timeCol: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  timeLabel: {
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  timeVal: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  timeDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-  },
-  heroBtnRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  punchBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    width: '100%',
-    ...Platform.select({
-      web: { boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15)' },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.15,
-        shadowRadius: 6,
-        elevation: 4,
-      },
-    }),
-  },
-  punchBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  shiftCompletedPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(110, 231, 183, 0.18)',
     paddingVertical: 12,
-    borderRadius: 16,
-    width: '100%',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: N.hairlineSoft,
   },
-
-  // Stat Row
-  statRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    gap: 10,
-    marginTop: -10,
-  },
-  statChip: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    ...Platform.select({
-      web: { boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)' },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
-        shadowRadius: 4,
-        elevation: 1,
-      },
-    }),
-  },
-  statChipVal: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0F172A',
-    marginBottom: 2,
-  },
-  statChipLabel: {
-    fontSize: 10,
+  heroCell: { flex: 1, alignItems: 'center' },
+  heroCellLabel: {
+    fontFamily: FONT,
+    fontSize: 9,
     fontWeight: '600',
-    color: '#94A3B8',
+    color: N.steel,
     textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
-
-  // Search & Filter
-  searchWrap: {
+  heroCellValue: {
+    fontFamily: FONT,
+    fontSize: 18,
+    fontWeight: '600',
+    color: N.ink,
+    letterSpacing: -0.4,
+    marginTop: 2,
+  },
+  geofenceBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingHorizontal: 14,
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+    marginTop: 10,
+    alignSelf: 'flex-start',
+  },
+  geofenceText: { fontFamily: FONT, fontSize: 10, fontWeight: '600' },
+
+  /* Stat strip */
+  statStrip: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 8,
+  },
+  statCell: {
+    flex: 1,
     paddingVertical: 10,
+    paddingHorizontal: 8,
+    backgroundColor: N.canvas,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: N.hairline,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontFamily: FONT,
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: -0.4,
+  },
+  statLabel: {
+    fontFamily: FONT,
+    fontSize: 9,
+    fontWeight: '500',
+    color: N.steel,
+    marginTop: 1,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+
+  /* Filter bar */
+  filterBar: {
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: N.canvas,
+    paddingHorizontal: 12,
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: N.hairline,
   },
   searchInput: {
-    fontSize: 13,
-    color: '#0F172A',
     flex: 1,
+    fontFamily: FONT,
+    fontSize: 13,
+    color: N.ink,
     padding: 0,
   },
-  filterPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: N.hairline,
+    backgroundColor: N.canvas,
   },
-  filterPillActive: {
-    backgroundColor: '#006a61',
+  filterChipActive: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
   },
-  filterPillText: {
+  filterChipText: {
+    fontFamily: FONT,
     fontSize: 11,
-    fontWeight: '700',
-    color: '#64748B',
+    fontWeight: '500',
+    color: N.steel,
   },
-  filterPillTextActive: {
-    color: '#FFFFFF',
+  filterChipTextActive: { color: N.onPrimary, fontWeight: '600' },
+
+  /* Month card */
+  monthCard: {
+    backgroundColor: N.canvas,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: N.hairline,
+    overflow: 'hidden',
   },
-  regularizeBtn: {
+  monthHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  monthTitle: {
+    fontFamily: FONT,
+    fontSize: 15,
+    fontWeight: '600',
+    color: N.ink,
+    letterSpacing: -0.2,
+  },
+  monthCount: {
+    fontFamily: FONT,
+    fontSize: 11,
+    fontWeight: '500',
+    color: N.steel,
+  },
+  chevronWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#EDF8F6',
-    paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#CCECE7',
+    backgroundColor: N.surface,
   },
-  regularizeBtnText: {
-    color: '#006a61',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-
-  // History Cards
-  historyCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    ...Platform.select({
-      web: { boxShadow: '0 2px 6px rgba(0, 0, 0, 0.03)' },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.03,
-        shadowRadius: 4,
-        elevation: 1,
-      },
-    }),
-  },
-  cardLeft: {
-    flex: 1,
-  },
-  cardDate: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#0F172A',
-    marginBottom: 4,
-  },
-  cardTimeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  cardTimeText: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  cardDurationText: {
-    fontSize: 12,
-    color: '#006a61',
-    fontWeight: '700',
-  },
-  cardRight: {
-    alignItems: 'flex-end',
-    gap: 6,
-  },
-  itemRegularizeBtn: {
+  miniChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#EDF8F6',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginTop: 2,
-  },
-  itemRegularizeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#006a61',
-  },
-  remoteTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#E0F2FE',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 4,
   },
-  remoteTagText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#0284C7',
+  miniDot: { width: 5, height: 5, borderRadius: 3 },
+  miniChipText: { fontFamily: FONT, fontSize: 10, fontWeight: '600' },
+  monthBody: {
+    borderTopWidth: 1,
+    borderTopColor: N.hairlineSoft,
+    paddingHorizontal: 14,
   },
-  geofenceNotice: {
+
+  /* Row */
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginTop: 4,
+    paddingVertical: 10,
+    gap: 8,
   },
-  geofenceNoticeText: {
-    color: '#FEF3C7',
+  rowDate: {
+    fontFamily: FONT,
+    fontSize: 13,
+    fontWeight: '600',
+    color: N.ink,
+  },
+  rowTime: { fontFamily: FONT, fontSize: 11, color: N.steel },
+  rowDuration: {
+    fontFamily: FONT,
     fontSize: 11,
     fontWeight: '600',
-    flex: 1,
+    color: N.brandGreen,
   },
-  faceTag: {
+  rowAction: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: '#EDF8F6',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
+    borderRadius: 4,
+    backgroundColor: N.tintLavender,
   },
-  faceTagText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#006a61',
+  rowActionText: {
+    fontFamily: FONT,
+    fontSize: 9,
+    fontWeight: '600',
+    color: N.brandPurple800,
+    letterSpacing: 0.2,
   },
-  emptyBox: {
-    paddingVertical: 40,
+
+  /* Tag */
+  tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  tagText: { fontFamily: FONT, fontSize: 10, fontWeight: '600' },
+
+  /* Buttons */
+  btnPrimary: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    gap: 6,
+    backgroundColor: N.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 8,
+  },
+  btnPrimaryText: {
+    fontFamily: FONT,
+    fontSize: 13,
+    fontWeight: '500',
+    color: N.onPrimary,
+  },
+  btnSecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: N.canvas,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: N.hairlineStrong,
+  },
+  btnSecondaryText: {
+    fontFamily: FONT,
+    fontSize: 13,
+    fontWeight: '500',
+    color: N.ink,
+  },
+
+  compactBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: N.tintLavender,
+  },
+  compactBtnText: {
+    fontFamily: FONT,
+    fontSize: 11,
+    fontWeight: '600',
+    color: N.brandPurple800,
+  },
+
+  /* Empty */
+  emptyBox: {
+    padding: 32,
+    alignItems: 'center',
+    backgroundColor: N.canvas,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: N.hairline,
+    borderStyle: 'dashed',
   },
   emptyText: {
+    fontFamily: FONT,
     fontSize: 13,
-    color: '#94A3B8',
+    color: N.steel,
     marginTop: 8,
+  },
+});
+
+const ds = StyleSheet.create({
+  content: {
+    maxWidth: 1200,
+    alignSelf: 'center',
+    width: '100%',
+    paddingHorizontal: 32,
+    paddingTop: 28,
+    paddingBottom: 60,
+    gap: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 16,
+  },
+  pageTitle: {
+    fontFamily: FONT,
+    fontSize: 32,
+    fontWeight: '600',
+    color: N.ink,
+    letterSpacing: -1.2,
+    marginTop: 4,
+  },
+  pageSub: {
+    fontFamily: FONT,
+    fontSize: 13,
+    color: N.steel,
+    marginTop: 4,
   },
 });

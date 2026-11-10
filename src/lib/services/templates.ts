@@ -109,10 +109,10 @@ export function getDefaultTemplatesForOrg(
   const isSubedge = normId.includes('subedge') || normName.includes('subedge');
 
   let orgName = orgNameParam;
-  let unitName = 'Central Hospital Campus';
-  let signatoryTitle = 'Medical Superintendent / HR Director';
-  let signatoryName = 'Medical Administration Board';
-  let portalName = 'SMH Oasis Workforce Portal';
+  let unitName = 'Headquarters Campus';
+  let signatoryTitle = 'Managing Director / HR Director';
+  let signatoryName = 'Executive Administration Board';
+  let portalName = 'Oasis Enterprise Portal';
 
   if (isGopal) {
     orgName = orgNameParam || 'Gopal Trust';

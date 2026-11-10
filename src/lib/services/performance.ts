@@ -354,38 +354,38 @@ export interface HospitalAppraisalParameter {
 export const DEFAULT_HOSPITAL_APPRAISAL_PARAMS: HospitalAppraisalParameter[] = [
   {
     id: 'param_clinical',
-    name: 'Clinical Competence & Patient Care Quality',
-    category: 'Core Clinical',
+    name: 'Professional Excellence & Quality Standards',
+    category: 'Core Competency',
     weightage_percent: 25,
-    description: 'Adherence to treatment protocols, diagnostic accuracy, bedside manner, and clinical outcomes.',
+    description: 'Adherence to domain best practices, quality standards, client care, and high-standard outcomes.',
   },
   {
     id: 'param_punctuality',
     name: 'Punctuality, Shift Adherence & Attendance',
     category: 'Operational',
     weightage_percent: 20,
-    description: 'Adherence to assigned 8-hour duty roster, biometric compliance, and shift handover punctuality.',
+    description: 'Adherence to assigned duty schedules, biometric compliance, and shift handover punctuality.',
   },
   {
     id: 'param_nabh',
-    name: 'Patient Safety, NABH Protocols & Infection Control',
+    name: 'Operational Safety, Standards & Compliance',
     category: 'Compliance',
     weightage_percent: 20,
-    description: 'Strict adherence to NABH guidelines, hygiene standards, sterile protocols, and incident reporting.',
+    description: 'Strict adherence to statutory compliance guidelines, hygiene standards, protocols, and incident reporting.',
   },
   {
     id: 'param_teamwork',
     name: 'Team Collaboration & Inter-Departmental Coordination',
     category: 'Behavioral',
     weightage_percent: 20,
-    description: 'Cross-functional teamwork between doctors, nursing, administration, billing, and support departments.',
+    description: 'Cross-functional teamwork between leads, teams, administration, billing, and support departments.',
   },
   {
     id: 'param_documentation',
-    name: 'Medical Documentation & Administrative Integrity',
+    name: 'Documentation & Administrative Integrity',
     category: 'Administrative',
     weightage_percent: 15,
-    description: 'Accurate and timely patient file documentation, discharge summary completion, and statutory record keeping.',
+    description: 'Accurate and timely documentation, project reports completion, and statutory record keeping.',
   },
 ];
 

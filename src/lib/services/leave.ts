@@ -235,7 +235,7 @@ export async function applyLeave(params: {
     is_half_day: params.is_half_day,
     reason: params.reason,
     status: 'pending',
-    current_tier: 1, // Hospital 4-Tier: Tier 1 (Reporting Officer) -> Tier 2 (HOD) -> Tier 3 (Medical Superintendent) -> Tier 4 (HR/Admin)
+    current_tier: 1, // Enterprise Tier Approval: Tier 1 (Reporting Officer) -> Tier 2 (HOD) -> Tier 3 (Operations Head) -> Tier 4 (HR/Admin)
     approval_history: [],
     is_locked: false,
     reviewed_by: null,
@@ -346,8 +346,17 @@ async function getFilteredLeaveRequests(
       const emp = req.employee_id ? empMap.get(req.employee_id) : undefined;
 
       if (organizationId) {
-        const empOrg = emp?.organization_id || emp?.profile?.organization_id;
-        if (empOrg && empOrg !== organizationId && !(organizationId === 'shanti-memorial-hospital' && empOrg === 'smh')) {
+        const isSubedge = organizationId === 'subedge' || organizationId === '00000000-0000-0000-0000-000000000001';
+        const isSmh = organizationId === 'shanti-memorial-hospital' || organizationId === 'smh' || organizationId === 'chikitsa' || organizationId === 'gopal-trust';
+        const empOrg = (req as any).organization_id || emp?.organization_id || emp?.profile?.organization_id;
+
+        if (isSubedge && (empOrg !== '00000000-0000-0000-0000-000000000001' && empOrg !== 'subedge')) {
+          return;
+        }
+        if (isSmh && (empOrg !== 'shanti-memorial-hospital' && empOrg !== 'smh')) {
+          return;
+        }
+        if (!isSubedge && !isSmh && empOrg && empOrg !== organizationId) {
           return;
         }
       }
@@ -374,12 +383,63 @@ async function getFilteredLeaveRequests(
   }
 }
 
-export const HOSPITAL_LEAVE_TIERS = [
+export interface LeaveApprovalTier {
+  tier: number;
+  name: string;
+  code: string;
+  role?: string;
+}
+
+export const DEFAULT_LEAVE_TIERS: LeaveApprovalTier[] = [
   { tier: 1, name: 'Reporting Officer / Supervisor', code: 'L1' },
   { tier: 2, name: 'Immediate Head of Department (HOD)', code: 'L2' },
-  { tier: 3, name: 'Medical Superintendent / Operations Head', code: 'L3' },
+  { tier: 3, name: 'Operations Head / Vice President', code: 'L3' },
   { tier: 4, name: 'HR Head / Administration (Final Approval)', code: 'L4' },
 ];
+export const HOSPITAL_LEAVE_TIERS = DEFAULT_LEAVE_TIERS;
+
+export function resolveLeaveApprovalWorkflow(workflowSetting?: any): {
+  totalLevels: number;
+  title: string;
+  subtitle: string;
+  tiers: LeaveApprovalTier[];
+} {
+  const levels = Number(workflowSetting?.levels);
+  const clampedLevels = levels && levels >= 1 && levels <= 4 ? levels : 4;
+
+  const defaultNames: Record<number, string> = {
+    1: workflowSetting?.l1 || 'Reporting Officer / Supervisor',
+    2: workflowSetting?.l2 || (clampedLevels === 2 ? 'Head of Department / HR (Final Approval)' : 'Immediate Head of Department (HOD)'),
+    3: workflowSetting?.l3 || (clampedLevels === 3 ? 'Operations Head / HR (Final Approval)' : 'Operations Head / Vice President'),
+    4: workflowSetting?.l4 || 'HR Head / Administration (Final Approval)',
+  };
+
+  const tiers: LeaveApprovalTier[] = [];
+  for (let i = 1; i <= clampedLevels; i++) {
+    tiers.push({
+      tier: i,
+      name: defaultNames[i] || `Level ${i} Approver`,
+      code: `L${i}`,
+    });
+  }
+
+  const titles: Record<number, string> = {
+    1: 'Single-Tier Approval Workflow',
+    2: 'Two-Tier Approval Workflow',
+    3: 'Three-Tier Approval Workflow',
+    4: 'Four-Tier Approval Workflow',
+  };
+
+  const title = titles[clampedLevels] || `${clampedLevels}-Tier Approval Workflow`;
+  const subtitle = `Sequential sign-offs: ${tiers.map((t) => t.name.split('/')[0].trim()).join(' → ')}`;
+
+  return {
+    totalLevels: clampedLevels,
+    title,
+    subtitle,
+    tiers,
+  };
+}
 
 export async function processLeaveRequest(
   requestId: string,
@@ -390,6 +450,8 @@ export async function processLeaveRequest(
     approverRole?: string;
     notes?: string;
     forceFinalApproval?: boolean;
+    totalLevels?: number;
+    workflowSetting?: any;
   }
 ): Promise<LeaveProcessResponse> {
   const now = new Date().toISOString();
@@ -400,11 +462,14 @@ export async function processLeaveRequest(
 
   // Prevent modifying an already locked request without administrative intervention
   if (reqData.is_locked && !options?.forceFinalApproval) {
-    throw new Error('This leave request has completed the 4-tier approval process and is locked.');
+    throw new Error('This leave request has completed the approval process and is locked.');
   }
 
+  const workflow = resolveLeaveApprovalWorkflow(
+    options?.workflowSetting || (options?.totalLevels ? { levels: options.totalLevels } : undefined)
+  );
   const currentTier = reqData.current_tier || 1;
-  const currentTierInfo = HOSPITAL_LEAVE_TIERS.find((t) => t.tier === currentTier) || HOSPITAL_LEAVE_TIERS[0];
+  const currentTierInfo = workflow.tiers.find((t) => t.tier === currentTier) || workflow.tiers[0];
   const history = Array.isArray(reqData.approval_history) ? [...reqData.approval_history] : [];
 
   history.push({
@@ -417,10 +482,10 @@ export async function processLeaveRequest(
     notes: options?.notes || null,
   });
 
-  const isFinalTier = options?.forceFinalApproval || currentTier >= 4;
+  const isFinalTier = options?.forceFinalApproval || currentTier >= workflow.totalLevels;
 
   if (action === 'approve' && isFinalTier) {
-    // Final tier 4 approved - deduct balances and lock
+    // Final configured tier approved - deduct balances and lock
     const y = new Date(reqData.start_date).getFullYear();
     const balId = `bal_${reqData.employee_id}_${reqData.leave_type_id}_${y}`;
     const balSnap = await getDoc(doc(db, 'leave_balances', balId));
@@ -454,7 +519,7 @@ export async function processLeaveRequest(
 
     await updateDoc(doc(db, 'leave_requests', requestId), {
       status: 'approved',
-      current_tier: 5, // 5 denotes fully approved through all 4 tiers
+      current_tier: workflow.totalLevels + 1, // Marks fully approved through all configured tiers
       approval_history: history,
       is_locked: true,
       approved_by: approverName || 'HR Management',

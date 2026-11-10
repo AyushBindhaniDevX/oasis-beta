@@ -1,18 +1,29 @@
 import React, { useRef } from 'react';
-import { View, StyleSheet, Pressable, Animated, type ViewProps, type ViewStyle } from 'react-native';
+import { View, StyleSheet, Pressable, Animated, Platform, type ViewProps, type ViewStyle } from 'react-native';
 import { useTheme } from '@/hooks/use-theme';
-import { BorderRadius, Shadows } from '@/constants/theme';
+import { BorderRadius, Shadows, NotionColors } from '@/constants/theme';
 import { MotiView } from 'moti';
 
-interface CardProps extends ViewProps {
-  /**
-   * default  — surface + hairline border + soft shadow (the standard card)
-   * elevated — surface + stronger shadow, no border (floating / hero cards)
-   * outlined — surface + border, no shadow (dense lists, nested cards)
-   * flat     — surface only, no border or shadow
-   * glass    — translucent surface with border
-   */
-  variant?: 'default' | 'elevated' | 'outlined' | 'flat' | 'glass';
+export type CardVariant =
+  | 'default'
+  | 'feature'
+  | 'elevated'
+  | 'mockup'
+  | 'outlined'
+  | 'flat'
+  | 'glass'
+  | 'peach'
+  | 'rose'
+  | 'mint'
+  | 'lavender'
+  | 'sky'
+  | 'yellow'
+  | 'yellowBold'
+  | 'cream'
+  | 'featuredTier';
+
+export interface CardProps extends ViewProps {
+  variant?: CardVariant;
   padding?: number;
   radius?: number;
   animate?: boolean;
@@ -21,11 +32,22 @@ interface CardProps extends ViewProps {
   gap?: number;
 }
 
+const pastelTintMap: Partial<Record<CardVariant, string>> = {
+  peach: NotionColors.cardTintPeach,
+  rose: NotionColors.cardTintRose,
+  mint: NotionColors.cardTintMint,
+  lavender: NotionColors.cardTintLavender,
+  sky: NotionColors.cardTintSky,
+  yellow: NotionColors.cardTintYellow,
+  yellowBold: NotionColors.cardTintYellowBold,
+  cream: NotionColors.cardTintCream,
+};
+
 export function Card({
   style,
   variant = 'default',
   padding = 16,
-  radius = 20,
+  radius = BorderRadius.lg, // 12px — Notion standard
   animate = false,
   pressable = false,
   onPress,
@@ -37,33 +59,74 @@ export function Card({
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
-    Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, bounciness: 0 }).start();
+    Animated.spring(scale, { toValue: 0.98, useNativeDriver: Platform.OS !== 'web', bounciness: 0 }).start();
   };
   const handlePressOut = () => {
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true, bounciness: 0 }).start();
+    Animated.spring(scale, { toValue: 1, useNativeDriver: Platform.OS !== 'web', bounciness: 0 }).start();
   };
 
   const isGlass = variant === 'glass';
+  const isMockup = variant === 'mockup';
+  const isFeaturedTier = variant === 'featuredTier';
+  const isPastel = variant in pastelTintMap;
+
+  let backgroundColor = colors.surface;
+  let borderColor: string | undefined = colors.border;
+  let borderWidth = 1;
+  let shadowStyle: any = Shadows?.sm;
+
+  if (isPastel) {
+    backgroundColor = pastelTintMap[variant]!;
+    borderWidth = 0;
+    borderColor = undefined;
+    shadowStyle = undefined;
+  } else if (isGlass) {
+    backgroundColor = 'rgba(255,255,255,0.85)';
+    borderColor = colors.borderSoft;
+    shadowStyle = Shadows?.sm;
+  } else if (isMockup) {
+    backgroundColor = '#ffffff';
+    borderColor = colors.border;
+    shadowStyle = Shadows?.lg; // Level 3 mockup depth
+  } else if (isFeaturedTier) {
+    backgroundColor = colors.surfaceMuted;
+    borderColor = NotionColors.primary;
+    borderWidth = 2;
+    shadowStyle = Shadows?.md;
+  } else if (variant === 'elevated') {
+    backgroundColor = colors.surface;
+    borderColor = colors.border;
+    shadowStyle = Shadows?.md;
+  } else if (variant === 'flat') {
+    backgroundColor = colors.surface;
+    borderWidth = 0;
+    borderColor = undefined;
+    shadowStyle = undefined;
+  } else if (variant === 'outlined') {
+    backgroundColor = 'transparent';
+    borderColor = colors.border;
+    borderWidth = 1;
+    shadowStyle = undefined;
+  }
 
   const cardStyle: ViewStyle[] = [
     {
-      backgroundColor: isGlass ? 'rgba(255,255,255,0.08)' : colors.surface,
+      backgroundColor,
       borderRadius: radius,
       padding,
-      borderColor: isGlass ? 'rgba(255,255,255,0.15)' : colors.border,
-      borderWidth: variant === 'default' || variant === 'outlined' || isGlass ? 1 : 0,
+      borderColor,
+      borderWidth,
       gap,
     },
-    variant === 'default' && (Shadows.sm as ViewStyle),
-    variant === 'elevated' && (Shadows.md as ViewStyle),
+    shadowStyle,
     style as ViewStyle,
   ].filter(Boolean) as ViewStyle[];
 
   const content = animate ? (
     <MotiView
-      from={{ opacity: 0, translateY: 8 }}
+      from={{ opacity: 0, translateY: 6 }}
       animate={{ opacity: 1, translateY: 0 }}
-      transition={{ type: 'timing', duration: 280 }}
+      transition={{ type: 'timing', duration: 240 }}
       style={cardStyle as any}
       {...(props as any)}
     >
@@ -77,7 +140,7 @@ export function Card({
 
   if (pressable) {
     return (
-      <Animated.View style={{ transform: [{ scale }] }}>
+      <Animated.View style={[{ transform: [{ scale }] }, Platform.select({ web: { cursor: 'pointer' } as any })]}>
         <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
           {content}
         </Pressable>
@@ -89,6 +152,5 @@ export function Card({
 }
 
 const styles = StyleSheet.create({
-  // retained for backwards-compat imports; styling now lives inline for token access
-  card: { borderRadius: BorderRadius.xl },
+  card: { borderRadius: BorderRadius.lg },
 });

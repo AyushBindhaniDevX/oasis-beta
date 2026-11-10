@@ -12,9 +12,18 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import {
+  CraftButton,
+  CraftCard,
+  CraftHeader,
+  Typography,
+  T,
+  S,
+} from '@/components/ui/CraftKit';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
+import { BorderRadius, NotionColors, BrandShadow, Shadows } from '@/constants/theme';
 import { Badge } from '@/components/ui/Badge';
 import { LoadingState } from '@/components/ui/States';
 import { getPayslips } from '@/lib/services/payroll';
@@ -112,61 +121,64 @@ export default function PayslipsScreen() {
   // ─────────────────────────────────────────────────────────────────────────────
   if (!isDesktop) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#004D47' }}>
-        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-        <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
-          {/* Top bounce underlay matching header card */}
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: '#004D47' }} />
+      <View style={{ flex: 1, backgroundColor: T.canvas }}>
+        <StatusBar barStyle="dark-content" />
+        <CraftHeader
+          title="Salary & Payslips"
+          subtitle={`Current cycle: ${monthName} ${yearStr}`}
+          right={
+            latest ? (
+              <CraftButton
+                title="Download"
+                variant="secondary"
+                size="sm"
+                icon={<Download size={13} color={T.ink} />}
+                loading={downloadingId === latest.id}
+                onPress={() => handleDownload(latest)}
+              />
+            ) : undefined
+          }
+        />
 
-          <ScrollView
-            style={mStyles.root}
-            contentContainerStyle={mStyles.content}
-            contentInsetAdjustmentBehavior="never"
-            automaticallyAdjustContentInsets={false}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* ── Hero Salary Banner ── */}
-            <View style={[mStyles.heroBanner, { paddingTop: topPadding + 10 }]}>
-              <Text style={mStyles.heroLabel}>OFFICIAL SALARY STATEMENT</Text>
-              <Text style={mStyles.heroPeriod}>{monthName} {yearStr}</Text>
-
-            {/* Big net salary display */}
-            <View style={mStyles.salaryDisplay}>
-              <Text style={mStyles.salaryLabel}>Net Take Home</Text>
-              <Text style={mStyles.salaryAmount}>{formatCurrency(netPay)}</Text>
-              <View style={mStyles.salaryStatusRow}>
-                <CheckCircle2 size={14} color="#34D399" />
-                <Text style={mStyles.salaryStatusText}>Verified & Disbursed</Text>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 100 }}
+          contentInsetAdjustmentBehavior="never"
+          automaticallyAdjustContentInsets={false}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Latest Salary Card ── */}
+          <CraftCard variant="pastel" pastelTint={T.periwinkleSoft} style={{ marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={[Typography.eyebrow, { color: T.periwinkleDeep }]}>OFFICIAL STATEMENT • {monthName.toUpperCase()} {yearStr}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#D8F3E5', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                <CheckCircle2 size={12} color={T.forest} />
+                <Text style={{ fontSize: 11, fontWeight: '700', color: T.forest }}>Disbursed</Text>
               </View>
             </View>
 
-            {/* 3 Metric Chips */}
-            <View style={mStyles.metricRow}>
-              <View style={mStyles.metricChip}>
-                <ArrowUpRight size={14} color="#34D399" />
-                <View>
-                  <Text style={mStyles.metricChipLabel}>Gross Salary</Text>
-                  <Text style={mStyles.metricChipValue}>{formatCurrency(grossEarnings)}</Text>
-                </View>
+            <View style={{ marginVertical: 6 }}>
+              <Text style={{ fontSize: 12, color: T.inkMuted }}>Net Take Home</Text>
+              <Text style={[Typography.displayLg, { color: T.ink, marginTop: 2 }]}>{formatCurrency(netPay)}</Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.06)', paddingTop: 10, justifyContent: 'space-between' }}>
+              <View>
+                <Text style={{ fontSize: 11, color: T.inkMuted }}>Gross</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: T.ink, marginTop: 2 }}>{formatCurrency(grossEarnings)}</Text>
               </View>
-              <View style={mStyles.metricDivider} />
-              <View style={mStyles.metricChip}>
-                <ArrowDownRight size={14} color="#F87171" />
-                <View>
-                  <Text style={mStyles.metricChipLabel}>Deductions</Text>
-                  <Text style={[mStyles.metricChipValue, { color: '#F87171' }]}>-{formatCurrency(deductions)}</Text>
-                </View>
+              <View style={{ width: 1, backgroundColor: 'rgba(0,0,0,0.06)' }} />
+              <View>
+                <Text style={{ fontSize: 11, color: T.inkMuted }}>Deductions</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#DC2626', marginTop: 2 }}>-{formatCurrency(deductions)}</Text>
               </View>
-              <View style={mStyles.metricDivider} />
-              <View style={mStyles.metricChip}>
-                <Banknote size={14} color="#60A5FA" />
-                <View>
-                  <Text style={mStyles.metricChipLabel}>Basic Pay</Text>
-                  <Text style={mStyles.metricChipValue}>{formatCurrency(latest?.payroll?.basic_salary || 0)}</Text>
-                </View>
+              <View style={{ width: 1, backgroundColor: 'rgba(0,0,0,0.06)' }} />
+              <View>
+                <Text style={{ fontSize: 11, color: T.inkMuted }}>Basic Pay</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: T.ink, marginTop: 2 }}>{formatCurrency(latest?.payroll?.basic_salary || 0)}</Text>
               </View>
             </View>
-          </View>
+          </CraftCard>
 
         {/* ── Download Latest Button ─────────────────────────────────────── */}
         {latest && (
@@ -320,50 +332,35 @@ export default function PayslipsScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
-  </View>
-);
+  );
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // DESKTOP LAYOUT (unchanged)
+  // DESKTOP LAYOUT
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={[styles.content, styles.contentDesktop]}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Hero Header */}
-      <Animated.View entering={FadeInDown.duration(350).springify()}>
-        <View style={[styles.heroBar, { backgroundColor: '#0b1c30' }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.heroSubHeader}>OFFICIAL SALARY STATEMENTS</Text>
-            <Text style={styles.heroTitle}>Payroll & Compensation</Text>
-            <Text style={styles.heroDate}>
-              Current Pay Cycle: {monthName} {yearStr}
-            </Text>
-          </View>
-          {latest && (
-            <TouchableOpacity
-              style={styles.heroDownloadBtn}
+    <View style={{ flex: 1, backgroundColor: T.canvas }}>
+      <CraftHeader
+        title="Payroll & Compensation"
+        subtitle={`Current Pay Cycle: ${monthName} ${yearStr}`}
+        right={
+          latest ? (
+            <CraftButton
+              title="Download Latest"
+              variant="primary"
+              icon={<Download size={16} color="#FFF" />}
+              loading={downloadingId === latest.id}
               onPress={() => handleDownload(latest)}
-              activeOpacity={0.85}
-              disabled={downloadingId === latest.id}
-            >
-              {downloadingId === latest.id ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <>
-                  <Download size={16} color="#FFF" />
-                  <Text style={styles.heroDownloadText}>Download Latest</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
-      </Animated.View>
-
-      <View style={styles.dashboardGrid}>
+            />
+          ) : undefined
+        }
+      />
+      <ScrollView
+        style={[styles.container, { backgroundColor: T.canvas }]}
+        contentContainerStyle={[styles.content, styles.contentDesktop]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.dashboardGrid}>
         {/* Main Column */}
         <View style={styles.mainCol}>
           {/* Summary Card */}
@@ -525,7 +522,8 @@ export default function PayslipsScreen() {
         </View>
       </View>
     </ScrollView>
-  );
+  </View>
+);
 }
 
 // ─── MOBILE STYLES ─────────────────────────────────────────────────────────────

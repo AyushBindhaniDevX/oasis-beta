@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import {
+  CraftButton,
+  CraftCard,
+  Typography,
+  T,
+  S,
+} from '@/components/ui/CraftKit';
 import { useTheme } from '@/hooks/use-theme';
-import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LoadingState } from '@/components/ui/States';
 import { db } from '@/lib/firebase';
@@ -70,13 +75,18 @@ export default function LeaveDetailScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <Button title="← Back" onPress={() => { if (router.canGoBack()) if (router.canGoBack()) { router.back(); } else { router.replace('/'); } else router.replace('/'); }} variant="ghost" size="sm" />
+        <CraftButton
+          title="← Back"
+          onPress={() => { if (router.canGoBack()) { router.back(); } else { router.replace('/'); } }}
+          variant="ghost"
+          size="sm"
+        />
         <Text style={[styles.title, { color: colors.text }]}>Leave Details</Text>
         <View style={{ width: 60 }} />
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16 }}>
-        <Card>
+        <CraftCard variant="base">
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
             <Text style={[styles.typeName, { color: colors.text }]}>{request.leave_type?.name}</Text>
             <Badge label={request.status} variant={statusVariant(request.status)} />
@@ -90,14 +100,14 @@ export default function LeaveDetailScreen() {
           {request.reviewed_at && <Row label="Reviewed On" value={formatDate(request.reviewed_at)} colors={colors} />}
 
           {request.status === 'pending' && (
-            <Button
+            <CraftButton
               title="Cancel Request"
               onPress={() => setShowCancel(true)}
               variant="danger"
               style={{ marginTop: 16 }}
             />
           )}
-        </Card>
+        </CraftCard>
       </ScrollView>
 
       <ConfirmDialog

@@ -2,58 +2,140 @@ import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/use-theme';
 import { Button } from './Button';
+import { BorderRadius, NotionColors } from '@/constants/theme';
 
-export function EmptyState({ title, message, icon, illustration, fullScreen }: {
+export function EmptyState({
+  title,
+  message,
+  icon,
+  illustration,
+  fullScreen,
+  actionLabel,
+  onAction,
+}: {
   title: string;
   message?: string;
   icon?: React.ReactNode;
-  /** Optional illustration rendered above the icon */
   illustration?: React.ReactNode;
-  /** When true, fills entire viewport height instead of minHeight */
   fullScreen?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
 }) {
   const colors = useTheme();
   return (
     <View style={[styles.center, fullScreen && styles.fullScreen]}>
       {illustration && <View style={styles.illustrationWrap}>{illustration}</View>}
-      {icon && <View style={styles.iconWrap}>{icon}</View>}
-      <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
-      {message && <Text style={[styles.message, { color: colors.textSecondary }]}>{message}</Text>}
+      {icon && (
+        <View
+          style={[
+            styles.iconWrap,
+            { backgroundColor: NotionColors.cardTintLavender },
+          ]}
+        >
+          {icon}
+        </View>
+      )}
+      <Text style={[styles.title, { color: NotionColors.ink }]}>{title}</Text>
+      {message && <Text style={[styles.message, { color: NotionColors.slate }]}>{message}</Text>}
+      {actionLabel && onAction && (
+        <Button
+          title={actionLabel}
+          onPress={onAction}
+          variant="primary"
+          size="sm"
+          style={{ marginTop: 16 }}
+        />
+      )}
     </View>
   );
 }
 
-export function LoadingState({ message = 'Loading...', fullScreen }: {
+export function LoadingState({
+  message = 'Loading...',
+  fullScreen,
+}: {
   message?: string;
-  /** When true, fills entire viewport height instead of minHeight */
   fullScreen?: boolean;
 }) {
   const colors = useTheme();
   return (
     <View style={[styles.center, fullScreen && styles.fullScreen]}>
-      <ActivityIndicator size="large" color={colors.primary} />
-      <Text style={[styles.message, { color: colors.textSecondary, marginTop: 12 }]}>{message}</Text>
+      <ActivityIndicator size="small" color={NotionColors.primary} />
+      <Text style={[styles.message, { color: NotionColors.slate, marginTop: 12 }]}>
+        {message}
+      </Text>
     </View>
   );
 }
 
-export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+export function ErrorState({
+  title = 'Something went wrong',
+  message,
+  onRetry,
+}: {
+  title?: string;
+  message: string;
+  onRetry?: () => void;
+}) {
   const colors = useTheme();
   return (
     <View style={styles.center}>
-      <Text style={[styles.title, { color: colors.danger }]}>Error</Text>
-      <Text style={[styles.message, { color: colors.textSecondary }]}>{message}</Text>
-      {onRetry && <Button title="Retry" onPress={onRetry} variant="outline" size="sm" style={{ marginTop: 12 }} />}
+      <View
+        style={[
+          styles.iconWrap,
+          { backgroundColor: NotionColors.cardTintRose },
+        ]}
+      >
+        <Text style={{ fontSize: 20 }}>⚠️</Text>
+      </View>
+      <Text style={[styles.title, { color: NotionColors.semanticError }]}>{title}</Text>
+      <Text style={[styles.message, { color: NotionColors.slate }]}>{message}</Text>
+      {onRetry && (
+        <Button
+          title="Try Again"
+          onPress={onRetry}
+          variant="secondary"
+          size="sm"
+          style={{ marginTop: 14 }}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, minHeight: 200 },
-  fullScreen: { minHeight: undefined },
-  iconWrap: { marginBottom: 16 },
-  illustrationWrap: { marginBottom: 20 },
-  title: { fontSize: 18, fontWeight: '600', textAlign: 'center' },
-  message: { fontSize: 14, textAlign: 'center', marginTop: 8, lineHeight: 20 },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    minHeight: 200,
+  },
+  fullScreen: {
+    minHeight: undefined,
+  },
+  iconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.md, // 8px Notion
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  illustrationWrap: {
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: -0.2,
+  },
+  message: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 18,
+    maxWidth: 320,
+  },
 });
-

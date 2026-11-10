@@ -6,12 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Modal,
   RefreshControl,
   useWindowDimensions,
   Image,
   ActivityIndicator,
 } from 'react-native';
+import { Modal } from '@/components/ui/Modal';
 import { router } from 'expo-router';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { useTheme } from '@/hooks/use-theme';
@@ -1217,40 +1217,24 @@ export default function RecruitmentWorkspaceScreen() {
         {/* CANDIDATE 360 MODAL */}
         {/* ======================================================== */}
         {selectedCandidate360 && (
-          <Modal visible={!!selectedCandidate360} animationType="slide" transparent>
-            <View style={styles.modalOverlay}>
-              <View style={styles.candidate360Modal}>
-                <View style={styles.c360Header}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                    <View style={styles.c360Avatar}>
-                      <Text style={styles.c360AvatarText}>{selectedCandidate360.full_name[0]}</Text>
-                    </View>
-                    <View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={styles.c360Name}>{selectedCandidate360.full_name}</Text>
-                        <View style={styles.stageTag}>
-                          <Text style={styles.stageTagText}>{selectedCandidate360.stage.toUpperCase()}</Text>
-                        </View>
-                      </View>
-                      <Text style={styles.c360Sub}>
-                        {selectedCandidate360.current_company} · {selectedCandidate360.experience_years} Years Exp · Source: {selectedCandidate360.source || 'Direct'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <TouchableOpacity
-                      onPress={() => setShowArchivePoolModal(true)}
-                      style={styles.archiveToPoolBtn}
-                    >
-                      <Archive size={14} color="#8B5CF6" />
-                      <Text style={styles.archiveToPoolBtnText}>Talent Pool</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setSelectedCandidate360(null)} style={{ padding: 6 }}>
-                      <X size={22} color="#64748B" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
+          <Modal
+            visible={!!selectedCandidate360}
+            onClose={() => setSelectedCandidate360(null)}
+            title={selectedCandidate360.full_name}
+            subtitle={`${selectedCandidate360.current_company} · ${selectedCandidate360.experience_years} Years Exp · Source: ${selectedCandidate360.source || 'Direct'}`}
+            badge={{ text: selectedCandidate360.stage.toUpperCase(), variant: 'primary' }}
+            headerRight={
+              <TouchableOpacity
+                onPress={() => setShowArchivePoolModal(true)}
+                style={styles.archiveToPoolBtn}
+              >
+                <Archive size={14} color="#8B5CF6" />
+                <Text style={styles.archiveToPoolBtnText}>Talent Pool</Text>
+              </TouchableOpacity>
+            }
+            size="xl"
+          >
+            <View>
 
                 <ScrollView style={{ padding: 24 }}>
                   {/* AI Compatibility Breakdown */}
@@ -1321,300 +1305,300 @@ export default function RecruitmentWorkspaceScreen() {
                   </View>
                 </ScrollView>
               </View>
-            </View>
           </Modal>
         )}
 
         {/* ======================================================== */}
         {/* BULK REJECTION MODAL */}
         {/* ======================================================== */}
-        <Modal visible={showBulkRejectModal} animationType="fade" transparent>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalSmallCard}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Bulk Reject Candidates</Text>
-                <TouchableOpacity onPress={() => setShowBulkRejectModal(false)}>
-                  <X size={20} color="#64748B" />
-                </TouchableOpacity>
-              </View>
-
-              <View style={{ padding: 20 }}>
-                <Text style={styles.label}>Select Official Reason Code</Text>
-                <ScrollView style={{ maxHeight: 150 }} showsVerticalScrollIndicator={false}>
-                  {REJECTION_REASONS.map((r) => (
-                    <TouchableOpacity
-                      key={r.code}
-                      onPress={() => setBulkRejectReason(r.code)}
-                      style={[styles.reasonOption, bulkRejectReason === r.code && styles.reasonOptionActive]}
-                    >
-                      <Text style={[styles.reasonText, bulkRejectReason === r.code && styles.reasonTextActive]}>
-                        {r.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-
-                <Text style={[styles.label, { marginTop: 12 }]}>Custom Feedback Note (Optional)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Profile will be maintained in Talent Pool for future roles."
-                  value={bulkRejectNotes}
-                  onChangeText={setBulkRejectNotes}
-                />
-
-                <TouchableOpacity
-                  onPress={() => setBulkSendRejectionEmail(!bulkSendRejectionEmail)}
-                  style={styles.checkboxRow}
-                >
-                  {bulkSendRejectionEmail ? <CheckSquare size={16} color="#0D7377" /> : <Square size={16} color="#94A3B8" />}
-                  <Text style={styles.checkboxLabel}>Dispatch courteous rejection email via Resend</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={handleBulkRejectSubmit}
-                  style={[styles.modalSubmitBtn, { backgroundColor: '#DC2626', marginTop: 16 }]}
-                >
-                  <Text style={styles.modalSubmitText}>Confirm Rejection ({selectedCandidateIds.length} Candidates)</Text>
-                </TouchableOpacity>
-              </View>
+        <Modal
+          visible={showBulkRejectModal}
+          onClose={() => setShowBulkRejectModal(false)}
+          title="Bulk Reject Candidates"
+          subtitle={`Disqualify ${selectedCandidateIds.length} selected candidates`}
+          icon={<AlertCircle size={20} color="#DC2626" />}
+          iconBgColor="#FEF2F2"
+          size="sm"
+        >
+          <View style={{ gap: 14 }}>
+            <View>
+              <Text style={styles.label}>Select Official Reason Code</Text>
+              <ScrollView style={{ maxHeight: 150 }} showsVerticalScrollIndicator={false}>
+                {REJECTION_REASONS.map((r) => (
+                  <TouchableOpacity
+                    key={r.code}
+                    onPress={() => setBulkRejectReason(r.code)}
+                    style={[styles.reasonOption, bulkRejectReason === r.code && styles.reasonOptionActive]}
+                  >
+                    <Text style={[styles.reasonText, bulkRejectReason === r.code && styles.reasonTextActive]}>
+                      {r.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
+
+            <View>
+              <Text style={styles.label}>Custom Feedback Note (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Profile will be maintained in Talent Pool for future roles."
+                value={bulkRejectNotes}
+                onChangeText={setBulkRejectNotes}
+              />
+            </View>
+
+            <TouchableOpacity
+              onPress={() => setBulkSendRejectionEmail(!bulkSendRejectionEmail)}
+              style={styles.checkboxRow}
+            >
+              {bulkSendRejectionEmail ? <CheckSquare size={16} color="#0D7377" /> : <Square size={16} color="#94A3B8" />}
+              <Text style={styles.checkboxLabel}>Dispatch courteous rejection email via Resend</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleBulkRejectSubmit}
+              style={[styles.modalSubmitBtn, { backgroundColor: '#DC2626', marginTop: 8 }]}
+            >
+              <Text style={styles.modalSubmitText}>Confirm Rejection ({selectedCandidateIds.length} Candidates)</Text>
+            </TouchableOpacity>
           </View>
         </Modal>
 
         {/* ======================================================== */}
         {/* BULK NOTIFY MODAL */}
         {/* ======================================================== */}
-        <Modal visible={showBulkNotifyModal} animationType="fade" transparent>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalSmallCard}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Batch Resend Email Notification</Text>
-                <TouchableOpacity onPress={() => setShowBulkNotifyModal(false)}>
-                  <X size={20} color="#64748B" />
-                </TouchableOpacity>
-              </View>
-
-              <View style={{ padding: 20 }}>
-                <Text style={styles.label}>Email Subject</Text>
-                <TextInput
-                  style={styles.input}
-                  value={bulkNotifySubject}
-                  onChangeText={setBulkNotifySubject}
-                />
-
-                <Text style={[styles.label, { marginTop: 12 }]}>Notification Body Message</Text>
-                <TextInput
-                  style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
-                  multiline
-                  value={bulkNotifyBody}
-                  onChangeText={setBulkNotifyBody}
-                />
-
-                <TouchableOpacity
-                  onPress={handleBulkNotifySubmit}
-                  style={[styles.modalSubmitBtn, { marginTop: 16 }]}
-                >
-                  <Send size={14} color="#FFFFFF" />
-                  <Text style={styles.modalSubmitText}>Dispatch to {selectedCandidateIds.length} Candidates</Text>
-                </TouchableOpacity>
-              </View>
+        <Modal
+          visible={showBulkNotifyModal}
+          onClose={() => setShowBulkNotifyModal(false)}
+          title="Batch Resend Email Notification"
+          subtitle={`Dispatch email updates to ${selectedCandidateIds.length} applicants`}
+          icon={<Send size={20} color="#0D7377" />}
+          iconBgColor="#F0F7F7"
+          size="sm"
+        >
+          <View style={{ gap: 14 }}>
+            <View>
+              <Text style={styles.label}>Email Subject</Text>
+              <TextInput
+                style={styles.input}
+                value={bulkNotifySubject}
+                onChangeText={setBulkNotifySubject}
+              />
             </View>
+
+            <View>
+              <Text style={styles.label}>Notification Body Message</Text>
+              <TextInput
+                style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
+                multiline
+                value={bulkNotifyBody}
+                onChangeText={setBulkNotifyBody}
+              />
+            </View>
+
+            <TouchableOpacity
+              onPress={handleBulkNotifySubmit}
+              style={[styles.modalSubmitBtn, { marginTop: 8 }]}
+            >
+              <Send size={14} color="#FFFFFF" />
+              <Text style={styles.modalSubmitText}>Dispatch to {selectedCandidateIds.length} Candidates</Text>
+            </TouchableOpacity>
           </View>
         </Modal>
 
         {/* ======================================================== */}
         {/* ARCHIVE TO TALENT POOL MODAL */}
         {/* ======================================================== */}
-        <Modal visible={showArchivePoolModal} animationType="fade" transparent>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalSmallCard}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Archive Candidate to Talent Pool</Text>
-                <TouchableOpacity onPress={() => setShowArchivePoolModal(false)}>
-                  <X size={20} color="#64748B" />
-                </TouchableOpacity>
-              </View>
-
-              <View style={{ padding: 20 }}>
-                <Text style={styles.label}>Skill & Domain Tags (Comma Separated)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={talentPoolTagInput}
-                  onChangeText={setTalentPoolTagInput}
-                  placeholder="e.g. Silver Medalist, Distributed Systems, Tech Lead"
-                />
-
-                <TouchableOpacity
-                  onPress={() => setIsSilverMedalistCheck(!isSilverMedalistCheck)}
-                  style={styles.checkboxRow}
-                >
-                  {isSilverMedalistCheck ? <CheckSquare size={16} color="#0D7377" /> : <Square size={16} color="#94A3B8" />}
-                  <Text style={styles.checkboxLabel}>Mark as High-Priority "Silver Medalist"</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={handleArchiveToPoolSubmit}
-                  style={[styles.modalSubmitBtn, { backgroundColor: '#8B5CF6', marginTop: 16 }]}
-                >
-                  <Archive size={14} color="#FFFFFF" />
-                  <Text style={styles.modalSubmitText}>Save to Talent Pool</Text>
-                </TouchableOpacity>
-              </View>
+        <Modal
+          visible={showArchivePoolModal}
+          onClose={() => setShowArchivePoolModal(false)}
+          title="Archive Candidate to Talent Pool"
+          subtitle="Tag candidate for future open roles"
+          icon={<Archive size={20} color="#8B5CF6" />}
+          iconBgColor="#F3EEFE"
+          size="sm"
+        >
+          <View style={{ gap: 14 }}>
+            <View>
+              <Text style={styles.label}>Skill & Domain Tags (Comma Separated)</Text>
+              <TextInput
+                style={styles.input}
+                value={talentPoolTagInput}
+                onChangeText={setTalentPoolTagInput}
+                placeholder="e.g. Silver Medalist, Distributed Systems, Tech Lead"
+              />
             </View>
+
+            <TouchableOpacity
+              onPress={() => setIsSilverMedalistCheck(!isSilverMedalistCheck)}
+              style={styles.checkboxRow}
+            >
+              {isSilverMedalistCheck ? <CheckSquare size={16} color="#0D7377" /> : <Square size={16} color="#94A3B8" />}
+              <Text style={styles.checkboxLabel}>Mark as High-Priority "Silver Medalist"</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleArchiveToPoolSubmit}
+              style={[styles.modalSubmitBtn, { backgroundColor: '#8B5CF6', marginTop: 8 }]}
+            >
+              <Archive size={14} color="#FFFFFF" />
+              <Text style={styles.modalSubmitText}>Save to Talent Pool</Text>
+            </TouchableOpacity>
           </View>
         </Modal>
 
         {/* ======================================================== */}
         {/* POST REQUISITION MODAL */}
         {/* ======================================================== */}
-        <Modal visible={showJobModal} animationType="slide" transparent>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Create New Job Requisition</Text>
-                <TouchableOpacity onPress={() => setShowJobModal(false)}>
-                  <X size={20} color="#64748B" />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView style={{ padding: 20 }}>
-                <Text style={styles.label}>Position Title *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Lead Distributed Backend Engineer"
-                  value={newJobTitle}
-                  onChangeText={setNewJobTitle}
-                />
-
-                <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Department</Text>
-                    <TextInput style={styles.input} value={newJobDept} onChangeText={setNewJobDept} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Location / Work Mode</Text>
-                    <TextInput style={styles.input} value={newJobLoc} onChangeText={setNewJobLoc} />
-                  </View>
-                </View>
-
-                <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Employment Type</Text>
-                    <TextInput style={styles.input} value={newJobType} onChangeText={(t: any) => setNewJobType(t)} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Annual Budget CTC</Text>
-                    <TextInput style={styles.input} value={newJobSalary} onChangeText={setNewJobSalary} />
-                  </View>
-                </View>
-
-                <Text style={[styles.label, { marginTop: 10 }]}>Required Skills (Comma separated)</Text>
-                <TextInput style={styles.input} value={newJobSkills} onChangeText={setNewJobSkills} />
-
-                <Text style={[styles.label, { marginTop: 10 }]}>Job Description & Scope</Text>
-                <TextInput
-                  style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
-                  multiline
-                  value={newJobDesc}
-                  onChangeText={setNewJobDesc}
-                />
-
-                <TouchableOpacity onPress={handlePostJob} style={[styles.modalSubmitBtn, { marginTop: 20 }]}>
-                  <Text style={styles.modalSubmitText}>Publish Requisition to All Portals</Text>
-                </TouchableOpacity>
-              </ScrollView>
+        <Modal
+          visible={showJobModal}
+          onClose={() => setShowJobModal(false)}
+          title="Create New Job Requisition"
+          subtitle="Publish open role to recruitment board"
+          icon={<Briefcase size={20} color="#0D7377" />}
+          size="md"
+        >
+          <View style={{ gap: 12 }}>
+            <View>
+              <Text style={styles.label}>Position Title *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Lead Distributed Backend Engineer"
+                value={newJobTitle}
+                onChangeText={setNewJobTitle}
+              />
             </View>
+
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Department</Text>
+                <TextInput style={styles.input} value={newJobDept} onChangeText={setNewJobDept} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Location / Work Mode</Text>
+                <TextInput style={styles.input} value={newJobLoc} onChangeText={setNewJobLoc} />
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Employment Type</Text>
+                <TextInput style={styles.input} value={newJobType} onChangeText={(t: any) => setNewJobType(t)} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Annual Budget CTC</Text>
+                <TextInput style={styles.input} value={newJobSalary} onChangeText={setNewJobSalary} />
+              </View>
+            </View>
+
+            <View>
+              <Text style={styles.label}>Required Skills (Comma separated)</Text>
+              <TextInput style={styles.input} value={newJobSkills} onChangeText={setNewJobSkills} />
+            </View>
+
+            <View>
+              <Text style={styles.label}>Job Description & Scope</Text>
+              <TextInput
+                style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+                multiline
+                value={newJobDesc}
+                onChangeText={setNewJobDesc}
+              />
+            </View>
+
+            <TouchableOpacity onPress={handlePostJob} style={[styles.modalSubmitBtn, { marginTop: 8 }]}>
+              <Text style={styles.modalSubmitText}>Publish Requisition to All Portals</Text>
+            </TouchableOpacity>
           </View>
         </Modal>
 
         {/* ======================================================== */}
         {/* NEW CUSTOM PIPELINE MODAL */}
         {/* ======================================================== */}
-        <Modal visible={showPipelineModal} animationType="slide" transparent>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalSmallCard}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Create New Custom Pipeline</Text>
-                <TouchableOpacity onPress={() => setShowPipelineModal(false)}>
-                  <X size={20} color="#64748B" />
-                </TouchableOpacity>
-              </View>
-
-              <View style={{ padding: 20 }}>
-                <Text style={styles.label}>Pipeline Track Name *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Executive & Leadership Track"
-                  value={newPipeName}
-                  onChangeText={setNewPipeName}
-                />
-
-                <Text style={[styles.label, { marginTop: 12 }]}>Department</Text>
-                <TextInput
-                  style={styles.input}
-                  value={newPipeDept}
-                  onChangeText={setNewPipeDept}
-                />
-
-                <TouchableOpacity onPress={handleCreatePipelineSubmit} style={[styles.modalSubmitBtn, { marginTop: 20 }]}>
-                  <Text style={styles.modalSubmitText}>Create Custom Track</Text>
-                </TouchableOpacity>
-              </View>
+        <Modal
+          visible={showPipelineModal}
+          onClose={() => setShowPipelineModal(false)}
+          title="Create New Custom Pipeline"
+          subtitle="Define hiring stages and department tracks"
+          icon={<Layers size={20} color="#0D7377" />}
+          size="sm"
+        >
+          <View style={{ gap: 14 }}>
+            <View>
+              <Text style={styles.label}>Pipeline Track Name *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Executive & Leadership Track"
+                value={newPipeName}
+                onChangeText={setNewPipeName}
+              />
             </View>
+
+            <View>
+              <Text style={styles.label}>Department</Text>
+              <TextInput
+                style={styles.input}
+                value={newPipeDept}
+                onChangeText={setNewPipeDept}
+              />
+            </View>
+
+            <TouchableOpacity onPress={handleCreatePipelineSubmit} style={[styles.modalSubmitBtn, { marginTop: 8 }]}>
+              <Text style={styles.modalSubmitText}>Create Custom Track</Text>
+            </TouchableOpacity>
           </View>
         </Modal>
 
         {/* ======================================================== */}
         {/* ADD STAGE MODAL */}
         {/* ======================================================== */}
-        <Modal visible={showAddStageModal} animationType="slide" transparent>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalSmallCard}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Add Custom Stage to Track</Text>
-                <TouchableOpacity onPress={() => setShowAddStageModal(false)}>
-                  <X size={20} color="#64748B" />
-                </TouchableOpacity>
-              </View>
+        <Modal
+          visible={showAddStageModal}
+          onClose={() => setShowAddStageModal(false)}
+          title="Add Custom Stage to Track"
+          subtitle="Configure stage SLA and evaluation criteria"
+          icon={<Plus size={20} color="#0D7377" />}
+          size="sm"
+        >
+          <View style={{ gap: 14 }}>
+            <View>
+              <Text style={styles.label}>Stage Name *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Live Coding Concurrency Test"
+                value={newStageName}
+                onChangeText={setNewStageName}
+              />
+            </View>
 
-              <View style={{ padding: 20 }}>
-                <Text style={styles.label}>Stage Name *</Text>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>SLA Target (Days)</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="e.g. Live Coding Concurrency Test"
-                  value={newStageName}
-                  onChangeText={setNewStageName}
+                  value={newStageSLA}
+                  onChangeText={setNewStageSLA}
+                  keyboardType="numeric"
                 />
-
-                <View style={{ flexDirection: 'row', gap: 12, marginTop: 10 }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>SLA Target (Days)</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={newStageSLA}
-                      onChangeText={setNewStageSLA}
-                      keyboardType="numeric"
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Stage Color Hex</Text>
-                    <TextInput style={styles.input} value={newStageColor} onChangeText={setNewStageColor} />
-                  </View>
-                </View>
-
-                <TouchableOpacity
-                  onPress={() => setNewStageScorecardReq(!newStageScorecardReq)}
-                  style={styles.checkboxRow}
-                >
-                  {newStageScorecardReq ? <CheckSquare size={16} color="#0D7377" /> : <Square size={16} color="#94A3B8" />}
-                  <Text style={styles.checkboxLabel}>Require Mandatory Interview Scorecard</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={handleAddStageSubmit} style={[styles.modalSubmitBtn, { marginTop: 20 }]}>
-                  <Text style={styles.modalSubmitText}>Add Stage</Text>
-                </TouchableOpacity>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Stage Color Hex</Text>
+                <TextInput style={styles.input} value={newStageColor} onChangeText={setNewStageColor} />
               </View>
             </View>
+
+            <TouchableOpacity
+              onPress={() => setNewStageScorecardReq(!newStageScorecardReq)}
+              style={styles.checkboxRow}
+            >
+              {newStageScorecardReq ? <CheckSquare size={16} color="#0D7377" /> : <Square size={16} color="#94A3B8" />}
+              <Text style={styles.checkboxLabel}>Require Mandatory Interview Scorecard</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={handleAddStageSubmit} style={[styles.modalSubmitBtn, { marginTop: 8 }]}>
+              <Text style={styles.modalSubmitText}>Add Stage</Text>
+            </TouchableOpacity>
           </View>
         </Modal>
       </View>

@@ -5,9 +5,18 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+import {
+  CraftButton,
+  CraftCard,
+  CraftHeader,
+  Typography,
+  T,
+  S,
+} from '@/components/ui/CraftKit';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
+import { BorderRadius, NotionColors, BrandShadow, Shadows } from '@/constants/theme';
 import { Badge } from '@/components/ui/Badge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LoadingState } from '@/components/ui/States';
@@ -29,7 +38,7 @@ const stripEmoji = (s: string) =>
 
 function getLeaveIcon(name: string, size = 20) {
   const n = name.toLowerCase();
-  const color = '#006a61';
+  const color = NotionColors.primary;
   if (n.includes('annual') || n.includes('vacation') || n.includes('earned')) return <Plane size={size} color={color} />;
   if (n.includes('sick') || n.includes('medical')) return <BriefcaseMedical size={size} color={color} />;
   if (n.includes('casual') || n.includes('personal') || n.includes('comp') || n.includes('cme') || n.includes('on-call')) return <Coffee size={size} color={color} />;
@@ -118,66 +127,76 @@ export default function LeaveScreen() {
   // ─────────────────────────────────────────────────────────────────────────────
   if (!isDesktop) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.primaryDark }}>
-        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-        <View style={{ flex: 1, backgroundColor: colors.background }}>
-          {/* Top bounce background underlay */}
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: colors.primaryDark }} />
+      <View style={{ flex: 1, backgroundColor: T.canvas }}>
+        <StatusBar barStyle="dark-content" />
+        <CraftHeader
+          title="Leave & Time Off"
+          subtitle="Check balances, request leave & review approval status"
+          right={
+            <CraftButton
+              title="Apply"
+              variant="primary"
+              size="sm"
+              icon={<Plus size={14} color="#FFF" />}
+              onPress={() => router.push('/(employee)/leave/apply' as never)}
+            />
+          }
+        />
 
-          <ConfirmDialog
-            visible={!!cancelTarget}
-            title="Cancel Leave Request"
-            message="Are you sure you want to cancel this leave request? This action cannot be undone."
-            confirmLabel="Yes, Cancel"
-            variant="danger"
-            onConfirm={handleCancel}
-            onCancel={() => setCancelTarget(null)}
-            loading={cancelling}
-          />
+        <ConfirmDialog
+          visible={!!cancelTarget}
+          title="Cancel Leave Request"
+          message="Are you sure you want to cancel this leave request? This action cannot be undone."
+          confirmLabel="Yes, Cancel"
+          variant="danger"
+          onConfirm={handleCancel}
+          onCancel={() => setCancelTarget(null)}
+          loading={cancelling}
+        />
 
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingBottom: 100 }}
-            contentInsetAdjustmentBehavior="never"
-            automaticallyAdjustContentInsets={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" colors={[colors.primaryDark]} />}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* ── Mobile Gradient Header ── */}
-            <View style={[mLeaveStyles.heroGradient, { paddingTop: topPadding + 10, backgroundColor: colors.primaryDark }]}>
-              <View style={mLeaveStyles.heroTop}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          contentInsetAdjustmentBehavior="never"
+          automaticallyAdjustContentInsets={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.mint} />}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Mobile Balance Stats Card ── */}
+          <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+            <CraftCard variant="pastel" pastelTint={T.mintSoft}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <View>
-                  <Text style={mLeaveStyles.heroTag}>TOTAL AVAILABLE LEAVE</Text>
-                  <Text style={mLeaveStyles.heroMainVal}>{totalRemaining} <Text style={{ fontSize: 16, fontWeight: '600' }}>Days</Text></Text>
+                  <Text style={[Typography.eyebrow, { color: T.forest }]}>TOTAL AVAILABLE LEAVE</Text>
+                  <Text style={[Typography.displayLg, { color: T.forest, marginTop: 4 }]}>
+                    {totalRemaining} <Text style={{ fontSize: 16, fontWeight: '600' }}>Days</Text>
+                  </Text>
                 </View>
-                <TouchableOpacity
-                  style={mLeaveStyles.applyBtn}
-                  onPress={() => router.push('/(employee)/leave/apply' as never)}
-                  activeOpacity={0.85}
-                >
-                  <Plus size={16} color="#006a61" />
-                  <Text style={mLeaveStyles.applyBtnText}>Apply</Text>
-                </TouchableOpacity>
+                <View style={{ backgroundColor: '#D8F3E5', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: T.forest }}>
+                    {totalRemaining > 0 ? 'ALLOWANCE ACTIVE' : 'EXHAUSTED'}
+                  </Text>
+                </View>
               </View>
 
-              {/* Sub stats row */}
-              <View style={mLeaveStyles.subStatsRow}>
-                <View style={mLeaveStyles.subStatCol}>
-                  <Text style={mLeaveStyles.subStatLabel}>Allocated</Text>
-                  <Text style={mLeaveStyles.subStatVal}>{totalAllocated}d</Text>
+              <View style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: 'rgba(0,106,97,0.12)', paddingTop: 12, justifyContent: 'space-between' }}>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ fontSize: 11, color: T.inkMuted }}>Allocated</Text>
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: T.ink, marginTop: 2 }}>{totalAllocated}d</Text>
                 </View>
-                <View style={mLeaveStyles.subStatDivider} />
-                <View style={mLeaveStyles.subStatCol}>
-                  <Text style={mLeaveStyles.subStatLabel}>Used</Text>
-                  <Text style={[mLeaveStyles.subStatVal, { color: '#FCA5A5' }]}>{totalUsed}d</Text>
+                <View style={{ width: 1, backgroundColor: 'rgba(0,106,97,0.12)' }} />
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ fontSize: 11, color: T.inkMuted }}>Used</Text>
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#DC2626', marginTop: 2 }}>{totalUsed}d</Text>
                 </View>
-                <View style={mLeaveStyles.subStatDivider} />
-                <View style={mLeaveStyles.subStatCol}>
-                  <Text style={mLeaveStyles.subStatLabel}>Remaining</Text>
-                  <Text style={[mLeaveStyles.subStatVal, { color: '#6EE7B7' }]}>{totalRemaining}d</Text>
+                <View style={{ width: 1, backgroundColor: 'rgba(0,106,97,0.12)' }} />
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ fontSize: 11, color: T.inkMuted }}>Remaining</Text>
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: T.forest, marginTop: 2 }}>{totalRemaining}d</Text>
                 </View>
               </View>
-            </View>
+            </CraftCard>
+          </View>
 
             {/* ── Quota Breakdown Cards ── */}
           <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
@@ -287,50 +306,45 @@ export default function LeaveScreen() {
           </View>
         </ScrollView>
       </View>
-    </View>
-  );
+    );
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
   // DESKTOP LAYOUT (unchanged)
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: '#F8FAFC' }]}
-      contentContainerStyle={[styles.content, styles.contentDesktop]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#006a61" />}
-      showsVerticalScrollIndicator={false}
-    >
-      <ConfirmDialog
-        visible={!!cancelTarget}
-        title="Cancel Leave Request"
-        message="Are you sure you want to cancel this leave request? This action cannot be undone."
-        confirmLabel="Yes, Cancel"
-        variant="danger"
-        onConfirm={handleCancel}
-        onCancel={() => setCancelTarget(null)}
-        loading={cancelling}
+    <View style={{ flex: 1, backgroundColor: T.canvas }}>
+      <CraftHeader
+        title="Leave & Time Off"
+        subtitle="Manage leave requests, annual balances & team holidays"
+        right={
+          <CraftButton
+            title="Apply Leave"
+            variant="primary"
+            icon={<Plus size={16} color="#FFF" />}
+            onPress={() => router.push('/(employee)/leave/apply' as never)}
+          />
+        }
       />
+      <ScrollView
+        style={[styles.container, { backgroundColor: T.canvas }]}
+        contentContainerStyle={[styles.content, styles.contentDesktop]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.mint} />}
+        showsVerticalScrollIndicator={false}
+      >
+        <ConfirmDialog
+          visible={!!cancelTarget}
+          title="Cancel Leave Request"
+          message="Are you sure you want to cancel this leave request? This action cannot be undone."
+          confirmLabel="Yes, Cancel"
+          variant="danger"
+          onConfirm={handleCancel}
+          onCancel={() => setCancelTarget(null)}
+          loading={cancelling}
+        />
 
-      {/* Header Frame */}
-      <Animated.View entering={FadeInDown.duration(300).springify()}>
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Image source={SUBEDGE_LOGO} style={styles.headerLogo} resizeMode="contain" />
-            <View style={styles.welcomeContainer}>
-              <Text style={styles.welcomeText}>Leave Hub</Text>
-              <Text style={styles.usernameText}>Time Off & Balances</Text>
-            </View>
-          </View>
-          <TouchableOpacity style={styles.addButton} onPress={() => router.push('/(employee)/leave/apply' as never)}>
-            <Plus size={16} color="#FFF" />
-            <Text style={styles.addButtonText}>Apply Leave</Text>
-          </TouchableOpacity>
-        </View>
-      </Animated.View>
-
-      {/* Hero Balance Frame (matching /mobile balanceCard) */}
-      <Animated.View entering={FadeInDown.delay(60).duration(300).springify()} style={styles.balanceContainer}>
+        {/* Hero Balance Frame (matching /mobile balanceCard) */}
+        <Animated.View entering={FadeInDown.delay(60).duration(300).springify()} style={styles.balanceContainer}>
         <HeroBalanceCard
           title="TOTAL AVAILABLE LEAVE"
           primaryValue={`${totalRemaining} Days`}
@@ -424,8 +438,9 @@ export default function LeaveScreen() {
           ))
         )}
       </Animated.View>
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </View>
   );
 }
 
@@ -651,9 +666,9 @@ const mLeaveStyles = StyleSheet.create({
 
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '800',
-    color: '#0F172A',
-    letterSpacing: -0.3,
+    fontWeight: '600',
+    color: NotionColors.ink,
+    letterSpacing: -0.2,
     marginBottom: 10,
   },
 
@@ -661,51 +676,42 @@ const mLeaveStyles = StyleSheet.create({
   quotaCard: {
     width: 140,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: BorderRadius.lg, // 12px Notion standard
     padding: 14,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
-    ...Platform.select({
-      web: { boxShadow: '0 2px 6px rgba(0, 0, 0, 0.03)' },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.03,
-        shadowRadius: 4,
-        elevation: 1,
-      },
-    }),
+    borderColor: NotionColors.hairline,
+    ...Shadows?.sm,
   },
   quotaIconWrap: {
     width: 32,
     height: 32,
-    borderRadius: 10,
-    backgroundColor: '#EDF8F6',
+    borderRadius: BorderRadius.md, // 8px
+    backgroundColor: NotionColors.cardTintLavender,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
   },
   quotaName: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#0F172A',
+    fontWeight: '600',
+    color: NotionColors.ink,
     marginBottom: 2,
   },
   quotaDays: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0F172A',
+    fontSize: 17,
+    fontWeight: '600',
+    color: NotionColors.ink,
     marginBottom: 8,
   },
   quotaTotal: {
     fontSize: 11,
-    fontWeight: '500',
-    color: '#94A3B8',
+    fontWeight: '400',
+    color: NotionColors.steel,
   },
   progressBg: {
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: NotionColors.surface,
     overflow: 'hidden',
   },
   progressFill: {
@@ -715,21 +721,25 @@ const mLeaveStyles = StyleSheet.create({
 
   // Filter Pills
   filterPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.full, // 9999px for pill tabs only
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: NotionColors.hairline,
   },
   filterPillActive: {
-    backgroundColor: '#006a61',
+    backgroundColor: NotionColors.inkDeep,
+    borderColor: NotionColors.inkDeep,
   },
   filterPillText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#64748B',
+    fontWeight: '500',
+    color: NotionColors.steel,
   },
   filterPillTextActive: {
     color: '#FFFFFF',
+    fontWeight: '600',
   },
 
   // Request Cards
@@ -737,45 +747,36 @@ const mLeaveStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: BorderRadius.lg, // 12px Notion standard
     padding: 14,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: NotionColors.hairline,
     gap: 12,
-    ...Platform.select({
-      web: { boxShadow: '0 2px 6px rgba(0, 0, 0, 0.03)' },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.03,
-        shadowRadius: 4,
-        elevation: 1,
-      },
-    }),
+    ...Shadows?.sm,
   },
   reqIconWrap: {
     width: 38,
     height: 38,
-    borderRadius: 12,
-    backgroundColor: '#EDF8F6',
+    borderRadius: BorderRadius.md,
+    backgroundColor: NotionColors.cardTintLavender,
     alignItems: 'center',
     justifyContent: 'center',
   },
   reqTitle: {
     fontSize: 14,
-    fontWeight: '800',
-    color: '#0F172A',
+    fontWeight: '600',
+    color: NotionColors.ink,
     marginBottom: 2,
   },
   reqDates: {
     fontSize: 12,
-    color: '#64748B',
+    color: NotionColors.slate,
     marginBottom: 2,
   },
   reqDuration: {
     fontSize: 11,
-    color: '#006a61',
-    fontWeight: '700',
+    color: NotionColors.primary,
+    fontWeight: '600',
   },
   cancelBtn: {
     flexDirection: 'row',
@@ -783,20 +784,20 @@ const mLeaveStyles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: '#FEE2E2',
+    borderRadius: BorderRadius.xs,
+    backgroundColor: NotionColors.cardTintRose,
   },
   cancelBtnText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#DC2626',
+    fontWeight: '600',
+    color: NotionColors.semanticError,
   },
 
   emptyCard: {
     padding: 24,
-    borderRadius: 16,
+    borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: NotionColors.hairline,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',

@@ -13,14 +13,21 @@ import {
   StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  CraftButton,
+  CraftCard,
+  CraftHeader,
+  Typography,
+  T,
+  S,
+} from '@/components/ui/CraftKit';
+import { LoadingState } from '@/components/ui/States';
+import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
-import { useTenant } from '@/context/TenantContext';
-import { LoadingState } from '@/components/ui/States';
-import { Button } from '@/components/ui/Button';
-import { getExpenses, createExpenseClaim } from '@/lib/services/expenses';
 import { getEmployeeByProfileId } from '@/lib/services/employee';
-import { ExpenseClaim, ExpenseCategory } from '@/types/database';
+import { createExpenseClaim, getExpenses } from '@/lib/services/expenses';
+import { ExpenseCategory, ExpenseClaim } from '@/types/database';
 import { formatCurrency } from '@/utils/format';
 import {
   Plus,
@@ -134,38 +141,40 @@ export default function EmployeeExpensesScreen() {
 
   if (!isDesktop) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#004D47' }}>
-        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-        <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
-          {/* Top bounce underlay matching header card */}
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: '#004D47' }} />
+      <View style={{ flex: 1, backgroundColor: T.canvas }}>
+        <StatusBar barStyle="dark-content" />
+        <CraftHeader
+          title="Expense Claims"
+          subtitle="Submit reimbursements, travel allowances & track settlements"
+          right={
+            <CraftButton
+              title="New Claim"
+              variant="primary"
+              size="sm"
+              icon={<Plus size={14} color="#FFF" />}
+              onPress={() => setShowModal(true)}
+            />
+          }
+        />
 
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={mStyles.content}
-            contentInsetAdjustmentBehavior="never"
-            automaticallyAdjustContentInsets={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor="#FFFFFF" colors={['#004D47']} />}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* ── Mobile Gradient Header ── */}
-            <View style={[mStyles.heroGradient, { paddingTop: topPadding + 10 }]}>
-              <View style={mStyles.heroTop}>
-                <View>
-                  <Text style={mStyles.heroTag}>EXPENSE CLAIMS</Text>
-                  <Text style={mStyles.heroAmount}>{formatCurrency(myTotal)}</Text>
-                  <Text style={mStyles.heroSub}>Monthly Settled Reimbursements</Text>
-                </View>
-                <TouchableOpacity
-                  style={mStyles.newClaimBtn}
-                  onPress={() => setShowModal(true)}
-                  activeOpacity={0.85}
-                >
-                  <Plus size={16} color="#006a61" />
-                  <Text style={mStyles.newClaimBtnText}>New Claim</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 100 }}
+          contentInsetAdjustmentBehavior="never"
+          automaticallyAdjustContentInsets={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor={T.mint} />}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Mobile Settled Reimbursements Card ── */}
+          <CraftCard variant="pastel" pastelTint={T.mintSoft} style={{ marginBottom: 16 }}>
+            <Text style={[Typography.eyebrow, { color: T.forest }]}>EXPENSE CLAIMS</Text>
+            <Text style={[Typography.displayLg, { color: T.forest, marginTop: 4 }]}>
+              {formatCurrency(myTotal)}
+            </Text>
+            <Text style={{ fontSize: 12, color: T.inkMuted, marginTop: 2 }}>
+              Monthly Settled Reimbursements
+            </Text>
+          </CraftCard>
 
           <Animated.View entering={FadeInDown.delay(200).duration(300).springify()}>
             <View style={mStyles.sectionHeader}>
@@ -297,34 +306,32 @@ export default function EmployeeExpensesScreen() {
                 onChangeText={setDesc}
               />
 
-              <Button title="Submit Claim" onPress={handleSubmit} style={{ backgroundColor: '#0D7377', marginTop: 24 }} />
+              <CraftButton title="Submit Claim" variant="primary" onPress={handleSubmit} fullWidth style={{ marginTop: 24 }} />
               <View style={{ height: 40 }} />
             </ScrollView>
           </View>
         </RNModal>
       </View>
-    </View>
-  );
+    );
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // DESKTOP LAYOUT (unchanged mostly, but use RNModal nicely)
+  // DESKTOP LAYOUT
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <View>
-          <Text style={[styles.title, { color: colors.text }]}>My Expense Claims</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Submit Reimbursements, Mileage Claims & Track Settlement
-          </Text>
-        </View>
-        <Button
-          title="+ Claim Expense"
-          onPress={() => setShowModal(true)}
-          style={{ backgroundColor: '#0D7377' }}
-        />
-      </View>
+    <View style={{ flex: 1, backgroundColor: T.canvas }}>
+      <CraftHeader
+        title="Expense Claims"
+        subtitle="Submit reimbursements, mileage claims & track settlements"
+        right={
+          <CraftButton
+            title="+ Claim Expense"
+            variant="primary"
+            icon={<Plus size={16} color="#FFF" />}
+            onPress={() => setShowModal(true)}
+          />
+        }
+      />
 
       <ScrollView
         style={{ flex: 1, padding: 24 }}
@@ -434,7 +441,7 @@ export default function EmployeeExpensesScreen() {
                 <Text style={styles.label}>Description</Text>
                 <TextInput style={[styles.input, { height: 75 }]} multiline placeholder="Justify..." value={desc} onChangeText={setDesc} />
 
-                <Button title="Submit for Approval" onPress={handleSubmit} style={{ backgroundColor: '#0D7377', marginTop: 16 }} />
+                <CraftButton title="Submit for Approval" variant="primary" onPress={handleSubmit} fullWidth style={{ marginTop: 16 }} />
               </ScrollView>
             </View>
           </View>

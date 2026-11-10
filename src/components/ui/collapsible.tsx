@@ -1,10 +1,8 @@
 import { ChevronRight } from 'lucide-react-native';
 import { PropsWithChildren, useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -13,28 +11,28 @@ export function Collapsible({ children, title }: PropsWithChildren & { title: st
   const theme = useTheme();
 
   return (
-    <ThemedView>
+    <View>
       <Pressable
         style={({ pressed }) => [styles.heading, pressed && styles.pressedHeading]}
         onPress={() => setIsOpen((value) => !value)}>
-        <ThemedView type="backgroundElement" style={styles.button}>
+        <View style={[styles.button, { backgroundColor: theme.surface }]}>
           <ChevronRight
             size={14}
             color={theme.text}
-            style={{ transform: [{ rotate: isOpen ? '-90deg' : '90deg' }] }}
+            style={{ transform: [{ rotate: isOpen ? '90deg' : '0deg' }] }}
           />
-        </ThemedView>
+        </View>
 
-        <ThemedText type="small">{title}</ThemedText>
+        <Text style={{ fontSize: 14, fontWeight: '600', color: theme.text }}>{title}</Text>
       </Pressable>
       {isOpen && (
         <Animated.View entering={FadeIn.duration(200)}>
-          <ThemedView type="backgroundElement" style={styles.content}>
+          <View style={[styles.content, { backgroundColor: theme.surface }]}>
             {children}
-          </ThemedView>
+          </View>
         </Animated.View>
       )}
-    </ThemedView>
+    </View>
   );
 }
 

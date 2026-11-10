@@ -11,6 +11,7 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  deleteDoc,
   onSnapshot,
 } from 'firebase/firestore';
 import type {
@@ -20,7 +21,14 @@ import type {
   SubscriptionPlan,
   OrganizationFeatures,
 } from '@/types';
-import { COMPANY_NAME } from '@/constants/config';
+import {
+  COMPANY_NAME,
+  resolveOrganizationIndustry,
+  INDUSTRY_PRESETS,
+  getTenantDefaultUnits,
+  type IndustryType,
+  type IndustryTerminology,
+} from '@/constants/config';
 
 // Default modular feature allocations per subscription tier
 export const PLAN_FEATURE_DEFAULTS: Record<SubscriptionPlan, OrganizationFeatures> = {
@@ -102,6 +110,9 @@ export interface TenantContextState {
   officeName: string;
   activePlan: SubscriptionPlan;
   features: OrganizationFeatures;
+  industry: IndustryType;
+  terminology: IndustryTerminology;
+  units: string[];
   isLoadingTenant: boolean;
   refreshTenant: () => Promise<void>;
   switchOrganization: (orgId: string) => Promise<void>;
@@ -114,8 +125,13 @@ export interface TenantContextState {
     logo_url?: string;
     primary_color?: string;
     plan?: SubscriptionPlan;
+    industry?: IndustryType;
     address?: string;
+    units?: string[];
   }) => Promise<Organization>;
+  updateOrganization: (orgId: string, data: Partial<Organization>) => Promise<void>;
+  deleteOrganization: (orgId: string) => Promise<void>;
+  updateOrganizationUnits: (orgId: string, units: string[]) => Promise<void>;
 }
 
 const TenantContext = createContext<TenantContextState | undefined>(undefined);
@@ -136,13 +152,51 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       const orgsSnap = await getDocs(collection(db, 'organizations'));
       const orgMap = new Map<string, Organization>();
 
+      // First pass: collect any child units that declare a parent_organization_id
+      const subUnitsMap = new Map<string, string[]>();
+      subUnitsMap.set('shanti-memorial-hospital', [
+        'Shanti Memorial Hospital - Cuttack',
+        'Chikitsa',
+        'Gopal Trust',
+      ]);
+      subUnitsMap.set('00000000-0000-0000-0000-000000000001', [
+        'Subedge - Headquarters',
+        'Main Branch',
+        'Branch Office',
+      ]);
+
       for (const d of orgsSnap.docs) {
-        const data = d.data() as Organization;
+        const data = d.data() as any;
+        const pId = data.parent_organization_id || (d.id === 'chikitsa' || d.id === 'gopal-trust' ? 'shanti-memorial-hospital' : null);
+        if (pId) {
+          const currentList = subUnitsMap.get(pId) || [];
+          if (data.name && !currentList.includes(data.name)) {
+            currentList.push(data.name);
+          }
+          subUnitsMap.set(pId, currentList);
+        }
+      }
+
+      // Second pass: register only root client organizations
+      for (const d of orgsSnap.docs) {
+        const data = d.data() as any;
         const normalizedName = (data.name || d.id).toLowerCase().trim();
-        // Skip short slug aliases if full org exists
+        // Skip short slug aliases
         if (d.id === 'smh' || d.id === 'oasis' || d.id === 'subedge') continue;
+        // Child units belong to their parent organization, not as separate top-level tenants
+        if (data.parent_organization_id || data.is_unit || d.id === 'chikitsa' || d.id === 'gopal-trust') continue;
+
         if (!orgMap.has(normalizedName)) {
-          orgMap.set(normalizedName, { ...data, id: d.id });
+          const childUnits = subUnitsMap.get(d.id) || [];
+          const defaultUnits = getTenantDefaultUnits(data.name, d.id);
+          const existingUnits = Array.isArray(data.units) ? data.units : defaultUnits;
+          const mergedUnits = Array.from(new Set([...existingUnits, ...childUnits]));
+
+          orgMap.set(normalizedName, {
+            ...data,
+            id: d.id,
+            units: mergedUnits,
+          });
         }
       }
       setAllOrganizations(Array.from(orgMap.values()));
@@ -155,14 +209,32 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     setIsLoadingTenant(true);
     try {
       let resolvedOrg: Organization | null = null;
-      const targetOrgId = manualOrgId || profile?.organization_id;
+      let targetOrgId = manualOrgId || profile?.organization_id;
+      if (targetOrgId === 'chikitsa' || targetOrgId === 'gopal-trust' || targetOrgId === 'smh') {
+        targetOrgId = 'shanti-memorial-hospital';
+      } else if (targetOrgId === 'subedge') {
+        targetOrgId = '00000000-0000-0000-0000-000000000001';
+      }
 
       // 1. Resolve organization by explicit ID or profile ID
       if (targetOrgId) {
         const orgRef = doc(db, 'organizations', targetOrgId);
         const orgSnap = await getDoc(orgRef);
         if (orgSnap.exists()) {
-          resolvedOrg = { id: orgSnap.id, ...orgSnap.data() } as Organization;
+          const orgData = { id: orgSnap.id, ...orgSnap.data() } as any;
+          // If this is a child unit/sub-brand, resolve to the parent tenant organization
+          const parentId = orgData.parent_organization_id || (orgSnap.id === 'chikitsa' || orgSnap.id === 'gopal-trust' ? 'shanti-memorial-hospital' : null);
+          if (parentId) {
+            const parentRef = doc(db, 'organizations', parentId);
+            const parentSnap = await getDoc(parentRef);
+            if (parentSnap.exists()) {
+              resolvedOrg = { id: parentSnap.id, ...parentSnap.data() } as Organization;
+            } else {
+              resolvedOrg = orgData as Organization;
+            }
+          } else {
+            resolvedOrg = orgData as Organization;
+          }
         }
       }
 
@@ -250,11 +322,23 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
   // Switch active organization context
   const switchOrganization = useCallback(async (orgId: string) => {
-    setManualOrgId(orgId);
+    let targetId = orgId;
+    if (targetId === 'chikitsa' || targetId === 'gopal-trust' || targetId === 'smh') {
+      targetId = 'shanti-memorial-hospital';
+    } else if (targetId === 'subedge') {
+      targetId = '00000000-0000-0000-0000-000000000001';
+    }
+    try {
+      const snap = await getDoc(doc(db, 'organizations', targetId));
+      if (snap.exists() && (snap.data() as any)?.parent_organization_id) {
+        targetId = (snap.data() as any).parent_organization_id;
+      }
+    } catch {}
+    setManualOrgId(targetId);
     if (profile?.id) {
       try {
         await updateDoc(doc(db, 'profiles', profile.id), {
-          organization_id: orgId,
+          organization_id: targetId,
           updated_at: new Date().toISOString(),
         });
       } catch (err) {
@@ -332,25 +416,34 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     logo_url?: string;
     primary_color?: string;
     plan?: SubscriptionPlan;
+    industry?: IndustryType;
     address?: string;
+    units?: string[];
   }): Promise<Organization> => {
     const orgId = data.slug.toLowerCase().trim().replace(/[^a-z0-9-]/g, '-');
     const selectedPlan = data.plan || 'growth';
     const now = new Date().toISOString();
+    const resolvedIndustry: IndustryType = data.industry || resolveOrganizationIndustry({ name: data.name, id: orgId });
+    const industryPreset = INDUSTRY_PRESETS[resolvedIndustry];
+    const resolvedUnits = data.units && data.units.length > 0
+      ? data.units
+      : (industryPreset?.defaultUnits || [data.name, 'Main Branch', 'Branch Office']);
 
     const newOrg: Organization = {
       id: orgId,
       name: data.name,
       slug: orgId,
       logo_url: data.logo_url || null,
-      primary_color: data.primary_color || '#0D7377',
+      primary_color: data.primary_color || industryPreset?.color || '#0D7377',
       accent_color: '#14B8A6',
       plan: selectedPlan,
       package_type: selectedPlan,
       features: PLAN_FEATURE_DEFAULTS[selectedPlan],
       max_employees: selectedPlan === 'enterprise' ? 1000 : 500,
+      units: resolvedUnits,
       settings: {
-        industry: 'General Enterprise',
+        industry: industryPreset?.label || 'Corporate & General Enterprise',
+        industry_type: resolvedIndustry,
         address: data.address || 'Corporate Headquarters',
         working_hours_start: '09:00',
         working_hours_end: '18:00',
@@ -381,6 +474,54 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     await fetchAllOrganizations();
     return newOrg;
   }, [fetchAllOrganizations]);
+
+  // Update an existing organization
+  const updateOrganization = useCallback(async (orgId: string, data: Partial<Organization>) => {
+    const orgRef = doc(db, 'organizations', orgId);
+    const updatePayload: Record<string, any> = {
+      ...data,
+      updated_at: new Date().toISOString(),
+    };
+    delete updatePayload.id;
+
+    await setDoc(orgRef, updatePayload, { merge: true });
+    await fetchAllOrganizations();
+    await fetchTenantData();
+  }, [fetchAllOrganizations, fetchTenantData]);
+
+  // Delete an organization and clean up primary workplaces
+  const deleteOrganization = useCallback(async (orgId: string) => {
+    await deleteDoc(doc(db, 'organizations', orgId));
+
+    try {
+      const wpSnap = await getDocs(query(collection(db, 'workplaces'), where('organization_id', '==', orgId)));
+      for (const d of wpSnap.docs) {
+        await deleteDoc(doc(db, 'workplaces', d.id));
+      }
+    } catch (wpErr) {
+      console.warn('Note: cleaning up workplaces:', wpErr);
+    }
+
+    if (organization?.id === orgId) {
+      const remaining = allOrganizations.filter((o) => o.id !== orgId);
+      if (remaining.length > 0) {
+        await switchOrganization(remaining[0].id);
+      }
+    }
+
+    await fetchAllOrganizations();
+    await fetchTenantData();
+  }, [allOrganizations, fetchAllOrganizations, fetchTenantData, organization?.id, switchOrganization]);
+
+  // Update units / sub-brands array for an organization
+  const updateOrganizationUnits = useCallback(async (orgId: string, units: string[]) => {
+    await setDoc(doc(db, 'organizations', orgId), {
+      units,
+      updated_at: new Date().toISOString(),
+    }, { merge: true });
+    await fetchAllOrganizations();
+    await fetchTenantData();
+  }, [fetchAllOrganizations, fetchTenantData]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -431,6 +572,19 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   const companyLogoUrl = organization?.logo_url || (organization?.settings as any)?.logo_url || null;
   const officeName = workplace?.name || 'Main Office';
 
+  // Dynamic industry detection & cross-vertical terminology resolution
+  const industry: IndustryType = useMemo(() => {
+    return resolveOrganizationIndustry(organization);
+  }, [organization]);
+
+  const terminology: IndustryTerminology = useMemo(() => {
+    return INDUSTRY_PRESETS[industry]?.terminology || INDUSTRY_PRESETS.corporate.terminology;
+  }, [industry]);
+
+  const units: string[] = useMemo(() => {
+    return getTenantDefaultUnits(organization?.name, organization?.id, organization?.units, industry);
+  }, [organization, industry]);
+
   const value: TenantContextState = {
     organization,
     workplace,
@@ -441,6 +595,9 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     officeName,
     activePlan,
     features,
+    industry,
+    terminology,
+    units,
     isLoadingTenant,
     refreshTenant: fetchTenantData,
     switchOrganization,
@@ -448,6 +605,9 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     updateOrganizationPlan,
     toggleFeatureLock,
     createOrganization,
+    updateOrganization,
+    deleteOrganization,
+    updateOrganizationUnits,
   };
 
   return (

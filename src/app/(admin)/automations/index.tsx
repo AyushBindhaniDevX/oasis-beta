@@ -103,35 +103,35 @@ export default function AutomationsScreen() {
       const orgName = tenantOrg?.name || 'Oasis HRMS';
 
       if (type === 'onboarding') {
-        await sendWelcomeEmail(testEmail, 'Dr. Rajesh Mohanty', 'SMH-MED-9021', 'Senior Consultant Physician', {
+        await sendWelcomeEmail(testEmail, 'Rajesh Mohanty', 'EMP-9021', 'Senior Operations Lead', {
           organizationId: orgId,
           organizationName: orgName,
-          department: 'Emergency & Critical Care',
-          workplace: 'Main Hospital Campus',
-          designation: 'Senior Consultant Physician',
+          department: 'Operations & Engineering',
+          workplace: 'Headquarters Campus',
+          designation: 'Senior Operations Lead',
           temporaryPassword: 'TempPassword@2026',
         });
         setTestSuccess(`Dynamic onboarding welcome email dispatched to ${testEmail}!`);
       } else if (type === 'leave') {
-        await sendLeaveStatusEmail(testEmail, 'Dr. Rajesh Mohanty', 'approved', 'Casual Leave (CL)', 'Aug 25 - Aug 28, 2026', 'Medical Superintendent', {
+        await sendLeaveStatusEmail(testEmail, 'Rajesh Mohanty', 'approved', 'Casual Leave (CL)', 'Aug 25 - Aug 28, 2026', 'Operations Head', {
           organizationId: orgId,
           organizationName: orgName,
           remainingDays: 14,
         });
         setTestSuccess(`Leave status notification dispatched to ${testEmail}!`);
       } else if (type === 'ticket') {
-        await sendTicketStatusEmail(testEmail, 'TKT-8842', 'HIS / EMR System Terminal Connection', 'Configured terminal client and verified biometric login.', {
+        await sendTicketStatusEmail(testEmail, 'TKT-8842', 'Enterprise ERP System Terminal Connection', 'Configured terminal client and verified biometric login.', {
           organizationId: orgId,
           organizationName: orgName,
           category: 'IT Infrastructure',
         });
         setTestSuccess(`Ticket resolution email dispatched to ${testEmail}!`);
       } else if (type === 'offer') {
-        await sendOfferLetterEmail(testEmail, 'Dr. Rajesh Mohanty', 'Senior Consultant Physician', 2400000, 'Sept 1, 2026', {
+        await sendOfferLetterEmail(testEmail, 'Rajesh Mohanty', 'Senior Operations Lead', 2400000, 'Sept 1, 2026', {
           organizationId: orgId,
           organizationName: orgName,
-          department: 'Cardiology',
-          location: 'Main Hospital Campus',
+          department: 'Operations & Engineering',
+          location: 'Headquarters Campus',
         });
         setTestSuccess(`Official Offer Letter email dispatched to ${testEmail}!`);
       } else {

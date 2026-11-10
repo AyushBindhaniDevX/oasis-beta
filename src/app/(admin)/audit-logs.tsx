@@ -11,6 +11,15 @@ import {
   useWindowDimensions,
   Platform,
 } from 'react-native';
+import Svg, { Path, SvgXml } from 'react-native-svg';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { InteractiveTile } from '@/components/ui/InteractiveTile';
+import {
+  STOCK_1_SVG,
+  STOCK_4_SVG,
+  STOCK_10_SVG,
+  STOCK_12_SVG,
+} from '@/constants/workManagementSvgs';
 import { useTheme } from '@/hooks/use-theme';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -33,6 +42,20 @@ import {
   Layers,
   CheckCircle2,
 } from 'lucide-react-native';
+
+function MetricWave({ color, width = 85, height = 28 }: { color: string; width?: number; height?: number }) {
+  return (
+    <Svg width={width} height={height} viewBox="0 0 90 30" fill="none">
+      <Path
+        d="M 2 18 C 16 26, 26 8, 42 16 C 56 24, 66 6, 88 12"
+        stroke={color}
+        strokeWidth={2.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 export default function AuditLogsScreen() {
   const colors = useTheme();
@@ -126,38 +149,171 @@ export default function AuditLogsScreen() {
     }
   };
 
+  const userLogsCount = useMemo(() => logs.filter((l) => l.action.includes('user') || l.entity_type === 'profile').length, [logs]);
+  const roleLogsCount = useMemo(() => logs.filter((l) => l.action.includes('role') || l.action.includes('permission')).length, [logs]);
+
   if (loading) return <LoadingState />;
+
+  const kpiCardWidth = isDesktop ? undefined : (width - 40 - 12) / 2;
 
   return (
     <SidebarLayout items={ADMIN_NAV}>
       <ScrollView
-        style={[styles.container, { backgroundColor: colors.background }]}
+        style={[styles.container, { backgroundColor: '#FAF9FD' }]}
         contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.title, { color: colors.text }]}>Security Audit Logs</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+        {/* Header Row with STOCK 12 SVG */}
+        <Animated.View entering={FadeInDown.duration(280)} style={styles.headerRow}>
+          <View style={{ flex: 1, minWidth: 260 }}>
+            <View style={styles.headerBadge}>
+              <Shield size={14} color="#7C3AED" />
+              <Text style={styles.headerBadgeText}>Security & Audit Trails</Text>
+            </View>
+            <Text style={[styles.title, { color: '#0F172A' }]}>Security Audit Logs</Text>
+            <Text style={[styles.subtitle, { color: '#64748B' }]}>
               Immutable event history for compliance, access changes, user management, and security events.
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={handleExportCSV}
-            style={[styles.exportBtn, { borderColor: '#e2e8f0' }]}
-            activeOpacity={0.8}
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <View style={{ opacity: 0.95 }}>
+              <SvgXml xml={STOCK_12_SVG} width={isDesktop ? 125 : 90} height={isDesktop ? 90 : 65} />
+            </View>
+            <TouchableOpacity
+              onPress={handleExportCSV}
+              style={[styles.exportBtn, { backgroundColor: '#F3EEFE', borderColor: '#E4DCFD' }]}
+              activeOpacity={0.8}
+            >
+              <Download size={15} color="#7C3AED" />
+              <Text style={[styles.exportBtnText, { color: '#7C3AED' }]}>Export CSV</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+
+        {/* 4 Pastel KPI Metric Cards with InteractiveTile */}
+        <Animated.View entering={FadeInDown.delay(50).duration(280)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 4 }}>
+          {/* Tile 1: Total Events */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#F3EEFE',
+                borderColor: '#E4DCFD',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+            onPress={() => setActionFilter('all')}
           >
-            <Download size={15} color="#0D7377" />
-            <Text style={styles.exportBtnText}>Export CSV</Text>
-          </TouchableOpacity>
-        </View>
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                <SvgXml xml={STOCK_12_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>{logs.length}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>↑ Immutable</Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Total Audit Events</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#8B5CF6" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+
+          {/* Tile 2: User Account Events */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#EDFAF2',
+                borderColor: '#CEF2DE',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+            onPress={() => setActionFilter('user')}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                <SvgXml xml={STOCK_4_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#064E3B' }]}>{userLogsCount}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>User Logs</Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>User Accounts</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#10B981" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+
+          {/* Tile 3: Role Changes */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#FFF4EB',
+                borderColor: '#FFE2CD',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+            onPress={() => setActionFilter('role')}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                <SvgXml xml={STOCK_1_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>{roleLogsCount}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Privileges</Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Role Changes</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#F97316" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+
+          {/* Tile 4: Compliance Status */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#EFF6FF',
+                borderColor: '#DBEAFE',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
+                <SvgXml xml={STOCK_10_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#1E3A8A' }]}>100%</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>Verified</Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Audit Integrity</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#3B82F6" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+        </Animated.View>
 
         {exportNotice && (
-          <View style={styles.noticeBox}>
+          <View style={[styles.noticeBox, { backgroundColor: '#EDFAF2', borderColor: '#CEF2DE' }]}>
             <CheckCircle2 size={16} color="#059669" />
-            <Text style={styles.noticeText}>{exportNotice}</Text>
+            <Text style={[styles.noticeText, { color: '#065F46' }]}>{exportNotice}</Text>
           </View>
         )}
 
@@ -337,9 +493,79 @@ const styles = StyleSheet.create({
   content: { padding: 20, gap: 24, paddingBottom: 60 },
   contentDesktop: { maxWidth: 1200, alignSelf: 'center', width: '100%', padding: 36, gap: 28 },
 
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 16,
+    flexWrap: 'wrap',
+  },
+  headerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F3EEFE',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E4DCFD',
+  },
+  headerBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#7C3AED',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   title: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
-  subtitle: { fontSize: 14, lineHeight: 20, marginTop: 4 },
+  subtitle: { fontSize: 13, lineHeight: 19, marginTop: 4 },
+
+  pastelMetricCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    overflow: 'hidden',
+    position: 'relative',
+    minHeight: 104,
+    shadowColor: '#0f0f0f',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  iconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metricValueText: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  metricLabelText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 8,
+  },
+  waveContainer: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    opacity: 0.65,
+    pointerEvents: 'none',
+  },
 
   exportBtn: {
     flexDirection: 'row',
@@ -347,9 +573,8 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    backgroundColor: '#FFFFFF',
   },
   exportBtnText: { fontSize: 13, fontWeight: '700', color: '#0D7377' },
 

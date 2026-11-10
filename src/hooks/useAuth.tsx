@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { auth, db } from '@/lib/firebase';
 import {
   signInWithEmailAndPassword,
@@ -47,6 +48,7 @@ interface AuthState {
   isAuthenticated: boolean;
   signIn: (email: string, password: string, fallbackOrgId?: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
+  signInWithGoogleToken: (idToken: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string, role?: string, orgId?: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -224,7 +226,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // 4. Primary Bootstrap Admin Exception
-    if (cleanEmail === 'ayushbindhani001@gmail.com') {
+    if (cleanEmail === 'ayushbindhani001@gmail.com' || cleanEmail === 'ab3682@srmist.edu.in') {
       let adminOrgId = 'shanti-memorial-hospital';
       try {
         const orgsQ = query(collection(db, 'organizations'), limit(1));
@@ -236,7 +238,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const adminPayload: Profile = {
         id: authUser.uid,
         email: cleanEmail,
-        full_name: 'Ayush Bindhani',
+        full_name: authUser.displayName || 'Ayush Bindhani',
         phone: authUser.phoneNumber || null,
         avatar_url: authUser.photoURL || null,
         role: 'admin',
@@ -396,7 +398,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
 
             // Bootstrap admin fallback
-            if (!prof && cleanSsoEmail === 'ayushbindhani001@gmail.com') {
+            if (!prof && (cleanSsoEmail === 'ayushbindhani001@gmail.com' || cleanSsoEmail === 'ab3682@srmist.edu.in')) {
               const now = new Date().toISOString();
               prof = {
                 id: sessionData.uid || 'admin_bootstrap',
@@ -581,6 +583,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(appUser);
         }
       } else {
+        const isExpoGo =
+          Constants.appOwnership === 'expo' ||
+          Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+        if (isExpoGo) {
+          throw new Error(
+            'Google Sign-In is not supported in Expo Go because it requires custom native binaries. Please sign in with your email and password, or use a Development Build (npx expo run:ios).'
+          );
+        }
+
         let GoogleSignin: any;
         let statusCodes: any;
         try {
@@ -670,6 +682,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error(err.message || 'Failed to sign in with Google.');
     }
   }, [syncProfileForAuthUser]);
+
+  // Sign In with Google ID Token (used by WebView OAuth modal in Expo Go)
+  const handleSignInWithGoogleToken = useCallback(
+    async (idToken: string) => {
+      try {
+        const { GoogleAuthProvider, signInWithCredential } = await import('firebase/auth');
+        const credential = GoogleAuthProvider.credential(idToken);
+        const authResult = await signInWithCredential(auth, credential);
+        const fbUser = authResult.user;
+
+        if (fbUser) {
+          const prof = await syncProfileForAuthUser(fbUser);
+          if (!prof || prof.is_active === false || !['employee', 'hr', 'admin'].includes(prof.role)) {
+            await firebaseSignOut(auth);
+            setUser(null);
+            setProfile(null);
+            throw new Error('ACCESS_DENIED_ROLE: Your account is not authorized or active.');
+          }
+
+          const appUser: AppUser = {
+            id: fbUser.uid,
+            email: fbUser.email || prof.email,
+            fullName: prof.full_name || fbUser.displayName || fbUser.email?.split('@')[0],
+            imageUrl: prof.avatar_url || fbUser.photoURL || null,
+            user_metadata: {
+              full_name: prof.full_name,
+              role: prof.role,
+              organization_id: prof.organization_id,
+            },
+          };
+          setProfile(prof);
+          setUser(appUser);
+        }
+      } catch (err: any) {
+        await firebaseSignOut(auth);
+        setUser(null);
+        setProfile(null);
+
+        if (err?.message?.includes('ACCESS_DENIED_DEACTIVATED')) {
+          throw new Error('Access Denied: Your account has been deactivated. Please contact your HR department or administrator.');
+        }
+        if (err?.message?.includes('ACCESS_DENIED_NO_ORG')) {
+          throw new Error('Access Denied: Your account is not linked to an organization. Please contact your administrator.');
+        }
+        if (err?.message?.includes('ACCESS_DENIED_UNREGISTERED')) {
+          throw new Error('Access Denied: Your Google account is not registered in the employee directory. You must exist in the system and be linked to an organization before logging in.');
+        }
+        if (err?.message?.includes('ACCESS_DENIED_ROLE')) {
+          throw new Error('Access Denied: Your account role is not authorized to access this portal.');
+        }
+        throw new Error(err.message || 'Failed to sign in with Google.');
+      }
+    },
+    [syncProfileForAuthUser]
+  );
 
   // Sign Up via Firebase Auth (Only allowed if email pre-exists in employee directory and linked to an org)
   const handleSignUp = useCallback(
@@ -784,6 +851,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: !!user && !!profile && profile.is_active === true && ['employee', 'hr', 'admin'].includes(profile.role),
         signIn: handleSignIn,
         signInWithGoogle: handleSignInWithGoogle,
+        signInWithGoogleToken: handleSignInWithGoogleToken,
         signUp: handleSignUp,
         signOut: handleSignOut,
         refreshProfile,

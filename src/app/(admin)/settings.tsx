@@ -9,11 +9,21 @@ import {
   TouchableOpacity,
   Switch,
 } from 'react-native';
+import Svg, { Path, SvgXml } from 'react-native-svg';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { InteractiveTile } from '@/components/ui/InteractiveTile';
+import {
+  STOCK_6_SVG,
+  STOCK_7_SVG,
+  STOCK_9_SVG,
+  STOCK_12_SVG,
+} from '@/constants/workManagementSvgs';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/use-theme';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
+import { TimePicker } from '@/components/ui/TimePicker';
 import { useTenant } from '@/context/TenantContext';
 import { useBiometrics } from '@/hooks/useBiometrics';
 import { LoadingState } from '@/components/ui/States';
@@ -38,6 +48,20 @@ import {
   Radio,
   Fingerprint,
 } from 'lucide-react-native';
+
+function MetricWave({ color, width = 85, height = 28 }: { color: string; width?: number; height?: number }) {
+  return (
+    <Svg width={width} height={height} viewBox="0 0 90 30" fill="none">
+      <Path
+        d="M 2 18 C 16 26, 26 8, 42 16 C 56 24, 66 6, 88 12"
+        stroke={color}
+        strokeWidth={2.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 export default function SettingsScreen() {
   const colors = useTheme();
@@ -184,34 +208,167 @@ export default function SettingsScreen() {
 
   if (loading) return <LoadingState />;
 
+  const kpiCardWidth = isDesktop ? undefined : (width - 40 - 12) / 2;
+
   return (
     <SidebarLayout items={ADMIN_NAV}>
       <ScrollView
-        style={[styles.container, { backgroundColor: colors.background }]}
+        style={[styles.container, { backgroundColor: '#FAF9FD' }]}
         contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Organization Settings</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Configure company legal entity, working shifts, geofencing parameters, and automated HR rules.
-          </Text>
-        </View>
+        {/* Header Row with STOCK 6 SVG */}
+        <Animated.View entering={FadeInDown.duration(280)} style={styles.headerRow}>
+          <View style={{ flex: 1, minWidth: 260 }}>
+            <View style={styles.headerBadge}>
+              <Building2 size={14} color="#7C3AED" />
+              <Text style={styles.headerBadgeText}>Organization & Policies</Text>
+            </View>
+            <Text style={[styles.title, { color: '#0F172A' }]}>Organization Settings</Text>
+            <Text style={[styles.subtitle, { color: '#64748B' }]}>
+              Configure legal entity profiles, shifts, GPS geofences, and automated compliance policies.
+            </Text>
+          </View>
+
+          <View style={{ opacity: 0.95 }}>
+            <SvgXml xml={STOCK_6_SVG} width={isDesktop ? 135 : 95} height={isDesktop ? 95 : 68} />
+          </View>
+        </Animated.View>
+
+        {/* 4 Pastel Policy Status KPI Cards with InteractiveTile */}
+        <Animated.View entering={FadeInDown.delay(50).duration(280)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 4 }}>
+          {/* Card 1: Legal Entity */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#F3EEFE',
+                borderColor: '#E4DCFD',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                <SvgXml xml={STOCK_6_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#1E1B4B' }]} numberOfLines={1}>
+                  {currency}
+                </Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>{timezone.split('/')[1] || 'IST'}</Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Billing & Timezone</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#8B5CF6" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+
+          {/* Card 2: Shift Hours */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#EDFAF2',
+                borderColor: '#CEF2DE',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                <SvgXml xml={STOCK_7_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#064E3B' }]}>{workStart}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>to {workEnd}</Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Working Hours</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#10B981" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+
+          {/* Card 3: Geofence */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#FFF4EB',
+                borderColor: '#FFE2CD',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                <SvgXml xml={STOCK_12_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>{defaultRadius}m</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>GPS Perimeter</Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Geofence Radius</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#F97316" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+
+          {/* Card 4: Compliance Policies */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#EFF6FF',
+                borderColor: '#DBEAFE',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
+                <SvgXml xml={STOCK_9_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#1E3A8A' }]}>
+                  {enablePf ? 'Active' : 'Standard'}
+                </Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>
+                  {enablePf ? `${empContribution}% EPF` : 'No EPF'}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Deduction Engine</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#3B82F6" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+        </Animated.View>
 
         {saved && (
-          <View style={[styles.alertBox, { backgroundColor: '#edf8f6', borderColor: '#c4ece7' }]}>
-            <CheckCircle2 size={18} color="#006a61" />
-            <Text style={{ color: '#006a61', fontWeight: '700', fontSize: 14 }}>
+          <View style={[styles.alertBox, { backgroundColor: '#EDFAF2', borderColor: '#CEF2DE' }]}>
+            <CheckCircle2 size={18} color="#059669" />
+            <Text style={{ color: '#065F46', fontWeight: '700', fontSize: 14 }}>
               Organization settings saved successfully!
             </Text>
           </View>
         )}
 
         {error ? (
-          <View style={[styles.alertBox, { backgroundColor: colors.dangerLight, borderColor: colors.danger + '40' }]}>
-            <AlertCircle size={18} color={colors.danger} />
-            <Text style={{ color: colors.danger, fontSize: 14 }}>{error}</Text>
+          <View style={[styles.alertBox, { backgroundColor: '#FFF1F2', borderColor: '#FECDD3' }]}>
+            <AlertCircle size={18} color="#DC2626" />
+            <Text style={{ color: '#991B1B', fontSize: 14 }}>{error}</Text>
           </View>
         ) : null}
 
@@ -232,6 +389,12 @@ export default function SettingsScreen() {
               placeholder="e.g. Subedge Technology Pvt Ltd"
               value={orgName}
               onChangeText={setOrgName}
+            />
+            <Input
+              label="Organization ID"
+              value={org?.id || profile?.organization_id || ''}
+              editable={false}
+              hint="Unique system identifier for this organization workspace."
             />
             <View style={isDesktop ? styles.rowFields : { gap: 14 }}>
               <View style={{ flex: 1 }}>
@@ -315,19 +478,22 @@ export default function SettingsScreen() {
           </View>
           <View style={isDesktop ? styles.rowFields : { gap: 14 }}>
             <View style={{ flex: 1 }}>
-              <Input
-                label="Shift Start Time (24h format)"
-                placeholder="09:00"
+              <TimePicker
+                label="Shift Start Time"
                 value={workStart}
-                onChangeText={setWorkStart}
+                onChange={setWorkStart}
+                format="HH:mm"
+                helperText="Standard hospital morning punch window"
               />
             </View>
             <View style={{ flex: 1 }}>
-              <Input
-                label="Shift End Time (24h format)"
-                placeholder="18:00"
+              <TimePicker
+                label="Shift End Time"
                 value={workEnd}
-                onChangeText={setWorkEnd}
+                onChange={setWorkEnd}
+                format="HH:mm"
+                minTime={workStart}
+                helperText="Late check-out & overtime baseline"
               />
             </View>
             <View style={{ flex: 1 }}>
@@ -532,7 +698,7 @@ export default function SettingsScreen() {
           icon={<Save size={16} color="#FFF" />}
           onPress={handleSave}
           loading={saving}
-          style={{ backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 14 }}
+          style={{ backgroundColor: '#7C3AED', borderRadius: 12, paddingVertical: 14 }}
         />
       </ScrollView>
     </SidebarLayout>
@@ -542,31 +708,108 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 20, gap: 24, paddingBottom: 60 },
-  contentDesktop: { maxWidth: 900, alignSelf: 'center', width: '100%', padding: 36, gap: 28 },
+  contentDesktop: { maxWidth: 1000, alignSelf: 'center', width: '100%', padding: 36, gap: 28 },
 
-  header: { gap: 4 },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 16,
+    flexWrap: 'wrap',
+  },
+  headerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F3EEFE',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E4DCFD',
+  },
+  headerBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#7C3AED',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   title: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
-  subtitle: { fontSize: 14, lineHeight: 20 },
+  subtitle: { fontSize: 13, marginTop: 4, lineHeight: 19 },
+
+  pastelMetricCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    overflow: 'hidden',
+    position: 'relative',
+    minHeight: 104,
+    shadowColor: '#0f0f0f',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  iconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metricValueText: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  metricLabelText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 8,
+  },
+  waveContainer: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    opacity: 0.65,
+    pointerEvents: 'none',
+  },
 
   alertBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     padding: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
   },
 
   card: {
     padding: 24,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
     gap: 18,
+    shadowColor: '#0f0f0f',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  iconWrap: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  cardTitle: { fontSize: 16, fontWeight: '700' },
-  cardSub: { fontSize: 12, marginTop: 1 },
+  iconWrap: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3EEFE' },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
+  cardSub: { fontSize: 12, marginTop: 1, color: '#64748B' },
 
   rowFields: { flexDirection: 'row', gap: 16 },
 
@@ -576,6 +819,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
   },
-  switchLabel: { fontSize: 14, fontWeight: '600' },
-  switchSub: { fontSize: 12, marginTop: 2 },
+  switchLabel: { fontSize: 14, fontWeight: '600', color: '#0F172A' },
+  switchSub: { fontSize: 12, marginTop: 2, color: '#64748B' },
 });

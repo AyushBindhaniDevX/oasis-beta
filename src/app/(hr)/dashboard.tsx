@@ -101,6 +101,7 @@ export default function HRDashboard() {
     { label: 'Payroll', icon: CreditCard, href: '/(hr)/payroll', color: '#0369A1', bg: '#E0F2FE' },
     { label: 'Performance', icon: Award, href: '/(hr)/performance', color: '#DC2626', bg: '#FEE2E2' },
     { label: 'Expenses', icon: Receipt, href: '/(hr)/expenses', color: '#059669', bg: '#D1FAE5' },
+    { label: 'Assets', icon: Laptop, href: '/(hr)/assets', color: '#2563EB', bg: '#EFF6FF' },
     { label: 'Learning', icon: GraduationCap, href: '/(hr)/learning', color: '#7C3AED', bg: '#EDE9FE' },
   ];
 

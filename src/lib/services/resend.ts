@@ -300,8 +300,10 @@ export async function sendResendEmail(payload: ResendEmailPayload): Promise<{ su
       emailBody.attachments = payload.attachments;
     }
 
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      // 1. Try Next.js / Serverless proxy route first
+    const isBrowser = Platform.OS === 'web' && typeof window !== 'undefined';
+
+    if (isBrowser) {
+      // 1. Try Next.js / Serverless proxy route first (avoids browser CORS restrictions)
       try {
         const proxyRes = await fetch('/api/send-email', {
           method: 'POST',
@@ -315,12 +317,13 @@ export async function sendResendEmail(payload: ResendEmailPayload): Promise<{ su
           sentViaApi = true;
         }
       } catch (proxyErr) {
-        // Fall through to direct fetch attempt
+        // Fall through to simulated mode on browser
       }
     }
 
-    // 2. Direct fetch with Resend API Key if proxy was not used/available
-    if (!sentViaApi && RESEND_API_KEY && !RESEND_API_KEY.startsWith('re_demo_key')) {
+    // 2. Direct fetch with Resend API Key for native runtime (iOS / Android / Node)
+    // Note: Resend API disallows browser origin direct calls via CORS policy.
+    if (!sentViaApi && !isBrowser && RESEND_API_KEY && !RESEND_API_KEY.startsWith('re_demo_key')) {
       try {
         const response = await fetch(RESEND_API_URL, {
           method: 'POST',

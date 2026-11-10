@@ -46,6 +46,9 @@ import { CustomPayrollItemsManager } from '@/components/payroll/CustomPayrollIte
 import type { Payroll, PayrollPeriod, Employee, CustomPayrollItem, Workplace } from '@/types';
 import {
   ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   RefreshCw,
   Sparkles,
   Calculator,
@@ -101,6 +104,14 @@ export default function PayrollDetailScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
+
+  // Pagination states for 700+ employee optimization
+  const [payrollPageSize, setPayrollPageSize] = useState<number | 'all'>(50);
+  const [payrollCurrentPage, setPayrollCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setPayrollCurrentPage(1);
+  }, [selectedUnit, selectedCategory, searchQuery, payrollPageSize]);
 
   // Detailed Entry Form state (Matches 9 User Requirements & Hospital Slip)
   const [selEmpId, setSelEmpId] = useState<string | null>(null);
@@ -721,6 +732,19 @@ export default function PayrollDetailScreen() {
     });
   }, [entries, selectedUnit, selectedCategory, searchQuery]);
 
+  // Pagination calculations for smooth rendering of 700+ payroll records
+  const payrollTotalPages = useMemo(() => {
+    if (payrollPageSize === 'all') return 1;
+    return Math.max(1, Math.ceil(filteredEntries.length / Number(payrollPageSize)));
+  }, [filteredEntries.length, payrollPageSize]);
+
+  const paginatedEntries = useMemo(() => {
+    if (payrollPageSize === 'all') return filteredEntries;
+    const size = Number(payrollPageSize);
+    const start = (payrollCurrentPage - 1) * size;
+    return filteredEntries.slice(start, start + size);
+  }, [filteredEntries, payrollCurrentPage, payrollPageSize]);
+
   // Export Prescribed 28-Column Salary Register as PDF / Landscape Print
   const handleExportRegisterPdf = async () => {
     if (!period) return;
@@ -1045,10 +1069,39 @@ export default function PayrollDetailScreen() {
 
         {/* ── Payroll Entries List ────────────────────────────────────────── */}
         <View style={[styles.entriesCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={[styles.entriesCardHeader, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.entriesTitle, { color: colors.text }]}>
-              Employees ({filteredEntries.length})
-            </Text>
+          <View style={[styles.entriesCardHeader, { borderBottomColor: colors.border, flexWrap: 'wrap', gap: 10 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <Text style={[styles.entriesTitle, { color: colors.text }]}>
+                Employees ({filteredEntries.length})
+              </Text>
+
+              {/* Rows Per Page Selector */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={{ fontSize: 12, color: colors.textSecondary }}>Per page:</Text>
+                {[25, 50, 100, 'all' as const].map((size) => (
+                  <TouchableOpacity
+                    key={String(size)}
+                    onPress={() => setPayrollPageSize(size)}
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 6,
+                      backgroundColor: payrollPageSize === size ? colors.primary : '#f1f5f9',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: '700',
+                        color: payrollPageSize === size ? '#ffffff' : colors.textSecondary,
+                      }}
+                    >
+                      {size === 'all' ? 'All' : size}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
 
             {/* Quick search input */}
             <View style={[styles.searchBox, { borderColor: colors.border, backgroundColor: colors.background }]}>
@@ -1071,10 +1124,11 @@ export default function PayrollDetailScreen() {
             </View>
           ) : (
             <View style={{ gap: 12, padding: 16 }}>
-              {filteredEntries.map((entry, idx) => {
+              {paginatedEntries.map((entry, idx) => {
+                const globalIdx = (payrollPageSize === 'all' ? 0 : (payrollCurrentPage - 1) * Number(payrollPageSize)) + idx;
                 const emp = entry.employee as any;
                 const empName = emp?.profile?.full_name || 'Staff Member';
-                const empCode = emp?.employee_code || emp?.id || `EMP-${idx + 1}`;
+                const empCode = emp?.employee_code || emp?.id || `EMP-${globalIdx + 1}`;
                 const slipGenerated = generatedSlips.has(entry.id);
                 const taxCfg = emp?.tax_config || {};
 
@@ -1102,7 +1156,7 @@ export default function PayrollDetailScreen() {
                     <View style={styles.entryItemTop}>
                       <View style={{ flex: 1, minWidth: 260 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <Text style={[styles.snoPill, { color: colors.textSecondary }]}>#{idx + 1}</Text>
+                          <Text style={[styles.snoPill, { color: colors.textSecondary }]}>#{globalIdx + 1}</Text>
                           <Text style={[styles.empNameText, { color: colors.text }]}>{empName}</Text>
                           <View style={styles.codePill}>
                             <Text style={styles.codePillText}>{empCode}</Text>
@@ -1231,6 +1285,112 @@ export default function PayrollDetailScreen() {
                   </View>
                 );
               })}
+            </View>
+          )}
+
+          {/* Pagination Navigation Bar */}
+          {filteredEntries.length > 0 && (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                backgroundColor: colors.surface,
+                borderTopWidth: 1,
+                borderTopColor: colors.border,
+                flexWrap: 'wrap',
+                gap: 10,
+              }}
+            >
+              <Text style={{ fontSize: 13, color: colors.textSecondary }}>
+                Showing{' '}
+                <Text style={{ fontWeight: '700', color: colors.text }}>
+                  {filteredEntries.length === 0 ? 0 : (payrollCurrentPage - 1) * (payrollPageSize === 'all' ? filteredEntries.length : Number(payrollPageSize)) + 1}
+                </Text>
+                –
+                <Text style={{ fontWeight: '700', color: colors.text }}>
+                  {payrollPageSize === 'all'
+                    ? filteredEntries.length
+                    : Math.min(payrollCurrentPage * Number(payrollPageSize), filteredEntries.length)}
+                </Text>{' '}
+                of <Text style={{ fontWeight: '700', color: colors.text }}>{filteredEntries.length}</Text> employees
+              </Text>
+
+              {payrollPageSize !== 'all' && payrollTotalPages > 1 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <TouchableOpacity
+                    onPress={() => setPayrollCurrentPage(1)}
+                    disabled={payrollCurrentPage === 1}
+                    style={{
+                      padding: 6,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      opacity: payrollCurrentPage === 1 ? 0.4 : 1,
+                      backgroundColor: colors.surface,
+                    }}
+                    accessibilityLabel="First page"
+                  >
+                    <ChevronsLeft size={16} color={colors.text} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setPayrollCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={payrollCurrentPage === 1}
+                    style={{
+                      padding: 6,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      opacity: payrollCurrentPage === 1 ? 0.4 : 1,
+                      backgroundColor: colors.surface,
+                    }}
+                    accessibilityLabel="Previous page"
+                  >
+                    <ChevronLeft size={16} color={colors.text} />
+                  </TouchableOpacity>
+
+                  <View style={{ paddingHorizontal: 10, paddingVertical: 4 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>
+                      Page {payrollCurrentPage} of {payrollTotalPages}
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() => setPayrollCurrentPage((p) => Math.min(payrollTotalPages, p + 1))}
+                    disabled={payrollCurrentPage === payrollTotalPages}
+                    style={{
+                      padding: 6,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      opacity: payrollCurrentPage === payrollTotalPages ? 0.4 : 1,
+                      backgroundColor: colors.surface,
+                    }}
+                    accessibilityLabel="Next page"
+                  >
+                    <ChevronRight size={16} color={colors.text} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setPayrollCurrentPage(payrollTotalPages)}
+                    disabled={payrollCurrentPage === payrollTotalPages}
+                    style={{
+                      padding: 6,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      opacity: payrollCurrentPage === payrollTotalPages ? 0.4 : 1,
+                      backgroundColor: colors.surface,
+                    }}
+                    accessibilityLabel="Last page"
+                  >
+                    <ChevronsRight size={16} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           )}
 

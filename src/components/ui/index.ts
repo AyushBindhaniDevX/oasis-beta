@@ -2,6 +2,7 @@ export * from './Badge';
 export * from './Button';
 export * from './Card';
 export * from './DatePicker';
+export * from './TimePicker';
 export * from './IconSelector';
 export * from './HeroBalanceCard';
 export * from './ActivityCard';

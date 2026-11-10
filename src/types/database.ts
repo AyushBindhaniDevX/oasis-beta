@@ -68,6 +68,8 @@ export interface Organization {
   plan?: SubscriptionPlan;
   features?: OrganizationFeatures;
   max_employees?: number;
+  units?: string[];
+  address?: string;
   settings: Record<string, unknown>;
   created_at: string;
   updated_at?: string;

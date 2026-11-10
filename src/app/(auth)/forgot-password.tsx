@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTheme } from '@/hooks/use-theme';
 import { auth } from '@/lib/firebase';
 import { sendPasswordResetEmail } from 'firebase/auth';
-import { useTheme } from '@/hooks/use-theme';
+import { BorderRadius, NotionColors, Shadows } from '@/constants/theme';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { ShieldCheck, Mail, KeyRound, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react-native';
@@ -90,7 +91,7 @@ export default function ForgotPasswordScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: '#F8FAFC' }]}>
+    <View style={[styles.container, { backgroundColor: '#ffffff' }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1, justifyContent: 'center' }}
@@ -98,8 +99,8 @@ export default function ForgotPasswordScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.formWrapper}>
             <View style={styles.header}>
-              <View style={[styles.iconContainer, { backgroundColor: colors.primary + '15' }]}>
-                <Mail size={32} color={colors.primary} />
+              <View style={[styles.iconContainer, { backgroundColor: NotionColors.cardTintLavender }]}>
+                <Mail size={28} color={NotionColors.primary} />
               </View>
               <Text style={styles.title}>Reset Password</Text>
               <Text style={styles.subtitle}>
@@ -107,10 +108,10 @@ export default function ForgotPasswordScreen() {
               </Text>
             </View>
 
-            <View style={[styles.card, { backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }]}>
+            <View style={[styles.card, { backgroundColor: '#ffffff', borderColor: NotionColors.hairline }]}>
               {error ? (
                 <View style={styles.errorBox}>
-                  <AlertCircle size={16} color="#DC2626" />
+                  <AlertCircle size={16} color={NotionColors.semanticError} />
                   <Text style={styles.errorText}>{error}</Text>
                 </View>
               ) : null}
@@ -118,7 +119,7 @@ export default function ForgotPasswordScreen() {
               {success ? (
                 <View style={{ gap: 16 }}>
                   <View style={styles.successBox}>
-                    <CheckCircle2 size={20} color="#059669" />
+                    <CheckCircle2 size={20} color={NotionColors.semanticSuccess} />
                     <Text style={styles.successText}>
                       Password reset instructions have been sent to {email}. Please check your inbox.
                     </Text>
@@ -162,7 +163,7 @@ export default function ForgotPasswordScreen() {
                   router.replace('/');
                 }
               }}
-              variant="ghost"
+              variant="link"
               size="sm"
               style={{ marginTop: 20, alignSelf: 'center' }}
             />
@@ -182,7 +183,7 @@ const styles = StyleSheet.create({
   },
   formWrapper: {
     width: '100%',
-    maxWidth: 440,
+    maxWidth: 420,
     alignSelf: 'center',
   },
   header: {
@@ -190,59 +191,50 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   iconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: BorderRadius.md, // 8px Notion standard
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
   },
   title: {
     fontSize: 24,
-    fontWeight: '800',
-    color: '#0F172A',
-    marginBottom: 8,
+    fontWeight: '600',
+    color: NotionColors.ink,
+    marginBottom: 6,
     textAlign: 'center',
+    letterSpacing: -0.4,
   },
   subtitle: {
     fontSize: 14,
-    color: '#64748B',
+    color: NotionColors.slate,
     textAlign: 'center',
     lineHeight: 20,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
   },
   card: {
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: BorderRadius.lg, // 12px
     padding: 24,
-    ...Platform.select({
-      web: {
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
-      },
-      default: {
-        elevation: 2,
-      },
-    }),
+    ...Shadows?.sm,
   },
   submitBtn: {
-    backgroundColor: '#0D7377',
-    borderRadius: 12,
-    paddingVertical: 12,
     marginTop: 4,
   },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEE2E2',
-    borderColor: '#F87171',
+    backgroundColor: NotionColors.cardTintRose,
+    borderColor: '#fca5a5',
     borderWidth: 1,
     padding: 12,
-    borderRadius: 10,
+    borderRadius: BorderRadius.md,
     marginBottom: 16,
     gap: 8,
   },
   errorText: {
-    color: '#DC2626',
+    color: NotionColors.semanticError,
     fontSize: 13,
     fontWeight: '500',
     flex: 1,
@@ -250,17 +242,17 @@ const styles = StyleSheet.create({
   successBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#D1FAE5',
-    borderColor: '#34D399',
+    backgroundColor: NotionColors.cardTintMint,
+    borderColor: '#86efac',
     borderWidth: 1,
-    padding: 16,
-    borderRadius: 10,
+    padding: 14,
+    borderRadius: BorderRadius.md,
     gap: 10,
   },
   successText: {
-    color: '#065F46',
-    fontSize: 14,
-    fontWeight: '600',
+    color: NotionColors.brandGreen,
+    fontSize: 13,
+    fontWeight: '500',
     flex: 1,
   },
 });

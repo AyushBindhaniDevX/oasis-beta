@@ -1,8 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Text, StyleSheet } from 'react-native';
 import { Modal } from './Modal';
-import { Button } from './Button';
-import { useTheme } from '@/hooks/use-theme';
+import { AlertTriangle, HelpCircle } from 'lucide-react-native';
 
 interface ConfirmDialogProps {
   visible: boolean;
@@ -17,29 +16,55 @@ interface ConfirmDialogProps {
 }
 
 export function ConfirmDialog({
-  visible, title, message,
-  confirmLabel = 'Confirm', cancelLabel = 'Cancel',
+  visible,
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
   variant = 'primary',
-  onConfirm, onCancel, loading,
+  onConfirm,
+  onCancel,
+  loading,
 }: ConfirmDialogProps) {
+  const isDanger = variant === 'danger';
+
   return (
-    <Modal visible={visible} onClose={onCancel} title={title}>
+    <Modal
+      visible={visible}
+      onClose={onCancel}
+      title={title}
+      size="sm"
+      icon={
+        isDanger ? (
+          <AlertTriangle size={20} color="#DC2626" />
+        ) : (
+          <HelpCircle size={20} color="#0D7377" />
+        )
+      }
+      iconBgColor={isDanger ? '#FEF2F2' : '#F0F7F7'}
+      iconBorderColor={isDanger ? '#FCA5A5' : 'rgba(13, 115, 119, 0.2)'}
+      primaryAction={{
+        label: confirmLabel,
+        onPress: onConfirm,
+        variant: isDanger ? 'danger' : 'primary',
+        loading,
+      }}
+      secondaryAction={{
+        label: cancelLabel,
+        onPress: onCancel,
+        disabled: loading,
+      }}
+    >
       <Text style={styles.message}>{message}</Text>
-      <View style={styles.actions}>
-        <Button title={cancelLabel} onPress={onCancel} variant="outline" style={{ flex: 1 }} />
-        <Button
-          title={confirmLabel}
-          onPress={onConfirm}
-          variant={variant === 'danger' ? 'danger' : 'primary'}
-          loading={loading}
-          style={{ flex: 1 }}
-        />
-      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  message: { fontSize: 15, lineHeight: 22, marginBottom: 20 },
-  actions: { flexDirection: 'row', gap: 12 },
+  message: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#334155',
+    marginVertical: 4,
+  },
 });

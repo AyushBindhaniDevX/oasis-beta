@@ -12,5 +12,5 @@ export default function HRLayout() {
   }
   if (role !== 'hr' && role !== 'admin') return <Redirect href="/(employee)/dashboard" />;
 
-  return <Stack screenOptions={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />;
+  return <Stack screenOptions={{ headerShown: false, gestureEnabled: false, fullScreenGestureEnabled: false, animation: 'fade' }} />;
 }

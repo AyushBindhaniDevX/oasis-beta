@@ -33,6 +33,12 @@ import {
   ChevronRight,
   ShieldCheck,
   Building2,
+  Laptop,
+  Clock,
+  Briefcase,
+  CreditCard,
+  FileText,
+  BarChart3,
 } from 'lucide-react-native';
 import Animated, {
   FadeInDown,
@@ -46,9 +52,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { FeatureGate } from '@/components/ui/FeatureGate';
 import { getRouteFeature } from '@/components/layout/Sidebar';
 import { useNotifications } from '@/context/NotificationContext';
+import { BorderRadius, NotionColors, Shadows } from '@/constants/theme';
 import * as Haptics from 'expo-haptics';
 
-interface TabItem {
+export interface TabItem {
   key: string;
   label: string;
   icon: React.ElementType;
@@ -56,39 +63,80 @@ interface TabItem {
   feature?: string;
 }
 
-const getTabsForRole = (role?: string | null): TabItem[] => [
-  { key: 'home', label: 'Home', icon: LayoutDashboard, href: role === 'admin' ? '/(admin)/dashboard' : role === 'hr' ? '/(hr)/dashboard' : '/(employee)/dashboard' },
-  { key: 'attendance', label: 'Attendance', icon: CalendarClock, href: '/(employee)/attendance', feature: 'attendance' },
-  { key: 'leave', label: 'Leave', icon: CalendarDays, href: '/(employee)/leave', feature: 'leave' },
-  { key: 'payslips', label: 'Payslips', icon: Banknote, href: '/(employee)/payslips', feature: 'payroll' },
-  { key: 'more', label: 'More', icon: MoreHorizontal, href: '' },
-];
+export const getTabsForRole = (role?: string | null): TabItem[] => {
+  if (role === 'admin') {
+    return [
+      { key: 'home', label: 'Console', icon: LayoutDashboard, href: '/(admin)/dashboard' },
+      { key: 'users', label: 'Users', icon: Users, href: '/(admin)/users', feature: 'users' },
+      { key: 'attendance', label: 'Attendance', icon: CalendarClock, href: '/(hr)/attendance', feature: 'attendance' },
+      { key: 'leave', label: 'Leave', icon: CalendarDays, href: '/(hr)/leave', feature: 'leave' },
+      { key: 'more', label: 'More', icon: MoreHorizontal, href: '' },
+    ];
+  }
+  if (role === 'hr') {
+    return [
+      { key: 'home', label: 'Console', icon: LayoutDashboard, href: '/(hr)/dashboard' },
+      { key: 'staff', label: 'Staff', icon: Users, href: '/(admin)/users', feature: 'users' },
+      { key: 'attendance', label: 'Attendance', icon: CalendarClock, href: '/(hr)/attendance', feature: 'attendance' },
+      { key: 'leave', label: 'Leave', icon: CalendarDays, href: '/(hr)/leave', feature: 'leave' },
+      { key: 'more', label: 'More', icon: MoreHorizontal, href: '' },
+    ];
+  }
+  // Employee
+  return [
+    { key: 'home', label: 'Home', icon: LayoutDashboard, href: '/(employee)/dashboard' },
+    { key: 'attendance', label: 'Attendance', icon: CalendarClock, href: '/(employee)/attendance', feature: 'attendance' },
+    { key: 'leave', label: 'Leave', icon: CalendarDays, href: '/(employee)/leave', feature: 'leave' },
+    { key: 'payslips', label: 'Salary', icon: Banknote, href: '/(employee)/payslips', feature: 'payroll' },
+    { key: 'more', label: 'More', icon: MoreHorizontal, href: '' },
+  ];
+};
 
-interface MoreItem {
+export interface MoreItem {
   label: string;
   icon: React.ElementType;
   href: string;
   feature?: string;
   description?: string;
+  badge?: string;
 }
 
-const MORE_ITEMS: MoreItem[] = [
-  { label: 'Directory', icon: Users, href: '/(employee)/directory', feature: 'users', description: 'Staff & Hospital Departments' },
-  { label: 'Holidays', icon: CalendarDays, href: '/(employee)/holidays', feature: 'holidays', description: 'Official Holiday Calendar' },
-  { label: 'Performance', icon: Award, href: '/(employee)/performance', feature: 'performance', description: 'Appraisals, Goals & Kudos' },
-  { label: 'Learning', icon: GraduationCap, href: '/(employee)/learning', feature: 'learning', description: 'Training Courses & CME' },
-  { label: 'Expenses', icon: Receipt, href: '/(employee)/expenses', feature: 'expenses', description: 'Mileage & Claims' },
-  { label: 'Helpdesk', icon: HelpCircle, href: '/(employee)/helpdesk', feature: 'helpdesk', description: 'IT, HR & Facility Support' },
-  { label: 'Notifications', icon: Bell, href: '/(employee)/notifications', description: 'Alerts & Bulletins' },
-  { label: 'My Profile', icon: User, href: '/(employee)/profile', description: 'Personal Details & Identity' },
-  { label: 'Settings', icon: Settings, href: '/(employee)/settings', description: 'Preferences & Security' },
-];
+export const getMoreItemsForRole = (role?: string | null): MoreItem[] => {
+  if (role === 'admin' || role === 'hr') {
+    return [
+      { label: 'Expenses & Claims', icon: Receipt, href: '/(hr)/expenses', feature: 'expenses', description: 'Review & approve employee claims' },
+      { label: 'Asset Management', icon: Laptop, href: '/(hr)/assets', feature: 'assets', description: 'Hardware inventory & barcode auditing' },
+      { label: 'Learning & LMS', icon: GraduationCap, href: '/(hr)/learning', feature: 'learning', description: 'Course creation & training metrics' },
+      { label: 'Shifts & Rosters', icon: Clock, href: '/(hr)/shifts', feature: 'shifts', description: 'Staff shift assignments & rotas' },
+      { label: 'Payroll', icon: CreditCard, href: '/(hr)/payroll', feature: 'payroll', description: 'Salary registers & payslips' },
+      { label: 'Performance', icon: Award, href: '/(hr)/performance', feature: 'performance', description: 'KPIs, appraisal cycles & reviews' },
+      { label: 'Recruitment & ATS', icon: Briefcase, href: '/(hr)/recruitment', feature: 'recruitment', description: 'Job openings, candidates & pipelines' },
+      { label: 'Helpdesk Tickets', icon: HelpCircle, href: '/(hr)/helpdesk', feature: 'helpdesk', description: 'Employee requests & ticket triage' },
+      { label: 'Templates & Letters', icon: FileText, href: '/(hr)/templates', feature: 'templates', description: 'Appointment & experience letters' },
+      { label: 'Reports & Analytics', icon: BarChart3, href: role === 'admin' ? '/(admin)/reports' : '/(hr)/reports', description: 'Forensic audits & workforce analytics' },
+      { label: 'Settings', icon: Settings, href: '/(admin)/settings', description: 'System policies & permissions' },
+    ];
+  }
+  return [
+    { label: 'Directory', icon: Users, href: '/(employee)/directory', feature: 'users', description: 'Staff directory & departments' },
+    { label: 'Holidays', icon: CalendarDays, href: '/(employee)/holidays', feature: 'holidays', description: 'Official company calendar' },
+    { label: 'Expenses', icon: Receipt, href: '/(employee)/expenses', feature: 'expenses', description: 'Mileage & expense claims' },
+    { label: 'My Assets', icon: Laptop, href: '/(employee)/assets', feature: 'assets', description: 'Custody & equipment requisitions' },
+    { label: 'Learning & LMS', icon: GraduationCap, href: '/(employee)/learning', feature: 'learning', description: 'Training courses & certificates' },
+    { label: 'Performance', icon: Award, href: '/(employee)/performance', feature: 'performance', description: 'Reviews, goals & kudos' },
+    { label: 'Helpdesk', icon: HelpCircle, href: '/(employee)/helpdesk', feature: 'helpdesk', description: 'IT, HR & facilities support' },
+    { label: 'Notifications', icon: Bell, href: '/(employee)/notifications', description: 'Announcements & updates' },
+    { label: 'My Profile', icon: User, href: '/(employee)/profile', description: 'Personal details & credentials' },
+    { label: 'Settings', icon: Settings, href: '/(employee)/settings', description: 'Preferences & security' },
+  ];
+};
 
 function getActiveTab(pathname: string): string {
   if (pathname.includes('/dashboard')) return 'home';
   if (pathname.includes('/attendance')) return 'attendance';
   if (pathname.includes('/leave')) return 'leave';
-  if (pathname.includes('/payslips') || pathname.includes('/payslip')) return 'payslips';
+  if (pathname.includes('/payslips') || pathname.includes('/payroll')) return 'payslips';
+  if (pathname.includes('/users')) return 'users';
   return 'more';
 }
 
@@ -98,7 +146,7 @@ interface BottomTabBarProps {
   moreItems?: MoreItem[];
 }
 
-export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomTabBarProps) {
+export function BottomTabBar({ children, tabs, moreItems }: BottomTabBarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { width } = useWindowDimensions();
@@ -109,21 +157,20 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
   const { profile, signOut, role } = useAuth();
   const { unreadCount } = useNotifications();
 
-  const resolvedTabs = tabs || getTabsForRole(profile?.role || role);
+  const userRole = profile?.role || role;
+  const resolvedTabs = tabs || getTabsForRole(userRole);
+  const resolvedMoreItems = moreItems || getMoreItemsForRole(userRole);
 
-  // Safe bottom inset: ensures Android 3-button nav / gesture bar & iOS home indicators never cover UI
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 20 : 12);
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Determine if the current route is locked by organization feature gates
   const currentRouteFeat = useMemo(() => getRouteFeature(pathname), [pathname]);
   const isCurrentRouteLocked = Boolean(
     currentRouteFeat && !isFeatureEnabled(currentRouteFeat.feature)
   );
 
-  // If on desktop screen width, pass children through directly
   if (isDesktop) return <>{children}</>;
 
   const activeTab = getActiveTab(pathname);
@@ -149,7 +196,7 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
     if (isTabLocked(tab)) {
       Alert.alert(
         'Module Locked',
-        `The "${tab.label}" feature is locked for ${organization?.name || 'your organization'}. Please contact your administrator to unlock this module.`,
+        `The "${tab.label}" feature is locked for ${organization?.name || 'your organization'}. Please contact your administrator.`,
         [{ text: 'OK' }]
       );
       return;
@@ -164,7 +211,7 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
     if (isMoreItemLocked(item)) {
       Alert.alert(
         'Module Locked',
-        `The "${item.label}" feature is locked for ${organization?.name || 'your organization'}. Please contact your administrator to unlock this module.`,
+        `The "${item.label}" feature is locked for ${organization?.name || 'your organization'}. Please contact your administrator.`,
         [{ text: 'OK' }]
       );
       return;
@@ -173,7 +220,7 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
     router.push(item.href as never);
   };
 
-  const filteredMoreItems = moreItems.filter((item) => {
+  const filteredMoreItems = resolvedMoreItems.filter((item) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return item.label.toLowerCase().includes(q) || (item.description || '').toLowerCase().includes(q);
@@ -181,7 +228,7 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* ── Main Content with Route-Level Feature Gate Interception ── */}
+      {/* Main Content Area with Route Feature Interception */}
       <View style={styles.content}>
         {isCurrentRouteLocked && currentRouteFeat ? (
           <FeatureGate
@@ -196,11 +243,11 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
         )}
       </View>
 
-      {/* ── Enhanced Native-Style "More" Bottom Sheet ── */}
+      {/* Notion-Style "More" Bottom Sheet */}
       {moreOpen && (
         <Animated.View
-          entering={FadeIn.duration(180)}
-          exiting={FadeOut.duration(150)}
+          entering={FadeIn.duration(160)}
+          exiting={FadeOut.duration(120)}
           style={styles.moreOverlay}
         >
           <TouchableOpacity
@@ -209,11 +256,11 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
             onPress={() => setMoreOpen(false)}
           />
           <Animated.View
-            entering={FadeInDown.duration(280).springify().damping(18)}
+            entering={FadeInDown.duration(240).springify().damping(20)}
             style={[
               styles.moreSheet,
               {
-                backgroundColor: '#FFFFFF',
+                backgroundColor: '#ffffff',
                 paddingBottom: Math.max(insets.bottom, 16) + 12,
               },
             ]}
@@ -224,25 +271,29 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
             </View>
 
             {/* Header with Organization Branding */}
-            <View style={[styles.moreHeader, { borderBottomColor: colors.backgroundElement }]}>
+            <View style={[styles.moreHeader, { borderBottomColor: colors.border }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
                 {companyLogoUrl ? (
                   <Image source={{ uri: companyLogoUrl }} style={styles.orgLogo} resizeMode="contain" />
                 ) : (
-                  <View style={[styles.orgLogoPlaceholder, { backgroundColor: colors.primaryLight }]}>
-                    <Building2 size={18} color={colors.primary} />
+                  <View style={[styles.orgLogoPlaceholder, { backgroundColor: NotionColors.cardTintLavender }]}>
+                    <Building2 size={18} color={NotionColors.primary} />
                   </View>
                 )}
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.moreTitle, { color: colors.text }]} numberOfLines={1}>
-                    {organization?.name || companyName}
+                  <Text style={[styles.moreTitle, { color: NotionColors.ink }]} numberOfLines={1}>
+                    {organization?.name || companyName || 'Workspace'}
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                    <View style={[styles.activePlanChip, { backgroundColor: colors.primaryLight }]}>
-                      <ShieldCheck size={10} color={colors.primary} />
-                      <Text style={[styles.activePlanText, { color: colors.primary }]}>{String(activePlan).toUpperCase()}</Text>
+                    <View style={[styles.activePlanChip, { backgroundColor: NotionColors.cardTintLavender }]}>
+                      <ShieldCheck size={10} color={NotionColors.brandPurple800} />
+                      <Text style={[styles.activePlanText, { color: NotionColors.brandPurple800 }]}>
+                        {String(activePlan || 'TEAM').toUpperCase()}
+                      </Text>
                     </View>
-                    <Text style={[styles.moreSubtitle, { color: colors.textSecondary }]}>Apps & Console</Text>
+                    <Text style={[styles.moreSubtitle, { color: NotionColors.steel }]}>
+                      {String(profile?.role || role || 'employee').toUpperCase()} SUITE
+                    </Text>
                   </View>
                 </View>
               </View>
@@ -252,23 +303,23 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
                 style={[styles.moreCloseBtn, { backgroundColor: colors.backgroundElement }]}
                 activeOpacity={0.7}
               >
-                <X size={18} color={colors.textSecondary} />
+                <X size={16} color={NotionColors.steel} />
               </TouchableOpacity>
             </View>
 
-            {/* Module Search Bar */}
-            <View style={[styles.searchBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Search size={16} color={colors.textTertiary} />
+            {/* Notion Search Pill */}
+            <View style={[styles.searchBar, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}>
+              <Search size={15} color={NotionColors.steel} />
               <TextInput
-                style={[styles.searchInput, { color: colors.text }]}
-                placeholder="Search modules, claims, support..."
-                placeholderTextColor={colors.textTertiary}
+                style={[styles.searchInput, { color: NotionColors.ink }]}
+                placeholder="Search workspace modules & tools..."
+                placeholderTextColor={NotionColors.steel}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
               />
               {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <X size={14} color={colors.textTertiary} />
+                  <X size={14} color={NotionColors.steel} />
                 </TouchableOpacity>
               )}
             </View>
@@ -276,7 +327,7 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
             {/* Modules List */}
             <ScrollView
               style={styles.sheetScroll}
-              contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 32 }}
+              contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 24 }}
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.moreGrid}>
@@ -290,9 +341,9 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
                       key={item.label}
                       style={[
                         styles.moreItem,
-                        { backgroundColor: colors.surface, borderColor: colors.backgroundElement },
-                        isActive && { backgroundColor: colors.primaryLight, borderColor: colors.primaryLight },
-                        isLocked && { opacity: 0.65 },
+                        { backgroundColor: '#ffffff', borderColor: colors.border },
+                        isActive && { backgroundColor: NotionColors.cardTintLavender, borderColor: NotionColors.brandPurple300 },
+                        isLocked && { opacity: 0.6 },
                       ]}
                       onPress={() => handleMoreItemPress(item)}
                       activeOpacity={0.75}
@@ -300,14 +351,16 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
                       <View
                         style={[
                           styles.moreItemIcon,
-                          isActive ? { backgroundColor: colors.primary } : { backgroundColor: colors.backgroundElement },
-                          isLocked && { backgroundColor: colors.dangerLight },
+                          isActive
+                            ? { backgroundColor: NotionColors.primary }
+                            : { backgroundColor: colors.backgroundElement },
+                          isLocked && { backgroundColor: NotionColors.cardTintRose },
                         ]}
                       >
-                        <Icon size={20} color={isActive ? '#FFFFFF' : isLocked ? colors.danger : colors.text} />
+                        <Icon size={18} color={isActive ? '#ffffff' : isLocked ? NotionColors.semanticError : NotionColors.ink} />
                         {isLocked && (
                           <View style={styles.lockBadgeIcon}>
-                            <Lock size={8} color="#FFFFFF" strokeWidth={2.5} />
+                            <Lock size={8} color="#ffffff" strokeWidth={2.5} />
                           </View>
                         )}
                       </View>
@@ -317,45 +370,45 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
                           <Text
                             style={[
                               styles.moreItemLabel,
-                              { color: colors.text },
-                              isActive && { color: colors.primary, fontWeight: '700' },
-                              isLocked && { color: colors.textSecondary },
+                              { color: NotionColors.ink },
+                              isActive && { color: NotionColors.primary, fontWeight: '600' },
+                              isLocked && { color: NotionColors.slate },
                             ]}
                             numberOfLines={1}
                           >
                             {item.label}
                           </Text>
                           {isLocked && (
-                            <View style={[styles.lockedChip, { backgroundColor: colors.dangerLight }]}>
-                              <Text style={[styles.lockedChipText, { color: colors.danger }]}>LOCKED</Text>
+                            <View style={[styles.lockedChip, { backgroundColor: NotionColors.cardTintRose }]}>
+                              <Text style={[styles.lockedChipText, { color: NotionColors.semanticError }]}>LOCKED</Text>
                             </View>
                           )}
                         </View>
                         {item.description ? (
-                          <Text style={[styles.moreItemDesc, { color: colors.textSecondary }]} numberOfLines={1}>
+                          <Text style={[styles.moreItemDesc, { color: NotionColors.steel }]} numberOfLines={1}>
                             {item.description}
                           </Text>
                         ) : null}
                       </View>
 
-                      <ChevronRight size={14} color={isActive ? colors.primary : colors.borderStrong} />
+                      <ChevronRight size={14} color={isActive ? NotionColors.primary : NotionColors.hairlineStrong} />
                     </TouchableOpacity>
                   );
                 })}
               </View>
 
-              {/* Bottom Quick Actions: Sign Out */}
-              <View style={[styles.sheetFooter, { borderTopColor: colors.backgroundElement }]}>
+              {/* Bottom Quick Action: Sign Out */}
+              <View style={[styles.sheetFooter, { borderTopColor: colors.border }]}>
                 <TouchableOpacity
-                  style={[styles.signOutBtn, { backgroundColor: colors.dangerLight }]}
+                  style={[styles.signOutBtn, { backgroundColor: NotionColors.cardTintRose }]}
                   onPress={() => {
                     setMoreOpen(false);
                     signOut();
                   }}
                   activeOpacity={0.8}
                 >
-                  <LogOut size={16} color={colors.danger} />
-                  <Text style={[styles.signOutText, { color: colors.danger }]}>Sign Out of Oasis HCM</Text>
+                  <LogOut size={16} color={NotionColors.semanticError} />
+                  <Text style={[styles.signOutText, { color: NotionColors.semanticError }]}>Sign Out of Workspace</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -363,15 +416,15 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
         </Animated.View>
       )}
 
-      {/* ── Modern Frosted Mobile Bottom Navigation Bar ── */}
+      {/* Notion Mobile Bottom Tab Bar */}
       <View
         style={[
           styles.tabBar,
           {
-            backgroundColor: colors.surface,
+            backgroundColor: '#ffffff',
             borderTopColor: colors.border,
             paddingBottom: bottomInset,
-            minHeight: 56 + bottomInset,
+            minHeight: 52 + bottomInset,
           },
         ]}
       >
@@ -384,27 +437,33 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
             <TouchableOpacity
               key={tab.key}
               onPress={() => handleTabPress(tab)}
-              style={[styles.tab, isLocked && { opacity: 0.6 }]}
+              style={[styles.tab, isLocked && { opacity: 0.55 }]}
               activeOpacity={0.75}
             >
               <View
                 style={[
                   styles.tabIndicator,
-                  isActive && { backgroundColor: colors.primaryLight },
+                  isActive && {
+                    backgroundColor: '#F3EEFE',
+                    borderWidth: 1,
+                    borderColor: '#DDD6FE',
+                    borderRadius: 16,
+                    paddingHorizontal: 8,
+                  },
                 ]}
               >
                 <Icon
-                  size={20}
-                  color={isActive ? colors.primary : isLocked ? colors.textTertiary : colors.textSecondary}
-                  strokeWidth={isActive ? 2.4 : 1.8}
+                  size={19}
+                  color={isActive ? '#7C3AED' : isLocked ? NotionColors.muted : NotionColors.steel}
+                  strokeWidth={isActive ? 2.5 : 1.8}
                 />
                 {isLocked && (
                   <View style={styles.tabLockBadge}>
-                    <Lock size={8} color="#FFFFFF" strokeWidth={3} />
+                    <Lock size={7} color="#ffffff" strokeWidth={3} />
                   </View>
                 )}
                 {tab.key === 'more' && unreadCount > 0 && !isLocked && (
-                  <View style={[styles.tabCountBadge, { backgroundColor: colors.primary }]}>
+                  <View style={[styles.tabCountBadge, { backgroundColor: NotionColors.primary }]}>
                     <Text style={styles.tabCountText}>
                       {unreadCount > 9 ? '9+' : unreadCount}
                     </Text>
@@ -414,13 +473,16 @@ export function BottomTabBar({ children, tabs, moreItems = MORE_ITEMS }: BottomT
               <Text
                 style={[
                   styles.tabLabel,
-                  { color: isActive ? colors.primary : isLocked ? colors.textTertiary : colors.textSecondary },
-                  isActive && styles.tabLabelActive,
+                  { color: isActive ? '#6D28D9' : isLocked ? NotionColors.muted : NotionColors.slate },
+                  isActive && { fontWeight: '800', color: '#6D28D9' },
                 ]}
                 numberOfLines={1}
               >
                 {tab.label}
               </Text>
+              {isActive && (
+                <View style={{ width: 16, height: 3, backgroundColor: '#7C3AED', borderRadius: 1.5, marginTop: 2 }} />
+              )}
             </TouchableOpacity>
           );
         })}
@@ -436,33 +498,32 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-
-  // Bottom Navigation Bar
   tabBar: {
     flexDirection: 'row',
-    paddingTop: 8,
+    paddingTop: 6,
     borderTopWidth: 1,
-    ...(Platform.select({
-      web: { boxShadow: '0 -4px 20px rgba(0, 77, 71, 0.08)' },
+    ...Platform.select({
+      web: { boxShadow: '0 -2px 10px rgba(15, 15, 15, 0.05)' } as any,
       default: {
-        shadowColor: '#004D47',
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-        elevation: 10,
+        shadowColor: '#0f0f0f',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+        elevation: 4,
       },
-    }) as any),
+    }),
   },
   tab: {
     flex: 1,
     alignItems: 'center',
     gap: 2,
     position: 'relative',
+    minHeight: 44, // Touch target
   },
   tabIndicator: {
     width: 44,
-    height: 30,
-    borderRadius: 15,
+    height: 28,
+    borderRadius: BorderRadius.full, // 9999px for pill tab indicator
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -470,90 +531,81 @@ const styles = StyleSheet.create({
   tabLockBadge: {
     position: 'absolute',
     top: -2,
-    right: -4,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#DC2626',
+    right: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: NotionColors.semanticError,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#FFFFFF',
+    borderColor: '#ffffff',
   },
   tabCountBadge: {
     position: 'absolute',
     top: -2,
-    right: -6,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
+    right: -4,
+    minWidth: 15,
+    height: 15,
+    borderRadius: 7.5,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 3,
     borderWidth: 1.5,
-    borderColor: '#FFFFFF',
+    borderColor: '#ffffff',
   },
   tabCountText: {
     fontSize: 9,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  tabDotBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 8,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#006a61',
+    fontWeight: '600',
+    color: '#ffffff',
   },
   tabLabel: {
     fontSize: 11,
     fontWeight: '500',
-    letterSpacing: 0.1,
+    letterSpacing: -0.1,
   },
   tabLabelActive: {
-    fontWeight: '800',
+    fontWeight: '600',
   },
 
-  // More Sheet Overlay
+  // More Sheet
   moreOverlay: {
     ...StyleSheet.absoluteFill,
     zIndex: 999,
   },
   moreBackdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    backgroundColor: 'rgba(10, 21, 48, 0.65)', // Notion brand-navy
   },
   moreSheet: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    maxHeight: '82%',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 12,
-    ...(Platform.select({
-      web: { boxShadow: '0 -10px 40px rgba(0, 0, 0, 0.2)' },
+    maxHeight: '84%',
+    borderTopLeftRadius: BorderRadius.xl, // 16px
+    borderTopRightRadius: BorderRadius.xl,
+    paddingTop: 10,
+    ...Platform.select({
+      web: { boxShadow: '0 -10px 40px rgba(15, 15, 15, 0.16)' } as any,
       default: {
-        shadowColor: '#000',
+        shadowColor: '#0f0f0f',
         shadowOffset: { width: 0, height: -8 },
-        shadowOpacity: 0.2,
-        shadowRadius: 20,
-        elevation: 24,
+        shadowOpacity: 0.16,
+        shadowRadius: 24,
+        elevation: 20,
       },
-    }) as any),
+    }),
   },
   sheetHandleWrap: {
     alignItems: 'center',
-    paddingVertical: 6,
+    paddingVertical: 4,
   },
   sheetHandle: {
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#CBD5E1',
+    backgroundColor: '#e5e3df',
   },
   moreHeader: {
     flexDirection: 'row',
@@ -562,79 +614,67 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
   },
   orgLogo: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.md, // 8px
   },
   orgLogoPlaceholder: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
-    backgroundColor: '#EDF8F6',
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   moreTitle: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#0F172A',
+    fontWeight: '600',
   },
   activePlanChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#E6F4F2',
+    gap: 4,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingVertical: 1.5,
+    borderRadius: BorderRadius.xs, // 4px
   },
   activePlanText: {
     fontSize: 9,
-    fontWeight: '800',
-    color: '#006a61',
-    letterSpacing: 0.3,
+    fontWeight: '600',
+    letterSpacing: 0.4,
   },
   moreSubtitle: {
     fontSize: 11,
-    color: '#64748B',
     fontWeight: '500',
   },
   moreCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F1F5F9',
+    width: 30,
+    height: 30,
+    borderRadius: BorderRadius.sm, // 6px
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#F8FAFC',
     marginHorizontal: 20,
-    marginTop: 14,
+    marginTop: 12,
     marginBottom: 8,
     paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 12,
+    height: 44, // 44px Notion search-pill
+    borderRadius: BorderRadius.md, // 8px
     borderWidth: 1,
-    borderColor: '#E2E8F0',
   },
   searchInput: {
     flex: 1,
     fontSize: 13,
-    color: '#0F172A',
-    padding: 0,
+    paddingVertical: 0,
   },
-
   sheetScroll: {
     paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingTop: 6,
   },
   moreGrid: {
     gap: 8,
@@ -644,25 +684,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     padding: 12,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+    borderRadius: BorderRadius.lg, // 12px Notion standard
     borderWidth: 1,
-    borderColor: '#F1F5F9',
-    ...Platform.select({
-      web: { boxShadow: '0 1px 3px rgba(0,0,0,0.02)' },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.02,
-        shadowRadius: 2,
-        elevation: 1,
-      },
-    }),
   },
   moreItemIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.md, // 8px
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -671,43 +699,34 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -2,
     right: -2,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#DC2626',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: NotionColors.semanticError,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
   },
   moreItemLabel: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#0F172A',
+    fontWeight: '500',
   },
   moreItemDesc: {
-    fontSize: 11,
-    color: '#64748B',
+    fontSize: 12,
     marginTop: 1,
   },
   lockedChip: {
-    backgroundColor: '#FEE2E2',
     paddingHorizontal: 5,
-    paddingVertical: 1.5,
-    borderRadius: 4,
+    paddingVertical: 1,
+    borderRadius: BorderRadius.xs,
   },
   lockedChipText: {
     fontSize: 9,
-    fontWeight: '800',
-    color: '#DC2626',
-    letterSpacing: 0.4,
+    fontWeight: '600',
   },
-
   sheetFooter: {
     marginTop: 16,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
   },
   signOutBtn: {
     flexDirection: 'row',
@@ -715,17 +734,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: '#FEF2F2',
+    borderRadius: BorderRadius.md, // 8px
   },
   signOutText: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#DC2626',
+    fontWeight: '600',
   },
 });
 
 export function useTabBarHeight() {
   const insets = useSafeAreaInsets();
-  return 56 + Math.max(insets.bottom, Platform.OS === 'ios' ? 20 : 12);
+  return 52 + Math.max(insets.bottom, Platform.OS === 'ios' ? 20 : 12);
 }

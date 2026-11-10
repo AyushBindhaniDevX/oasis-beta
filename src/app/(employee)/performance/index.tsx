@@ -15,6 +15,14 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
+import {
+  CraftButton,
+  CraftCard,
+  CraftHeader,
+  Typography,
+  T,
+  S,
+} from '@/components/ui/CraftKit';
 import { Card } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
 import { Badge } from '@/components/ui/Badge';
@@ -576,14 +584,34 @@ export default function EmployeePerformanceScreen() {
   );
 
   return (
-    <>
+    <View style={{ flex: 1, backgroundColor: T.canvas }}>
+      <CraftHeader
+        title="Performance & Goals"
+        subtitle="360 appraisals, KPI self-evaluations & company recognition"
+        right={
+          activeTab === 'my_goals' ? (
+            <CraftButton
+              title="Add Goal"
+              variant="primary"
+              size="sm"
+              icon={<Plus size={14} color="#FFF" />}
+              onPress={() => setShowGoalModal(true)}
+            />
+          ) : activeTab === 'kudos' ? (
+            <CraftButton
+              title="Send Kudos"
+              variant="primary"
+              size="sm"
+              icon={<Sparkles size={14} color="#FFF" />}
+              onPress={() => setShowKudosModal(true)}
+            />
+          ) : undefined
+        }
+      />
       {isDesktop ? (
         <View style={styles.desktopContainer}>{content}</View>
       ) : (
-        <View style={[styles.mobileRoot, { backgroundColor: colors.background }]}>
-          <View style={styles.mobileHeader}>
-            <Text style={styles.mobileHeaderTitle}>Performance & Appraisals</Text>
-          </View>
+        <View style={[styles.mobileRoot, { backgroundColor: T.canvas }]}>
           {content}
         </View>
       )}
@@ -815,7 +843,7 @@ export default function EmployeePerformanceScreen() {
           </View>
         </View>
       </Modal>
-    </>
+    </View>
   );
 }
 

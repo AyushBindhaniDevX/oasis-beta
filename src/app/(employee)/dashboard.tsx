@@ -1,305 +1,318 @@
+import { InteractiveTile } from '@/components/ui/InteractiveTile';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View,
-  Text,
+  AlertCircle,
+  ArrowRight,
+  Briefcase,
+  Building2,
+  Calendar,
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  CreditCard,
+  LogIn,
+  LogOut,
+  MapPin,
+  Shield,
+  Laptop,
+  GraduationCap,
+  Receipt,
+} from 'lucide-react-native';
+import { useCallback, useEffect, useState, useMemo } from 'react';
+import {
   Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Text,
   TouchableOpacity,
   useWindowDimensions,
-  Alert,
+  View
 } from 'react-native';
-import Animated, {
-  Easing,
-  FadeInDown,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withSpring,
-  withTiming,
-  FadeInUp,
-} from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Path, SvgXml } from 'react-native-svg';
 
-// Lucide Icons
-import {
-  AlertCircle, ArrowRight, Award, Banknote, Bell, Briefcase, CalendarClock,
-  CalendarDays, CheckCircle2,
-  Clock, LogIn, LogOut as LogOutIcon,
-  Mic, Receipt,
-  Users, Globe, Lock, Building2, Cake, Heart, PartyPopper, Sparkles
-} from 'lucide-react-native';
-
-// Components & Context
 import { FaceVerificationModal } from '@/components/attendance/FaceVerificationModal';
+import { ScreenErrorFallback } from '@/components/ui/ScreenErrorBoundary';
 import { LoadingState } from '@/components/ui/States';
-import { ScreenHeader } from '@/components/ui/ScreenHeader';
-import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import { Avatar } from '@/components/ui/Avatar';
-import { Button } from '@/components/ui/Button';
+import { fetchMobileDashboardBundle, invalidateMobileDashboardCache } from '@/lib/api/mobileClient';
+import {
+  STOCK_10_SVG,
+  STOCK_12_SVG,
+  STOCK_13_SVG,
+  STOCK_1_SVG,
+  STOCK_3_SVG,
+  STOCK_4_SVG,
+  STOCK_5_SVG,
+  STOCK_6_SVG,
+  STOCK_7_SVG,
+  STOCK_8_SVG,
+  STOCK_9_SVG,
+} from '@/constants/workManagementSvgs';
 import { useNotifications } from '@/context/NotificationContext';
 import { useTenant } from '@/context/TenantContext';
-import { useTheme } from '@/hooks/use-theme';
-import { MOBILE } from '@/constants/mobile';
 import { useAuth } from '@/hooks/useAuth';
-
-// Services
-import { clockIn, clockOut, getAttendanceHistory, getTodayAttendance } from '@/lib/services/attendance';
+import { clockIn, clockOut, getTodayAttendance } from '@/lib/services/attendance';
 import { getEmployeeByProfileId } from '@/lib/services/employee';
 import { getLeaveBalances } from '@/lib/services/leave';
-import { calculateDistance, getCurrentLocation } from '@/lib/services/location';
-import { cancelClockInNotification, sendClockInNotification } from '@/lib/services/notifications';
-import { getPayslips } from '@/lib/services/payroll';
-import { getAppraisals } from '@/lib/services/performance';
-import { getEmployeeShiftForDate } from '@/lib/services/shifts';
+import { getCurrentLocation } from '@/lib/services/location';
+import { db } from '@/lib/firebase';
+import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import type { Attendance, Employee } from '@/types';
+import { formatTime, getGreeting, formatCurrency } from '@/utils/format';
 
-// Types & Utils
-import type { Attendance, Employee, LeaveBalance, Payslip, AppraisalReview, WorkShift } from '@/types';
-import { formatCurrency, formatDate, formatMinutes, formatTime, getGreeting } from '@/utils/format';
-import { ScreenErrorFallback } from '@/components/ui/ScreenErrorBoundary';
-
-// Expo Router renders this if the dashboard subtree throws, instead of crashing the app.
 export function ErrorBoundary({ error, retry }: { error: Error; retry: () => void }) {
   return <ScreenErrorFallback error={error} retry={retry} />;
 }
 
-// ─── Animated Pulse Clock-In Button ───────────────────────────────────────────
-function PulseButton({ onPress, loading, title, color }: { onPress: () => void; loading: boolean; title: string; color: string }) {
-  const ring1 = useSharedValue(1);
-  const ring1Op = useSharedValue(0.6);
-  const scale = useSharedValue(1);
+const FONT = Platform.select({
+  ios: 'System',
+  android: 'Roboto',
+  web: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+}) as string;
 
-  useEffect(() => {
-    ring1.value = withRepeat(
-      withSequence(
-        withTiming(1.2, { duration: 1600, easing: Easing.out(Easing.ease) }),
-        withTiming(1, { duration: 1600 })
-      ),
-      -1,
-      true
-    );
-    ring1Op.value = withRepeat(
-      withSequence(
-        withTiming(0, { duration: 1600 }),
-        withTiming(0.5, { duration: 1600 })
-      ),
-      -1,
-      true
-    );
-  }, []);
-
-  const ringStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: ring1.value }],
-    opacity: ring1Op.value,
-    position: 'absolute',
-    top: -10, left: -10, right: -10, bottom: -10,
-    borderRadius: 22,
-    borderWidth: 2,
-    borderColor: color,
-  }));
-
-  const pressStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
+/* ─── Metric Wave Graphic Primitive ──────────────────────────────────── */
+function MetricWave({
+  color = '#8B5CF6',
+  width = 140,
+  height = 28,
+}: {
+  color?: string;
+  width?: number;
+  height?: number;
+}) {
+  const d = `M 0 16 C 25 8, 45 24, 70 14 C 95 4, 115 22, ${width} 10`;
   return (
-    <Animated.View style={[{ position: 'relative', width: '100%', marginTop: 6 }, pressStyle]}>
-      {!loading && <Animated.View style={ringStyle} />}
-      <TouchableOpacity
-        onPressIn={() => { scale.value = withSpring(0.97, { damping: 12 }); }}
-        onPressOut={() => { scale.value = withSpring(1, { damping: 12 }); }}
-        onPress={loading ? undefined : onPress}
-        activeOpacity={0.9}
-        style={[clockBtnStyle.btn, { backgroundColor: color, shadowColor: color }]}
-      >
-        <View style={clockBtnStyle.iconCircle}>
-          <LogIn size={20} color="#FFF" />
-        </View>
-        <Text style={clockBtnStyle.label}>{loading ? 'Processing…' : title}</Text>
-      </TouchableOpacity>
-    </Animated.View>
+    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} fill="none">
+      <Path d={d} stroke={color} strokeWidth={2.4} strokeLinecap="round" />
+    </Svg>
   );
 }
 
-const clockBtnStyle = StyleSheet.create({
-  btn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    paddingVertical: 18,
-    borderRadius: 18,
-    width: '100%',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  iconCircle: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    padding: 8,
-    borderRadius: 999,
-  },
-  label: { color: '#FFF', fontSize: 17, fontWeight: '700', letterSpacing: 0.4 },
-});
-
 export default function EmployeeDashboard() {
-  const colors = useTheme();
   const { profile } = useAuth();
-  const { officeName, isFeatureEnabled, organization, employee: tenantEmp, workplace: tenantWp } = useTenant();
+  const { organization, employee: tenantEmp, workplace: tenantWp, companyLogoUrl } = useTenant();
   const activeOrgId = organization?.id || tenantEmp?.organization_id || profile?.organization_id;
-  const isWfhEnabled = isFeatureEnabled('wfh');
   const { unreadCount } = useNotifications();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
-
-  const primaryColor = colors.primary;
+  const isTablet = width >= 768 && width < 1024;
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [todayAttendance, setTodayAttendance] = useState<Attendance | null>(null);
-  const [recentAttendance, setRecentAttendance] = useState<Attendance[]>([]);
-  const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
-  const [latestPayslip, setLatestPayslip] = useState<Payslip | null>(null);
-  const [pendingAppraisal, setPendingAppraisal] = useState<AppraisalReview | null>(null);
-  const [todayShift, setTodayShift] = useState<WorkShift | null>(null);
+  const [monthAttendanceRecords, setMonthAttendanceRecords] = useState<Attendance[]>([]);
+  const [leaveBalanceTotal, setLeaveBalanceTotal] = useState<number>(14);
+  const [assignedShift, setAssignedShift] = useState<{ name: string; start_time: string; end_time: string } | null>(null);
   const [clockLoading, setClockLoading] = useState(false);
   const [clockError, setClockError] = useState('');
-  const [distance, setDistance] = useState<number | null>(null);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
-  // Face Verification Modal state
   const [showFaceModal, setShowFaceModal] = useState(false);
   const [faceModalType, setFaceModalType] = useState<'in' | 'out'>('in');
   const [pendingLoc, setPendingLoc] = useState<{ latitude: number; longitude: number }>({ latitude: 0, longitude: 0 });
+  const [isRemoteClock, setIsRemoteClock] = useState(false);
 
-  const loadData = useCallback(async () => {
+  // Real-Time Firestore Synchronization
+  useEffect(() => {
     if (!profile) return;
-    try {
-      const emp = tenantEmp || (await getEmployeeByProfileId(profile.id, activeOrgId));
-      if (emp && !emp.workplace && tenantWp) {
-        emp.workplace = tenantWp;
+    let unsubEmployee: (() => void) | undefined;
+    let unsubAttendance: (() => void) | undefined;
+    let unsubTodayAttendance: (() => void) | undefined;
+
+    async function initLiveDashboard() {
+      try {
+        // Fast Cached Bundle API: Instant render on mobile & web
+        if (profile?.id) {
+          try {
+            const { bundle } = await fetchMobileDashboardBundle(profile.id, activeOrgId);
+            if (bundle.employee) {
+              setEmployee(bundle.employee);
+              if (bundle.todayAttendance) setTodayAttendance(bundle.todayAttendance);
+              if (bundle.monthRecords.length > 0) setMonthAttendanceRecords(bundle.monthRecords);
+              if (bundle.leaveBalanceTotal) setLeaveBalanceTotal(bundle.leaveBalanceTotal);
+              if (bundle.defaultShift) {
+                setAssignedShift({
+                  name: bundle.defaultShift.name,
+                  start_time: bundle.defaultShift.start_time,
+                  end_time: bundle.defaultShift.end_time,
+                });
+              }
+              setLoading(false);
+            }
+          } catch (cacheErr) {
+            console.warn('Mobile API cache bundle bypass:', cacheErr);
+          }
+        }
+
+        const emp = tenantEmp || (profile?.id ? await getEmployeeByProfileId(profile.id, activeOrgId) : null);
+        if (emp && !emp.workplace && tenantWp) emp.workplace = tenantWp;
+        setEmployee(emp);
+
+        if (emp) {
+          // 1. Real-time Employee Document Listener
+          unsubEmployee = onSnapshot(doc(db, 'employees', emp.id), (snap) => {
+            if (snap.exists()) {
+              const liveData = { id: snap.id, ...snap.data() } as Employee;
+              setEmployee((prev) => {
+                if (!prev) return liveData;
+                return {
+                  ...prev,
+                  ...liveData,
+                  workplace: (liveData.workplace || prev.workplace || tenantWp) || undefined,
+                };
+              });
+            }
+          });
+
+          // 2. Real-time Today's Attendance Listener
+          const todayStr = new Date().toISOString().split('T')[0];
+          unsubTodayAttendance = onSnapshot(doc(db, 'attendance', `${emp.id}_${todayStr}`), (snap) => {
+            if (snap.exists()) {
+              setTodayAttendance({ id: snap.id, ...snap.data() } as Attendance);
+            } else {
+              setTodayAttendance(null);
+            }
+          });
+
+          // 3. Real-time Month's Attendance Records Listener
+          const qAttendance = query(
+            collection(db, 'attendance'),
+            where('employee_id', '==', emp.id)
+          );
+          unsubAttendance = onSnapshot(qAttendance, (snapshot) => {
+            const records: Attendance[] = [];
+            snapshot.forEach((d) => records.push({ id: d.id, ...d.data() } as Attendance));
+            setMonthAttendanceRecords(records);
+          });
+
+          // 4. Real-time Leave Balance Query
+          try {
+            const year = new Date().getFullYear();
+            const balances = await getLeaveBalances(emp.id, year, activeOrgId);
+            const totalRemaining = balances.reduce((sum, b) => sum + (b.remaining_days || 0), 0);
+            setLeaveBalanceTotal(totalRemaining);
+          } catch (e) {
+            console.warn('Error fetching leave balances:', e);
+          }
+
+          // 5. Shift Schedule Lookup
+          if (emp.default_shift_id) {
+            try {
+              const shiftSnap = await getDoc(doc(db, 'shifts', emp.default_shift_id));
+              if (shiftSnap.exists()) {
+                const sData = shiftSnap.data() as any;
+                setAssignedShift({
+                  name: sData.name || 'Regular Shift',
+                  start_time: sData.start_time || '09:00 AM',
+                  end_time: sData.end_time || '06:00 PM',
+                });
+              }
+            } catch {}
+          }
+        }
+      } catch (err) {
+        console.error('Live dashboard init error:', err);
+      } finally {
+        setLoading(false);
       }
-      setEmployee(emp);
-      if (emp) {
-        const todayDateStr = new Date().toISOString().split('T')[0];
-        const [today, history, balances, payslips, appraisals, shift] = await Promise.all([
-          getTodayAttendance(emp.id),
-          getAttendanceHistory(emp.id, 5),
-          getLeaveBalances(emp.id, undefined, activeOrgId),
-          getPayslips(emp.id),
-          getAppraisals({ employeeId: emp.id, status: 'self_review', organizationId: activeOrgId }),
-          getEmployeeShiftForDate(emp.id, todayDateStr)
-        ]);
-        setTodayAttendance(today);
-        setRecentAttendance(history);
-        setLeaveBalances(balances);
-        setLatestPayslip(payslips.length > 0 ? payslips[0] : null);
-        setPendingAppraisal(appraisals.length > 0 ? appraisals[0] : null);
-        setTodayShift(shift);
-      }
-    } catch (err) { console.error('Dashboard load error:', err); }
-    finally { setLoading(false); }
+    }
+
+    initLiveDashboard();
+
+    return () => {
+      if (unsubEmployee) unsubEmployee();
+      if (unsubAttendance) unsubAttendance();
+      if (unsubTodayAttendance) unsubTodayAttendance();
+    };
   }, [profile, activeOrgId, tenantEmp, tenantWp]);
 
-  useEffect(() => { loadData(); }, [loadData]);
-
-  // Location tracking and distance computation
-  useEffect(() => {
-    if (employee?.workplace?.latitude && employee?.workplace?.longitude) {
-      getCurrentLocation()
-        .then((loc) => {
-          setUserLocation(loc);
-          const dist = calculateDistance(
-            loc.latitude, loc.longitude,
-            employee.workplace!.latitude, employee.workplace!.longitude
-          );
-          setDistance(Math.round(dist));
-        })
-        .catch(() => { });
+  const onRefresh = async () => {
+    setRefreshing(true);
+    if (employee) {
+      try {
+        const year = new Date().getFullYear();
+        const balances = await getLeaveBalances(employee.id, year, activeOrgId);
+        const totalRemaining = balances.reduce((sum, b) => sum + (b.remaining_days || 0), 0);
+        setLeaveBalanceTotal(totalRemaining);
+        const today = await getTodayAttendance(employee.id);
+        setTodayAttendance(today);
+      } catch {}
     }
-  }, [employee]);
+    setRefreshing(false);
+  };
 
-  // Periodic distance refresh
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    if (employee?.workplace?.latitude && employee?.workplace?.longitude) {
-      interval = setInterval(() => {
-        getCurrentLocation()
-          .then((loc) => {
-            setUserLocation(loc);
-            const dist = calculateDistance(
-              loc.latitude, loc.longitude,
-              employee.workplace!.latitude, employee.workplace!.longitude
-            );
-            setDistance(Math.round(dist));
-          })
-          .catch(() => { });
-      }, 60000);
-    }
-    return () => { if (interval) clearInterval(interval); };
-  }, [employee]);
-
-  // Remote Clock In state
-  const [isRemoteClock, setIsRemoteClock] = useState(false);
-  const [remoteReason, setRemoteReason] = useState('Work From Home');
-
-  const onRefresh = async () => { setRefreshing(true); await loadData(); setRefreshing(false); };
-
-  const handleClock = async (type: 'in' | 'out', remote: boolean = false) => {
+  const handleClock = async (type: 'in' | 'out') => {
     setClockError('');
-    if (remote && !isWfhEnabled) {
-      setClockError('Work From Home (WFH) remote clock-in is locked for your organization. Please clock in on-site.');
-      return;
-    }
     setClockLoading(true);
-    setIsRemoteClock(remote);
     try {
       let loc = userLocation;
       try {
         loc = await getCurrentLocation();
         setUserLocation(loc);
-      } catch (locErr) {
-        if (!remote && type === 'in') {
-          throw new Error('GPS location required. Please enable location permissions or use Remote Clock-In.');
-        }
+      } catch {
+        loc = { latitude: 0, longitude: 0 };
       }
-
       const activeLoc = loc || { latitude: 0, longitude: 0 };
       setPendingLoc(activeLoc);
+      setIsRemoteClock(false);
 
-      if (employee?.workplace?.latitude && employee?.workplace?.longitude && activeLoc.latitude && activeLoc.longitude) {
-        const dist = Math.round(
-          calculateDistance(
-            activeLoc.latitude, activeLoc.longitude,
-            employee.workplace.latitude, employee.workplace.longitude
-          )
-        );
-        setDistance(dist);
+      // On Web: Execute punch directly with instantaneous feedback (no modal barrier)
+      if (Platform.OS === 'web') {
+        const result =
+          type === 'in'
+            ? await clockIn(activeLoc.latitude, activeLoc.longitude, 'web_verified', profile?.id, { isRemote: false })
+            : await clockOut(activeLoc.latitude, activeLoc.longitude, 'web_verified', profile?.id);
 
-        // Block office clock-in if outside geofence!
-        if (type === 'in' && !remote && dist > geofenceRadius) {
-          setClockError(
-            `You are outside the office geofence (${dist}m away from ${employee.workplace.name || officeName}). Office clock-in requires being within ${geofenceRadius}m. Please move within range or tap "Clock In Remotely (WFH)".`
-          );
-          setClockLoading(false);
-          return;
+        if (!result.success) {
+          setClockError(result.message || 'Operation failed');
+        } else if (profile?.id) {
+          invalidateMobileDashboardCache(profile.id, activeOrgId);
         }
-      } else if (type === 'in' && !remote && employee?.workplace?.latitude) {
-        setClockError('Unable to obtain your GPS location to verify office proximity. Please turn on location services or use Remote Clock-In.');
-        setClockLoading(false);
         return;
       }
 
-      setFaceModalType(type);
-      setShowFaceModal(true);
-    } catch (err: unknown) {
-      setClockError(err instanceof Error ? err.message : 'Failed to prepare clocking. Please try again.');
+      // On Native Mobile: Check for enrolled biometrics (Face ID / Fingerprint)
+      try {
+        const LocalAuthentication = await import('expo-local-authentication');
+        const hasHw = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+        if (hasHw && isEnrolled) {
+          const bioResult = await LocalAuthentication.authenticateAsync({
+            promptMessage: `Verify identity to Clock ${type === 'in' ? 'In' : 'Out'}`,
+            cancelLabel: 'Cancel',
+            disableDeviceFallback: false,
+          });
+
+          if (!bioResult.success) {
+            if (bioResult.error !== 'user_cancel' && bioResult.error !== 'app_cancel') {
+              setClockError('Biometric verification failed.');
+            }
+            return;
+          }
+        }
+      } catch (bioErr) {
+        console.warn('Native biometric check skipped:', bioErr);
+      }
+
+      // Record punch directly
+      const result =
+        type === 'in'
+          ? await clockIn(activeLoc.latitude, activeLoc.longitude, 'device_biometric_verified', profile?.id, { isRemote: false })
+          : await clockOut(activeLoc.latitude, activeLoc.longitude, 'device_biometric_verified', profile?.id);
+
+      if (!result.success) {
+        setClockError(result.message || 'Operation failed');
+      } else if (profile?.id) {
+        invalidateMobileDashboardCache(profile.id, activeOrgId);
+      }
+    } catch (err) {
+      setClockError(err instanceof Error ? err.message : 'Failed to prepare clocking.');
     } finally {
       setClockLoading(false);
     }
@@ -307,680 +320,1053 @@ export default function EmployeeDashboard() {
 
   const handleFaceVerified = async (faceSnapshot?: string) => {
     setClockLoading(true);
-    setClockError('');
     try {
-      const loc = pendingLoc || userLocation || { latitude: 0, longitude: 0 };
-      const result = faceModalType === 'in'
-        ? await clockIn(loc.latitude, loc.longitude, faceSnapshot, profile?.id, {
-            isRemote: isRemoteClock,
-            remoteReason: isRemoteClock ? remoteReason : undefined,
-          })
-        : await clockOut(loc.latitude, loc.longitude, faceSnapshot, profile?.id);
+      const loc = pendingLoc || { latitude: 0, longitude: 0 };
+      const result =
+        faceModalType === 'in'
+          ? await clockIn(loc.latitude, loc.longitude, faceSnapshot, profile?.id, { isRemote: isRemoteClock })
+          : await clockOut(loc.latitude, loc.longitude, faceSnapshot, profile?.id);
 
       if (!result.success) {
         setClockError(result.message || 'Operation failed');
       } else {
-        try {
-          if (faceModalType === 'in') {
-            const startTime = formatTime(new Date().toISOString());
-            await sendClockInNotification(startTime);
-          } else {
-            await cancelClockInNotification();
-          }
-        } catch (notifErr) { }
-
         setShowFaceModal(false);
-        await loadData();
       }
-    } catch (err: unknown) {
-      setClockError(err instanceof Error ? err.message : 'Biometric clocking failed. Please try again.');
+    } catch (err) {
+      setClockError(err instanceof Error ? err.message : 'Clocking failed.');
     } finally {
       setClockLoading(false);
     }
   };
 
-  const isClockedIn = todayAttendance && !todayAttendance.clock_out;
-  const isClockedOut = todayAttendance && todayAttendance.clock_out;
+  // Real-time Live Computed Metrics
+  const monthlyStats = useMemo(() => {
+    const now = new Date();
+    const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const thisMonthRecords = monthAttendanceRecords.filter((r) => (r.date || '').startsWith(currentYearMonth));
 
-  const statusBadgeVariant = (s: string): 'successLight' | 'warningLight' | 'dangerLight' | 'infoLight' => {
-    switch (s) {
-      case 'present': return 'successLight';
-      case 'late': case 'half_day': return 'warningLight';
-      case 'absent': return 'dangerLight';
-      default: return 'infoLight';
+    const presentOrLate = thisMonthRecords.filter((r) => r.status === 'present' || r.status === 'late').length;
+    const totalWorkingMins = thisMonthRecords.reduce((acc, r) => acc + (r.working_minutes || 0), 0);
+    const totalWorkingHours = Math.round(totalWorkingMins / 60);
+
+    // Business days in month passed so far
+    const dayOfMonth = now.getDate();
+    let weekdaysSoFar = 0;
+    for (let d = 1; d <= dayOfMonth; d++) {
+      const day = new Date(now.getFullYear(), now.getMonth(), d).getDay();
+      if (day !== 0 && day !== 6) weekdaysSoFar++;
     }
-  };
 
-  const stripEmoji = (s: string) => s.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]/gu, '').trim();
+    const baselineDays = Math.max(1, Math.max(weekdaysSoFar, thisMonthRecords.length));
+    const attendancePercent = thisMonthRecords.length > 0
+      ? Math.min(100, Math.round((presentOrLate / baselineDays) * 100))
+      : 100;
 
-  const isBirthday = React.useMemo(() => {
-    if (!employee?.date_of_birth) return false;
-    const today = new Date();
-    const dob = new Date(employee.date_of_birth);
-    return today.getDate() === dob.getDate() && today.getMonth() === dob.getMonth();
+    return {
+      percent: attendancePercent,
+      hours: totalWorkingHours,
+      presentDays: presentOrLate,
+      isOnTrack: attendancePercent >= 85,
+    };
+  }, [monthAttendanceRecords]);
+
+  const salaryDisplay = useMemo(() => {
+    const sal = (employee as any)?.salary;
+    const amount = sal?.gross_salary || sal?.base_salary || employee?.basic_salary || (employee as any)?.base_salary;
+    if (amount) {
+      return formatCurrency(amount);
+    }
+    return 'Active';
   }, [employee]);
+
+  const nextPayrollDateStr = useMemo(() => {
+    const now = new Date();
+    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return lastDayOfMonth.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }, []);
 
   if (loading) return <LoadingState />;
 
-  const netPay = latestPayslip?.payroll?.net_salary ?? 0;
-  const annualLeave = leaveBalances.find(b => (b.leave_type?.name || '').toLowerCase().includes('annual'));
-  const annualLeft = annualLeave?.remaining_days ?? 0;
+  const isClockedIn = Boolean(todayAttendance && !todayAttendance.clock_out);
+  const isClockedOut = Boolean(todayAttendance && todayAttendance.clock_out);
 
-  const geofenceRadius = employee?.workplace?.radius_meters ?? 200;
-  const isOutsideGeofence = distance !== null && employee?.workplace?.latitude && distance > geofenceRadius;
-
-  const ACCENT = {
-    teal: { color: primaryColor, bg: colors.primaryLight },
-    indigo: { color: '#6366F1', bg: '#EEF2FF' },
-    sky: { color: colors.info, bg: colors.infoLight },
-    amber: { color: colors.warning, bg: colors.warningLight },
-    emerald: { color: colors.success, bg: colors.successLight },
-    red: { color: colors.danger, bg: colors.dangerLight },
-  };
-
-  const kpis = [
-    { label: "Today's Hours", value: todayAttendance?.working_minutes != null ? formatMinutes(todayAttendance.working_minutes) : '—', accent: ACCENT.teal, icon: Clock, sub: todayAttendance?.clock_in ? `In: ${formatTime(todayAttendance.clock_in)}` : 'Not clocked in' },
-    { label: 'Leave Left', value: `${annualLeft}d`, accent: ACCENT.indigo, icon: CalendarDays, sub: annualLeave ? `of ${annualLeave.allocated_days} days` : 'No quota' },
-    { label: 'Net Pay', value: formatCurrency(netPay ?? 0), accent: ACCENT.sky, icon: Banknote, sub: latestPayslip?.period_month ? `Month ${latestPayslip.period_month}` : 'No payslip' },
-    { label: 'Dept', value: employee?.department?.name || '—', accent: ACCENT.amber, icon: Briefcase, sub: employee?.designation || 'Employee' },
-  ];
-
-  const quickActions = [
-    { label: 'Attendance', icon: CalendarClock, href: '/(employee)/attendance', accent: ACCENT.teal },
-    { label: 'Leave', icon: CalendarDays, href: '/(employee)/leave', accent: ACCENT.indigo },
-    { label: 'Payslips', icon: Banknote, href: '/(employee)/payslips', accent: ACCENT.sky },
-    { label: 'Expenses', icon: Receipt, href: '/(employee)/expenses', accent: ACCENT.red },
-    { label: 'Performance', icon: Award, href: '/(employee)/performance', accent: ACCENT.emerald },
-    { label: 'Directory', icon: Users, href: '/(employee)/directory', accent: ACCENT.amber },
-  ];
-
-  const statusLabel = isClockedIn ? 'Currently Working' : isClockedOut ? 'Shift Completed' : 'Ready to Start';
-  const statusDot = isClockedIn ? colors.success : isClockedOut ? colors.primary : colors.warning;
+  const userName = profile?.full_name?.split(' ')[0] || 'Team Member';
+  const orgName = organization?.name || 'WorkGrid Workspace';
+  const designation = employee?.designation || 'Staff';
+  const workplaceName = employee?.hospital_unit || employee?.workplace?.name || tenantWp?.name || 'Shanti Memorial Hospital - Cuttack';
+  const kpiCardWidth = isDesktop ? undefined : (width - 40 - 12) / 2;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: 120 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" colors={[colors.primary]} />}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Gradient hero header */}
-        <ScreenHeader
-          eyebrow={getGreeting()}
-          title={profile?.full_name?.split(' ')[0] || 'Team Member'}
-          subtitle={organization?.name ? `${organization.name} · Org ID: ${activeOrgId || 'N/A'}` : `Org ID: ${activeOrgId || 'N/A'}`}
-          paddingBottom={26}
-          right={
-            <View style={styles.headerActions}>
-              <TouchableOpacity
-                onPress={() => router.push('/(employee)/notifications' as never)}
-                style={styles.bellBtn}
-                activeOpacity={0.8}
-              >
-                <Bell size={20} color="#FFF" />
-                {unreadCount > 0 && <View style={[styles.bellDot, { borderColor: colors.primaryDark }]} />}
-              </TouchableOpacity>
-              {profile && (
-                <TouchableOpacity onPress={() => router.push('/(employee)/profile' as never)} activeOpacity={0.8}>
-                  <View style={styles.avatarRing}>
-                    <Avatar name={profile.full_name} url={profile.avatar_url} size={40} />
-                  </View>
-                </TouchableOpacity>
-              )}
-            </View>
-          }
-          stats={[
-            { label: 'Shift Start', value: todayShift ? todayShift.start_time : '--:--' },
-            { label: 'Clock In', value: todayAttendance?.clock_in ? formatTime(todayAttendance.clock_in) : '--:--' },
-            { label: 'Clock Out', value: todayAttendance?.clock_out ? formatTime(todayAttendance.clock_out) : '--:--' },
-            { label: 'Hours', value: todayAttendance?.working_minutes ? formatMinutes(todayAttendance.working_minutes) : '0h 0m', valueColor: '#6EE7B7' },
+    <ScrollView
+      style={s.canvas}
+      contentContainerStyle={[s.contentContainer, isDesktop && s.desktopContainer]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#7C3AED" />}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* ── Hero Greeting Banner with STOCK 6 SVG ──────────────────────── */}
+      <Animated.View entering={FadeInDown.duration(280)} style={s.heroRow}>
+        <View style={s.heroTextCol}>
+          <Text style={s.greetingSmall}>{getGreeting()},</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 }}>
+            <Text style={s.greetingLarge}>{userName}</Text>
+            <Text style={{ fontSize: 26 }}>👋</Text>
+          </View>
+          <Text style={s.greetingSub}>
+            {designation} · {workplaceName}
+          </Text>
+        </View>
+
+        {/* Work management visual illustration */}
+        <View style={s.heroGraphicCol}>
+          <SvgXml
+            xml={STOCK_6_SVG}
+            width={isDesktop ? 175 : 130}
+            height={isDesktop ? 125 : 94}
+          />
+        </View>
+      </Animated.View>
+
+      {/* ── 4 Metric KPI Cards ─────────────────────────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(60).duration(280)} style={s.metricsGrid}>
+        {/* Card 1: Attendance Rate with STOCK 10 SVG */}
+        <InteractiveTile
+          style={[
+            s.metricCard,
+            {
+              backgroundColor: '#EDFAF2',
+              borderColor: '#CEF2DE',
+              flex: isDesktop ? 1 : undefined,
+              minWidth: isDesktop ? 160 : undefined,
+              width: kpiCardWidth,
+            },
           ]}
+          onPress={() => router.push('/(employee)/attendance' as never)}
         >
-          {/* Organization & Org ID badge */}
-          <View style={styles.orgBadgeWrap}>
-            <Building2 size={13} color="rgba(255,255,255,0.9)" />
-            <Text style={styles.orgBadgeName} numberOfLines={1}>
-              {organization?.name || 'Organization'}
-            </Text>
-            <View style={styles.orgBadgePill}>
-              <Text style={styles.orgBadgePillLabel}>ORG ID</Text>
-              <Text style={styles.orgBadgePillVal}>{activeOrgId || 'N/A'}</Text>
+          <View style={s.cardTopRow}>
+            <View style={[s.iconBox, { backgroundColor: '#D1FAE5' }]}>
+              <SvgXml xml={STOCK_10_SVG} width={34} height={25} />
+            </View>
+            <View style={s.valueRow}>
+              <Text style={[s.metricValueText, { color: '#064E3B' }]}>{monthlyStats.percent}%</Text>
+              <Text style={s.trendGreen}>{monthlyStats.isOnTrack ? '↑ On Track' : 'Needs Review'}</Text>
             </View>
           </View>
-        </ScreenHeader>
+          <Text style={s.metricLabelText}>Monthly Attendance</Text>
+          <View style={s.waveContainer}>
+            <MetricWave color="#10B981" width={isDesktop ? 160 : 85} height={26} />
+          </View>
+        </InteractiveTile>
 
-        {/* Responsive content */}
-        <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
-          {/* Main column */}
-          <View style={[styles.col, isDesktop && { flex: 3 }]}>
-            
-            {/* Today's Shift Card */}
-            {todayShift && (
-              <Animated.View entering={FadeInDown.springify().delay(50)}>
-                <Card style={{ backgroundColor: '#f8fafc', borderColor: '#e2e8f0', marginBottom: 20 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                    <View style={{ backgroundColor: `${todayShift.color}20`, padding: 12, borderRadius: 999 }}>
-                      <Clock size={24} color={todayShift.color} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 13, color: '#64748b', fontWeight: '600', textTransform: 'uppercase' }}>Today's Shift</Text>
-                      <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', marginTop: 2 }}>{todayShift.name}</Text>
-                      <Text style={{ fontSize: 13, color: '#475569', marginTop: 3 }}>
-                        {todayShift.start_time} — {todayShift.end_time}
-                      </Text>
-                    </View>
-                  </View>
-                </Card>
-              </Animated.View>
-            )}
+        {/* Card 2: Leave Balance with STOCK 7 SVG */}
+        <InteractiveTile
+          style={[
+            s.metricCard,
+            {
+              backgroundColor: '#FFF4EB',
+              borderColor: '#FFE2CD',
+              flex: isDesktop ? 1 : undefined,
+              minWidth: isDesktop ? 160 : undefined,
+              width: kpiCardWidth,
+            },
+          ]}
+          onPress={() => router.push('/(employee)/leave' as never)}
+        >
+          <View style={s.cardTopRow}>
+            <View style={[s.iconBox, { backgroundColor: '#FFEDD5' }]}>
+              <SvgXml xml={STOCK_7_SVG} width={34} height={25} />
+            </View>
+            <View style={s.valueRow}>
+              <Text style={[s.metricValueText, { color: '#7C2D12' }]}>{leaveBalanceTotal}</Text>
+              <Text style={[s.trendGreen, { color: '#EA580C' }]}>Days Left</Text>
+            </View>
+          </View>
+          <Text style={s.metricLabelText}>Paid Leave Balance</Text>
+          <View style={s.waveContainer}>
+            <MetricWave color="#F97316" width={isDesktop ? 160 : 85} height={26} />
+          </View>
+        </InteractiveTile>
 
-            {/* Pending Appraisal Alert Card */}
-            {pendingAppraisal && (
-              <Animated.View entering={FadeInDown.springify()}>
-                <Card style={{ backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', marginBottom: 20 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                    <View style={{ backgroundColor: '#dcfce7', padding: 12, borderRadius: 999 }}>
-                      <Award size={26} color="#16a34a" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, fontWeight: '800', color: '#166534' }}>Appraisal Cycle Open!</Text>
-                      <Text style={{ fontSize: 13, color: '#166534', marginTop: 3 }}>
-                        Your self-review for <Text style={{ fontWeight: '700' }}>{pendingAppraisal.cycle_name}</Text> is now due.
-                      </Text>
-                    </View>
-                    <TouchableOpacity 
-                      onPress={() => router.push('/(employee)/performance' as never)}
-                      style={{ backgroundColor: '#16a34a', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 }}
-                    >
-                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Fill Review</Text>
-                    </TouchableOpacity>
-                  </View>
-                </Card>
-              </Animated.View>
-            )}
+        {/* Card 3: Shift Hours with STOCK 4 SVG */}
+        <InteractiveTile
+          style={[
+            s.metricCard,
+            {
+              backgroundColor: '#F3EEFE',
+              borderColor: '#E4DCFD',
+              flex: isDesktop ? 1 : undefined,
+              minWidth: isDesktop ? 160 : undefined,
+              width: kpiCardWidth,
+            },
+          ]}
+          onPress={() => router.push('/(employee)/attendance' as never)}
+        >
+          <View style={s.cardTopRow}>
+            <View style={[s.iconBox, { backgroundColor: '#DDD6FE' }]}>
+              <SvgXml xml={STOCK_4_SVG} width={34} height={25} />
+            </View>
+            <View style={s.valueRow}>
+              <Text style={[s.metricValueText, { color: '#1E1B4B' }]}>{monthlyStats.hours}h</Text>
+              <Text style={s.trendGreen}>{monthlyStats.hours > 0 ? `${monthlyStats.hours}h Logged` : 'Active Shift'}</Text>
+            </View>
+          </View>
+          <Text style={s.metricLabelText}>Monthly Shift Hours</Text>
+          <View style={s.waveContainer}>
+            <MetricWave color="#8B5CF6" width={isDesktop ? 160 : 85} height={26} />
+          </View>
+        </InteractiveTile>
 
-            {/* Birthday Alert Card */}
-            {isBirthday && (
-              <Animated.View entering={FadeInDown.springify()}>
-                <Card variant="default" padding={20} radius={22} style={{ backgroundColor: '#FEF08A', borderColor: '#FDE047', marginBottom: 20 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-                    <View style={{ backgroundColor: '#FDF08A', padding: 12, borderRadius: 16 }}>
-                      <PartyPopper size={32} color="#A16207" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <Text style={{ fontSize: 20, fontWeight: '800', color: '#854D0E' }}>Happy Birthday, {profile?.full_name?.split(' ')[0]}!</Text>
-                        <Sparkles size={20} color="#854D0E" />
-                      </View>
-                      <Text style={{ fontSize: 14, color: '#A16207', fontWeight: '500' }}>
-                        Wishing you a fantastic day from all of us at {organization?.name || 'the team'}!
-                      </Text>
-                    </View>
-                  </View>
-                </Card>
-              </Animated.View>
-            )}
+        {/* Card 4: Salary & Payslips with STOCK 9 SVG */}
+        <InteractiveTile
+          style={[
+            s.metricCard,
+            {
+              backgroundColor: '#EFF6FF',
+              borderColor: '#DBEAFE',
+              flex: isDesktop ? 1 : undefined,
+              minWidth: isDesktop ? 160 : undefined,
+              width: kpiCardWidth,
+            },
+          ]}
+          onPress={() => router.push('/(employee)/payslips' as never)}
+        >
+          <View style={s.cardTopRow}>
+            <View style={[s.iconBox, { backgroundColor: '#DBEAFE' }]}>
+              <SvgXml xml={STOCK_9_SVG} width={34} height={25} />
+            </View>
+            <View style={s.valueRow}>
+              <Text style={[s.metricValueText, { color: '#1E3A8A' }]} numberOfLines={1}>{salaryDisplay}</Text>
+              <Text style={[s.trendGreen, { color: '#2563EB' }]}>Payslip Ready</Text>
+            </View>
+          </View>
+          <Text style={s.metricLabelText}>Payroll & Payslips</Text>
+          <View style={s.waveContainer}>
+            <MetricWave color="#3B82F6" width={isDesktop ? 160 : 85} height={26} />
+          </View>
+        </InteractiveTile>
+      </Animated.View>
 
-            {/* Clock Action Card */}
-            <Animated.View entering={FadeInDown.delay(100).springify()}>
-              <Card variant="default" padding={18} radius={22}>
-                <View style={styles.clockHeader}>
-                  <View style={styles.rowCenter}>
-                    <View style={[styles.dot, { backgroundColor: statusDot }]} />
-                    <Text style={[styles.clockStatus, { color: colors.text }]}>{statusLabel}</Text>
-                  </View>
-                  <Text style={[styles.clockDate, { color: colors.textSecondary }]}>{formatDate(new Date().toISOString())}</Text>
-                </View>
-
-                {/* Outside Geofence Alert (Prior to Clock-In) */}
-                {!todayAttendance && isOutsideGeofence && (
-                  <View style={[styles.banner, { backgroundColor: colors.warningLight, borderColor: `${colors.warning}33`, alignItems: 'flex-start' }]}>
-                    <AlertCircle color={colors.warning} size={18} style={{ marginTop: 2 }} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.bannerTitle, { color: colors.warning }]}>Outside Assigned Workplace</Text>
-                      <Text style={[styles.bannerBody, { color: colors.warning }]}>
-                        You are {Math.round(distance ?? 0)}m from {employee?.workplace?.name || officeName || 'the office'} (geofence radius: {geofenceRadius}m). Normal clock-in requires being on-site. Use Remote Clock-In if working from home.
-                      </Text>
-                    </View>
-                  </View>
-                )}
-
-                {!todayAttendance && (
-                  <View style={{ gap: 10 }}>
-                    <PulseButton
-                      title={isOutsideGeofence ? 'Clock In for Office (Out of Bounds)' : 'Clock In for Shift'}
-                      onPress={() => handleClock('in', false)}
-                      loading={clockLoading}
-                      color={isOutsideGeofence ? '#64748B' : primaryColor}
-                    />
-                    {isWfhEnabled ? (
-                      <Button
-                        title="Clock In Remotely (WFH)"
-                        onPress={() => handleClock('in', true)}
-                        loading={clockLoading}
-                        variant="outline"
-                        size="lg"
-                        fullWidth
-                        icon={<Globe size={18} color={primaryColor} />}
-                        style={{ borderColor: primaryColor }}
-                        textStyle={{ color: primaryColor, fontWeight: '700' }}
-                      />
-                    ) : (
-                      <TouchableOpacity
-                        onPress={() =>
-                          Alert.alert(
-                            'WFH Feature Locked',
-                            'Work From Home (WFH) remote clock-in is locked for your organization. Please clock in on-site within your campus geofence.'
-                          )
-                        }
-                        style={styles.lockedWfhBtn}
-                        activeOpacity={0.75}
-                      >
-                        <Lock size={16} color="#94A3B8" />
-                        <Text style={styles.lockedWfhBtnText}>Clock In Remotely (WFH Locked)</Text>
-                        <View style={styles.lockedWfhTag}>
-                          <Text style={styles.lockedWfhTagText}>LOCKED</Text>
-                        </View>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                )}
-                {isClockedIn && (
-                  <View style={{ marginTop: 6 }}>
-                    <Button
-                      title={clockLoading ? 'Processing…' : 'Clock Out'}
-                      onPress={() => handleClock('out')}
-                      loading={clockLoading}
-                      variant="secondary"
-                      size="lg"
-                      fullWidth
-                      icon={<LogOutIcon size={20} color="#FFF" />}
-                      style={{ backgroundColor: colors.text }}
-                      textStyle={{ color: '#FFF' }}
-                    />
-                  </View>
-                )}
-                {isClockedIn && todayAttendance?.is_remote && (
-                  <View style={[styles.banner, { backgroundColor: '#E0F2FE', borderColor: '#BAE6FD', alignItems: 'center' }]}>
-                    <Globe size={18} color="#0284C7" />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.bannerTitle, { color: '#0284C7' }]}>Remote Shift Active</Text>
-                      <Text style={[styles.bannerBody, { color: '#0369A1' }]}>
-                        Working remotely today ({todayAttendance?.remote_reason || 'WFH'})
-                      </Text>
-                    </View>
-                  </View>
-                )}
-                {isClockedOut && (
-                  <View style={[styles.banner, { backgroundColor: colors.primaryLight, borderColor: colors.accentLight }]}>
-                    <CheckCircle2 size={24} color={primaryColor} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.bannerTitle, { color: colors.primary }]}>Shift Complete</Text>
-                      <Text style={[styles.bannerBody, { color: colors.primary }]}>Logged {formatMinutes(todayAttendance?.working_minutes ?? 0)} today</Text>
-                    </View>
-                  </View>
-                )}
-                {clockError ? (
-                  <View style={[styles.banner, { backgroundColor: colors.dangerLight, borderColor: `${colors.danger}33` }]}>
-                    <AlertCircle size={16} color={colors.danger} />
-                    <Text style={[styles.bannerBody, { color: colors.danger, flex: 1 }]}>{clockError}</Text>
-                  </View>
-                ) : null}
-
-                {/* Geofence Alert when clocked in on-site but wandering away */}
-                {isOutsideGeofence && isClockedIn && !todayAttendance?.is_remote && (
-                  <View style={[styles.banner, { backgroundColor: colors.warningLight, borderColor: `${colors.warning}33`, alignItems: 'flex-start' }]}>
-                    <AlertCircle color={colors.warning} size={20} style={{ marginTop: 2 }} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.bannerTitle, { color: colors.warning }]}>Outside Office Zone</Text>
-                      <Text style={[styles.bannerBody, { color: colors.warning }]}>You are {Math.round(distance ?? 0)}m from {employee?.workplace?.name || 'workplace'}.</Text>
-                    </View>
-                  </View>
-                )}
-              </Card>
-            </Animated.View>
-
-            {/* KPI Stats Grid */}
-            <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.grid}>
-              {kpis.map((kpi, idx) => {
-                const IconComp = kpi.icon;
-                return (
-                  <View key={idx} style={[styles.kpiCard, { backgroundColor: colors.surface, borderColor: colors.border, width: isDesktop ? '23%' : '48%' }]}>
-                    <View style={[styles.kpiIcon, { backgroundColor: kpi.accent.bg }]}>
-                      <IconComp size={20} color={kpi.accent.color} />
-                    </View>
-                    <Text style={[styles.kpiValue, { color: colors.text }]} numberOfLines={1}>{kpi.value}</Text>
-                    <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>{kpi.label.toUpperCase()}</Text>
-                    <Text style={[styles.kpiSub, { color: colors.textTertiary }]} numberOfLines={1}>{kpi.sub}</Text>
-                  </View>
-                );
-              })}
-            </Animated.View>
-
-            {/* Quick Actions */}
-            <Animated.View entering={FadeInDown.delay(300).springify()}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
-              <View style={styles.grid}>
-                {quickActions.map((qa, idx) => {
-                  const IconComp = qa.icon;
-                  return (
-                    <TouchableOpacity
-                      key={idx}
-                      style={[styles.qaCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                      onPress={() => router.push(qa.href as never)}
-                      activeOpacity={0.75}
-                    >
-                      <View style={[styles.qaIcon, { backgroundColor: qa.accent.bg }]}>
-                        <IconComp size={24} color={qa.accent.color} />
-                      </View>
-                      <Text style={[styles.qaLabel, { color: colors.text }]}>{qa.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </Animated.View>
+      {/* ── Today's Shift Punch Card ───────────────────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(100).duration(280)} style={s.shiftCard}>
+        {/* Card Header */}
+        <View style={s.cardHeaderRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={[s.iconBox, { backgroundColor: '#EDE9FE', width: 32, height: 32, borderRadius: 10 }]}>
+              <Clock size={16} color="#7C3AED" />
+            </View>
+            <Text style={s.sectionTitle}>Today's Shift Punch</Text>
           </View>
 
-          {/* Side column */}
-          <View style={[styles.col, isDesktop && { flex: 2 }]}>
-            {/* Leave Balances */}
-            <Animated.View entering={FadeInDown.delay(150).springify()}>
-              <Card variant="default" padding={0} radius={22} style={{ overflow: 'hidden' }}>
-                <View style={styles.listHeader}>
-                  <View style={styles.rowCenter}>
-                    <View style={[styles.mapIcon, { backgroundColor: '#EEF2FF' }]}>
-                      <CalendarDays size={18} color="#6366F1" />
-                    </View>
-                    <Text style={[styles.cardHeading, { color: colors.text }]}>Leave Balances</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => router.push('/(employee)/leave/apply' as never)} hitSlop={8}>
-                    <Text style={[styles.linkStrong, { color: '#6366F1' }]}>Apply Leave</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {leaveBalances.length === 0 ? (
-                  <Text style={[styles.emptyLine, { color: colors.textSecondary }]}>No leave quotas assigned</Text>
-                ) : (
-                  <View style={{ paddingHorizontal: 16, paddingBottom: 16, gap: 12 }}>
-                    {leaveBalances.slice(0, 4).map((lb) => {
-                      const pct = lb.allocated_days > 0 ? lb.remaining_days / lb.allocated_days : 0;
-                      const barColor = pct > 0.5 ? primaryColor : pct > 0.2 ? colors.warning : colors.danger;
-                      return (
-                        <View key={lb.id} style={[styles.leaveRow, { backgroundColor: colors.surfaceMuted }]}>
-                          <View style={styles.rowBetween}>
-                            <Text style={[styles.leaveName, { color: colors.text }]}>{stripEmoji(lb.leave_type?.name || 'Leave')}</Text>
-                            <Text style={[styles.leaveCount, { color: colors.textSecondary }]}>{lb.remaining_days} / {lb.allocated_days} days left</Text>
-                          </View>
-                          <View style={[styles.progressTrack, { backgroundColor: colors.backgroundElement }]}>
-                            <View style={{ height: '100%', width: `${Math.round(pct * 100)}%`, backgroundColor: barColor, borderRadius: 999 }} />
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-                <TouchableOpacity onPress={() => router.push('/(employee)/leave' as never)} activeOpacity={0.7}>
-                  <View style={[styles.cardFooter, { borderTopColor: colors.border, backgroundColor: colors.surfaceMuted }]}>
-                    <Text style={[styles.linkStrong, { color: primaryColor }]}>View All Quotas & History</Text>
-                    <ArrowRight size={16} color={primaryColor} />
-                  </View>
-                </TouchableOpacity>
-              </Card>
-            </Animated.View>
-
-            {/* Recent Attendance */}
-            <Animated.View entering={FadeInDown.delay(250).springify()}>
-              <Card variant="default" padding={0} radius={22} style={{ overflow: 'hidden' }}>
-                <View style={styles.listHeader}>
-                  <Text style={[styles.cardHeading, { color: colors.text }]}>Recent Activity</Text>
-                  <TouchableOpacity onPress={() => router.push('/(employee)/attendance' as never)} hitSlop={8}>
-                    <Text style={[styles.linkStrong, { color: primaryColor }]}>View All</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {recentAttendance.length === 0 ? (
-                  <Text style={[styles.emptyLine, { color: colors.textSecondary }]}>No recent attendance records</Text>
-                ) : (
-                  <View>
-                    {recentAttendance.slice(0, 5).map((a, idx) => (
-                      <TouchableOpacity key={a.id} onPress={() => router.push('/(employee)/attendance' as never)} activeOpacity={0.7}>
-                        <View style={[styles.activityRow, idx > 0 && { borderTopWidth: 1, borderTopColor: colors.border }]}>
-                          <View style={[styles.dot, { backgroundColor: a.status === 'present' ? primaryColor : a.status === 'late' ? colors.warning : a.status === 'absent' ? colors.danger : colors.textTertiary }]} />
-                          <View style={{ flex: 1 }}>
-                            <Text style={[styles.activityDate, { color: colors.text }]}>{formatDate(a.date)}</Text>
-                            <Text style={[styles.activityTime, { color: colors.textSecondary }]}>
-                              {a.clock_in ? formatTime(a.clock_in) : '—'} → {a.clock_out ? formatTime(a.clock_out) : '—'}
-                            </Text>
-                          </View>
-                          <Badge label={a.status.replace('_', ' ')} variant={statusBadgeVariant(a.status)} uppercase={false} />
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </Card>
-            </Animated.View>
+          {/* Shift Status Pill */}
+          <View
+            style={[
+              s.shiftStatusPill,
+              isClockedIn
+                ? { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }
+                : isClockedOut
+                  ? { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' }
+                  : { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' },
+            ]}
+          >
+            <View
+              style={[
+                s.shiftStatusDot,
+                {
+                  backgroundColor: isClockedIn
+                    ? '#10B981'
+                    : isClockedOut
+                      ? '#64748B'
+                      : '#F59E0B',
+                },
+              ]}
+            />
+            <Text
+              style={[
+                s.shiftStatusText,
+                {
+                  color: isClockedIn
+                    ? '#059669'
+                    : isClockedOut
+                      ? '#475569'
+                      : '#D97706',
+                },
+              ]}
+            >
+              {isClockedIn ? 'SHIFT ACTIVE' : isClockedOut ? 'COMPLETED' : 'AWAITING PUNCH'}
+            </Text>
           </View>
         </View>
-      </ScrollView>
 
+        {clockError ? (
+          <View style={s.errorBanner}>
+            <AlertCircle size={15} color="#DC2626" strokeWidth={1.8} />
+            <Text style={s.errorText}>{clockError}</Text>
+          </View>
+        ) : null}
+
+        {/* Timestamps Row */}
+        <View style={s.punchMetricsGrid}>
+          <View style={s.punchMetricItem}>
+            <Text style={s.punchMetricLabel}>CLOCK IN</Text>
+            <Text style={s.punchMetricValue}>
+              {todayAttendance?.clock_in ? formatTime(todayAttendance.clock_in) : '— : —'}
+            </Text>
+          </View>
+
+          <View style={s.punchDivider} />
+
+          <View style={s.punchMetricItem}>
+            <Text style={s.punchMetricLabel}>CLOCK OUT</Text>
+            <Text style={s.punchMetricValue}>
+              {todayAttendance?.clock_out ? formatTime(todayAttendance.clock_out) : '— : —'}
+            </Text>
+          </View>
+
+          <View style={s.punchDivider} />
+
+          <View style={s.punchMetricItem}>
+            <Text style={s.punchMetricLabel}>DUTY LOCATION</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+              <MapPin size={12} color="#7C3AED" />
+              <Text style={s.punchLocationText} numberOfLines={1}>
+                {workplaceName}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Action Button / Shift Concluded Banner */}
+        {isClockedOut ? (
+          <View style={s.punchCompletedBox}>
+            <View style={s.punchCompletedIconCircle}>
+              <CheckCircle2 size={18} color="#059669" strokeWidth={2.5} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.punchCompletedTitle}>Shift Concluded for Today</Text>
+              <Text style={s.punchCompletedSub}>
+                Attendance recorded successfully · {todayAttendance?.working_minutes ? `${Math.floor(todayAttendance.working_minutes / 60)}h ${todayAttendance.working_minutes % 60}m logged` : 'Have a great evening!'}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[
+              s.punchActionButton,
+              isClockedIn ? { backgroundColor: '#DC2626' } : { backgroundColor: '#7C3AED' },
+            ]}
+            activeOpacity={0.85}
+            onPress={() => handleClock(isClockedIn ? 'out' : 'in')}
+            disabled={clockLoading}
+          >
+            {isClockedIn ? (
+              <LogOut size={17} color="#FFFFFF" strokeWidth={2.2} style={{ marginRight: 8 }} />
+            ) : (
+              <LogIn size={17} color="#FFFFFF" strokeWidth={2.2} style={{ marginRight: 8 }} />
+            )}
+            <Text style={s.punchActionText}>
+              {clockLoading
+                ? 'Verifying Location...'
+                : isClockedIn
+                  ? 'Clock Out of Shift'
+                  : 'Clock In to Shift'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </Animated.View>
+
+      {/* ── Quick Actions ──────────────────────────────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(140).duration(280)} style={{ marginTop: 20 }}>
+        <View style={s.sectionHeaderRow}>
+          <Text style={s.sectionTitleLarge}>Quick Actions</Text>
+          <TouchableOpacity
+            onPress={() => router.push('/(employee)/attendance' as never)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+            activeOpacity={0.8}
+          >
+            <Text style={s.seeAllLink}>See All</Text>
+            <ArrowRight size={13} color="#7C3AED" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={s.quickActionsRow}>
+          {/* 1: Apply Leave with STOCK 8 SVG */}
+          <InteractiveTile
+            style={s.quickActionBtn}
+            onPress={() => router.push('/(employee)/leave/apply' as never)}
+          >
+            <View style={[s.quickActionIconCircle, { backgroundColor: '#FFF1F2' }]}>
+              <SvgXml xml={STOCK_8_SVG} width={42} height={30} />
+            </View>
+            <Text style={s.quickActionLabel}>Apply{'\n'}Leave</Text>
+          </InteractiveTile>
+
+          {/* 2: My Payslips with STOCK 3 SVG */}
+          <InteractiveTile
+            style={s.quickActionBtn}
+            onPress={() => router.push('/(employee)/payslips' as never)}
+          >
+            <View style={[s.quickActionIconCircle, { backgroundColor: '#EFF6FF' }]}>
+              <SvgXml xml={STOCK_3_SVG} width={42} height={30} />
+            </View>
+            <Text style={s.quickActionLabel}>My{'\n'}Payslips</Text>
+          </InteractiveTile>
+
+          {/* 3: File Expense with STOCK 1 SVG */}
+          <InteractiveTile
+            style={s.quickActionBtn}
+            onPress={() => router.push('/(employee)/expenses' as never)}
+          >
+            <View style={[s.quickActionIconCircle, { backgroundColor: '#EEF2FF' }]}>
+              <SvgXml xml={STOCK_1_SVG} width={42} height={30} />
+            </View>
+            <Text style={s.quickActionLabel}>File{'\n'}Expense</Text>
+          </InteractiveTile>
+
+          {/* 4: Learning & LMS with STOCK 10 SVG */}
+          <InteractiveTile
+            style={s.quickActionBtn}
+            onPress={() => router.push('/(employee)/learning' as never)}
+          >
+            <View style={[s.quickActionIconCircle, { backgroundColor: '#F3EEFE' }]}>
+              <SvgXml xml={STOCK_10_SVG} width={42} height={30} />
+            </View>
+            <Text style={s.quickActionLabel}>Learning{'\n'}& LMS</Text>
+          </InteractiveTile>
+
+          {/* 5: My Assets with STOCK 4 SVG */}
+          <InteractiveTile
+            style={s.quickActionBtn}
+            onPress={() => router.push('/(employee)/assets' as never)}
+          >
+            <View style={[s.quickActionIconCircle, { backgroundColor: '#EDFAF2' }]}>
+              <SvgXml xml={STOCK_4_SVG} width={42} height={30} />
+            </View>
+            <Text style={s.quickActionLabel}>My{'\n'}Assets</Text>
+          </InteractiveTile>
+
+          {/* 6: Helpdesk with STOCK 12 SVG */}
+          <InteractiveTile
+            style={s.quickActionBtn}
+            onPress={() => router.push('/(employee)/helpdesk' as never)}
+          >
+            <View style={[s.quickActionIconCircle, { backgroundColor: '#F5F3FF' }]}>
+              <SvgXml xml={STOCK_12_SVG} width={42} height={30} />
+            </View>
+            <Text style={s.quickActionLabel}>Helpdesk{'\n'}Support</Text>
+          </InteractiveTile>
+        </View>
+      </Animated.View>
+
+      {/* ── Bottom Split Cards (Duty Station & Schedule) ───────────────── */}
+      <Animated.View
+        entering={FadeInDown.delay(180).duration(280)}
+        style={isDesktop ? s.desktopSideBySide : s.mobileStackedCards}
+      >
+        {/* Card A: Duty Station & Work Assignment */}
+        <View style={s.bottomHalfCard}>
+          <View style={s.cardHeaderRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={[s.iconBox, { backgroundColor: '#EDE9FE', width: 26, height: 26 }]}>
+                <Building2 size={14} color="#7C3AED" />
+              </View>
+              <Text style={s.cardTitleMedium}>Duty Station</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={s.orgSubCard}
+            activeOpacity={0.85}
+            onPress={() => router.push('/(employee)/profile' as never)}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={s.orgSvgContainer}>
+                <SvgXml xml={STOCK_5_SVG} width={42} height={30} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.orgSubName} numberOfLines={1}>{orgName}</Text>
+                <View style={s.rolePill}>
+                  <Shield size={9} color="#7C3AED" />
+                  <Text style={s.rolePillText}>{designation}</Text>
+                </View>
+              </View>
+            </View>
+          </TouchableOpacity>
+
+          <View style={s.metaStatsList}>
+            <View style={s.metaStatRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <MapPin size={13} color="#6B7280" />
+                <Text style={s.metaStatLabel}>Workplace</Text>
+              </View>
+              <Text style={s.metaStatValue}>{workplaceName}</Text>
+            </View>
+
+            <View style={s.metaStatRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Briefcase size={13} color="#6B7280" />
+                <Text style={s.metaStatLabel}>Department</Text>
+              </View>
+              <Text style={s.metaStatValue}>{employee?.department?.name || 'General Operations'}</Text>
+            </View>
+
+            <View style={s.metaStatRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <CalendarDays size={13} color="#6B7280" />
+                <Text style={s.metaStatLabel}>Employee Code</Text>
+              </View>
+              <Text style={s.metaStatValue}>{employee?.employee_code || 'EMP-2026'}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Card B: Upcoming Schedule & Milestones */}
+        <View style={s.bottomHalfCard}>
+          <View style={s.cardHeaderRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={[s.iconBox, { backgroundColor: '#EFF6FF', width: 26, height: 26 }]}>
+                <Calendar size={14} color="#2563EB" />
+              </View>
+              <Text style={s.cardTitleMedium}>Upcoming Schedule</Text>
+            </View>
+
+            <View style={s.svgPreviewBadge} pointerEvents="none">
+              <SvgXml xml={STOCK_13_SVG} width={34} height={24} />
+            </View>
+          </View>
+
+          <View style={s.activityTimeline}>
+            {/* Item 1 */}
+            <View style={s.timelineItem}>
+              <View style={s.timelineIconCol}>
+                <View style={[s.timelineCircle, { backgroundColor: '#D1FAE5' }]}>
+                  <Clock size={11} color="#059669" strokeWidth={2.5} />
+                </View>
+                <View style={s.timelineLine} />
+              </View>
+              <View style={s.timelineContentCol}>
+                <Text style={s.timelineTitle}>{assignedShift?.name || 'Assigned Shift'}</Text>
+                <Text style={s.timelineSub}>
+                  {assignedShift
+                    ? `${assignedShift.start_time} – ${assignedShift.end_time} · Scheduled`
+                    : '09:00 AM – 06:00 PM · Scheduled'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Item 2 */}
+            <View style={s.timelineItem}>
+              <View style={s.timelineIconCol}>
+                <View style={[s.timelineCircle, { backgroundColor: '#EDE9FE' }]}>
+                  <CalendarDays size={11} color="#7C3AED" strokeWidth={2.2} />
+                </View>
+                <View style={s.timelineLine} />
+              </View>
+              <View style={s.timelineContentCol}>
+                <Text style={s.timelineTitle}>Available Leave</Text>
+                <Text style={s.timelineSub}>{leaveBalanceTotal} Days Available · Annual Balance</Text>
+              </View>
+            </View>
+
+            {/* Item 3 */}
+            <View style={[s.timelineItem, { marginBottom: 0 }]}>
+              <View style={s.timelineIconCol}>
+                <View style={[s.timelineCircle, { backgroundColor: '#FFEDD5' }]}>
+                  <CreditCard size={11} color="#EA580C" strokeWidth={2.2} />
+                </View>
+              </View>
+              <View style={s.timelineContentCol}>
+                <Text style={s.timelineTitle}>Next Payroll Run</Text>
+                <Text style={s.timelineSub}>{nextPayrollDateStr} · Direct Bank Transfer</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Animated.View>
 
       {/* Face Verification Modal */}
       <FaceVerificationModal
         visible={showFaceModal}
+        type={faceModalType}
+        isClockingIn={faceModalType === 'in'}
+        employeeName={profile?.full_name || userName}
+        officeName={workplaceName}
+        isRemote={isRemoteClock}
         onClose={() => setShowFaceModal(false)}
         onVerified={handleFaceVerified}
-        employeeName={profile?.full_name || 'Team Member'}
-        officeName={officeName || employee?.workplace?.name || 'Office Workplace'}
-        isClockingIn={faceModalType === 'in'}
-        isRemote={isRemoteClock}
-        remoteReason={remoteReason}
       />
-    </View>
+    </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  bellBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
+/* ─── Stylesheet ─────────────────────────────────────────────────────── */
+const s = StyleSheet.create({
+  canvas: {
+    flex: 1,
+    backgroundColor: '#F6F5FC',
   },
-  bellDot: {
-    position: 'absolute',
-    top: 9,
-    right: 9,
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: '#EF4444',
-    borderWidth: 2,
-  },
-  avatarRing: {
-    borderRadius: 999,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.4)',
-  },
-  orgBadgeWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 14,
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.22)',
-  },
-  orgBadgeName: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    maxWidth: 200,
-  },
-  orgBadgePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
-    paddingHorizontal: 8,
-    paddingVertical: 2.5,
-    borderRadius: 10,
-  },
-  orgBadgePillLabel: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: 'rgba(255, 255, 255, 0.75)',
-    letterSpacing: 0.5,
-  },
-  orgBadgePillVal: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#6EE7B7',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-  },
-
-  body: {
+  contentContainer: {
     paddingHorizontal: 20,
-    paddingTop: 20,
-    gap: 20,
+    paddingTop: 18,
+    paddingBottom: 110,
   },
-  bodyDesktop: {
-    flexDirection: 'row',
+  desktopContainer: {
     maxWidth: 1200,
     alignSelf: 'center',
     width: '100%',
+    paddingHorizontal: 28,
   },
-  col: { gap: 20 },
 
-  rowCenter: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  /* Hero Greeting */
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  heroTextCol: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  greetingSmall: {
+    fontFamily: FONT,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  greetingLarge: {
+    fontFamily: FONT,
+    fontSize: 27,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.6,
+  },
+  greetingSub: {
+    fontFamily: FONT,
+    fontSize: 12.5,
+    color: '#6B7280',
+    marginTop: 4,
+    lineHeight: 17,
+  },
+  heroGraphicCol: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
 
-  clockHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  dot: { width: 9, height: 9, borderRadius: 999 },
-  clockStatus: { fontSize: 14, fontWeight: '700' },
-  clockDate: { fontSize: 12, fontWeight: '500' },
+  /* 4 Metric Cards */
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 14,
+    justifyContent: 'space-between',
+  },
+  metricCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 14,
+    paddingBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+    overflow: 'hidden',
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  iconBox: {
+    width: 38,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  valueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  metricValueText: {
+    fontFamily: FONT,
+    fontSize: 21,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  trendGreen: {
+    fontFamily: FONT,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#10B981',
+  },
+  metricLabelText: {
+    fontFamily: FONT,
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#6B7280',
+    marginTop: 6,
+  },
+  waveContainer: {
+    alignItems: 'flex-end',
+    marginTop: 4,
+    marginRight: -4,
+  },
 
-  banner: {
+  /* Shift Punch Card */
+  shiftCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 18,
+    marginTop: 18,
+    borderWidth: 1,
+    borderColor: '#ECEEF5',
+    shadowColor: '#6C5CE7',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  sectionTitle: {
+    fontFamily: FONT,
+    fontSize: 15.5,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  shiftStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  shiftStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  shiftStatusText: {
+    fontFamily: FONT,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  punchMetricsGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  punchMetricItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  punchMetricLabel: {
+    fontFamily: FONT,
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#94A3B8',
+    letterSpacing: 0.5,
+  },
+  punchMetricValue: {
+    fontFamily: FONT,
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginTop: 2,
+  },
+  punchLocationText: {
+    fontFamily: FONT,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#7C3AED',
+  },
+  punchDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: '#E2E8F0',
+  },
+  punchActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 16,
+    marginTop: 14,
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  punchActionText: {
+    fontFamily: FONT,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  punchCompletedBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    padding: 14,
-    borderRadius: 16,
+    backgroundColor: '#F0FDF4',
     borderWidth: 1,
-    marginTop: 12,
+    borderColor: '#BBF7D0',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: 14,
   },
-  bannerTitle: { fontSize: 14, fontWeight: '700' },
-  bannerBody: { fontSize: 13, fontWeight: '500', marginTop: 1 },
+  punchCompletedIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  punchCompletedTitle: {
+    fontFamily: FONT,
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  punchCompletedSub: {
+    fontFamily: FONT,
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#047857',
+    marginTop: 2,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 12,
+  },
+  errorText: {
+    fontFamily: FONT,
+    fontSize: 12,
+    color: '#DC2626',
+    flex: 1,
+  },
 
-  grid: {
+  /* Quick Actions */
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  sectionTitleLarge: {
+    fontFamily: FONT,
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  seeAllLink: {
+    fontFamily: FONT,
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#7C3AED',
+  },
+  quickActionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    gap: 10,
   },
-  kpiCard: {
-    borderWidth: 1,
+  quickActionBtn: {
+    flex: 1,
+    minWidth: 100,
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 16,
-    marginBottom: 12,
-    ...Platform.select({
-      web: { boxShadow: '0 1px 2px rgba(15,23,42,0.05)' },
-      default: { elevation: 1, shadowColor: '#0F172A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
-    }),
-  },
-  kpiIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  kpiValue: { fontSize: 20, fontWeight: '800', letterSpacing: -0.3 },
-  kpiLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5, marginTop: 4 },
-  kpiSub: { fontSize: 11, fontWeight: '500', marginTop: 2 },
-
-  sectionTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.3, marginBottom: 12 },
-
-  qaCard: {
-    width: '31%',
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingVertical: 16,
+    paddingVertical: 14,
     alignItems: 'center',
-    marginBottom: 12,
-    ...Platform.select({
-      web: { boxShadow: '0 1px 2px rgba(15,23,42,0.05)' },
-      default: { elevation: 1, shadowColor: '#0F172A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
-    }),
+    borderWidth: 1,
+    borderColor: '#ECEEF5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 5,
+    elevation: 1,
   },
-  qaIcon: { width: 50, height: 50, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  qaLabel: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
-
-  mapIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  cardHeading: { fontSize: 15, fontWeight: '700' },
-  cardSub: { fontSize: 12, fontWeight: '500', marginTop: 1 },
-
-  listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
-  linkStrong: { fontSize: 13, fontWeight: '700' },
-  emptyLine: { padding: 24, textAlign: 'center', fontSize: 14, fontWeight: '500' },
-
-  leaveRow: { gap: 8, padding: 12, borderRadius: 14 },
-  leaveName: { fontSize: 14, fontWeight: '700' },
-  leaveCount: { fontSize: 12, fontWeight: '700' },
-  progressTrack: { height: 7, borderRadius: 999, overflow: 'hidden', marginTop: 4 },
-
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderTopWidth: 1 },
-
-  activityRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
-  activityDate: { fontSize: 14, fontWeight: '700' },
-  activityTime: { fontSize: 12, fontWeight: '500', marginTop: 1 },
-
-  fab: {
-    position: 'absolute',
-    bottom: 28,
-    right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 999,
+  quickActionIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 10,
+    marginBottom: 8,
   },
-  lockedWfhBtn: {
+  quickActionLabel: {
+    fontFamily: FONT,
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#374151',
+    textAlign: 'center',
+    lineHeight: 15,
+  },
+
+  /* Bottom Split Cards */
+  desktopSideBySide: {
+    flexDirection: 'row',
+    gap: 20,
+    marginTop: 20,
+  },
+  mobileStackedCards: {
+    marginTop: 20,
+    gap: 14,
+  },
+  bottomHalfCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#ECEEF5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  cardTitleMedium: {
+    fontFamily: FONT,
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  svgPreviewBadge: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orgSubCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 10,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  orgSvgContainer: {
+    width: 48,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orgSubName: {
+    fontFamily: FONT,
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  rolePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#F1F5F9',
-  },
-  lockedWfhBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#94A3B8',
-  },
-  lockedWfhTag: {
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 6,
+    gap: 4,
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 4,
-    marginLeft: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginTop: 4,
   },
-  lockedWfhTagText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#DC2626',
-    letterSpacing: 0.5,
+  rolePillText: {
+    fontFamily: FONT,
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#7C3AED',
+  },
+  metaStatsList: {
+    marginTop: 10,
+    gap: 8,
+  },
+  metaStatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+  },
+  metaStatLabel: {
+    fontFamily: FONT,
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  metaStatValue: {
+    fontFamily: FONT,
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#111827',
+  },
+
+  /* Activity Timeline */
+  activityTimeline: {
+    marginTop: 8,
+  },
+  timelineItem: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  timelineIconCol: {
+    alignItems: 'center',
+    marginRight: 10,
+    width: 24,
+  },
+  timelineCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timelineLine: {
+    width: 1.5,
+    flex: 1,
+    backgroundColor: '#E5E7EB',
+    marginTop: 3,
+    marginBottom: -6,
+  },
+  timelineContentCol: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  timelineTitle: {
+    fontFamily: FONT,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  timelineSub: {
+    fontFamily: FONT,
+    fontSize: 10.5,
+    color: '#6B7280',
+    marginTop: 1,
   },
 });

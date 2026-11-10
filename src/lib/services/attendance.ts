@@ -198,6 +198,14 @@ export async function clockIn(
   const existingSnap = await getDoc(doc(db, 'attendance', attendanceId));
   if (existingSnap.exists()) {
     const existing = existingSnap.data() as Attendance;
+    if (existing.clock_in && existing.clock_out) {
+      return {
+        success: false,
+        message: 'Shift already completed for today. Clock out was recorded.',
+        distance_meters: distance,
+        face_verified: true,
+      };
+    }
     if (existing.clock_in && !existing.clock_out) {
       return {
         success: true,
@@ -506,8 +514,20 @@ export async function getOrgAttendance(date: string, organizationId?: string): P
     attSnap.forEach((d) => {
       const att = { id: d.id, ...d.data() } as Attendance;
       const emp = att.employee_id ? empMap.get(att.employee_id) : undefined;
-      if (organizationId && emp?.profile?.organization_id && emp.profile.organization_id !== organizationId) {
-        return;
+      if (organizationId) {
+        const isSubedge = organizationId === 'subedge' || organizationId === '00000000-0000-0000-0000-000000000001';
+        const isSmh = organizationId === 'shanti-memorial-hospital' || organizationId === 'smh' || organizationId === 'chikitsa' || organizationId === 'gopal-trust';
+        const targetOrg = (att as any).organization_id || emp?.organization_id || emp?.profile?.organization_id;
+
+        if (isSubedge && (targetOrg !== '00000000-0000-0000-0000-000000000001' && targetOrg !== 'subedge')) {
+          return;
+        }
+        if (isSmh && (targetOrg !== 'shanti-memorial-hospital' && targetOrg !== 'smh')) {
+          return;
+        }
+        if (!isSubedge && !isSmh && targetOrg && targetOrg !== organizationId) {
+          return;
+        }
       }
       att.employee = emp;
       att.workplace = att.workplace_id ? wpMap.get(att.workplace_id) : undefined;

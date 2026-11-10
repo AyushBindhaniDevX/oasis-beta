@@ -1,61 +1,93 @@
-import React, { useCallback, useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Image,
-  TextInput,
-  TouchableOpacity,
-  StatusBar,
-  ActivityIndicator,
-  Linking,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Image as ExpoImage } from 'expo-image';
+import { useRouter } from 'expo-router';
 import {
   AlertCircle,
+  ArrowRight,
   Eye,
   EyeOff,
   Fingerprint,
   Lock,
   Mail,
   ScanFace,
+  Smartphone,
   Zap,
-  ArrowRight,
-  LockKeyhole,
 } from 'lucide-react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Linking,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SvgXml } from 'react-native-svg';
 
+import { GoogleAuthWebViewModal } from '@/components/auth/GoogleAuthWebViewModal';
+import { InteractiveTile } from '@/components/ui/InteractiveTile';
 import { DEFAULT_SUBEDGE_LOGO as SUBEDGE_LOGO } from '@/components/ui/SubedgeBrand';
+import { STOCK_6_SVG } from '@/constants/workManagementSvgs';
 import { useAuth } from '@/hooks/useAuth';
 import { useBiometrics } from '@/hooks/useBiometrics';
 import { useTenantBranding } from '@/hooks/useTenantBranding';
 
-// Official Google 4-color SVG URL
 const GOOGLE_ICON_URL = 'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg';
+
+const THEME = {
+  primary: '#7C3AED',
+  primaryHover: '#6D28D9',
+  primaryLight: '#EDE9FE',
+  primarySoft: '#F5F3FF',
+  canvas: '#FAF9FD',
+  card: '#FFFFFF',
+  textMain: '#0F172A',
+  textMuted: '#64748B',
+  textLight: '#94A3B8',
+  border: '#EDE9FE',
+  borderFocus: '#7C3AED',
+  error: '#EF4444',
+  errorBg: '#FEF2F2',
+  errorBorder: '#FECACA',
+  success: '#10B981',
+  successBg: '#ECFDF5',
+  successBorder: '#A7F3D0',
+};
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
+
+  const isDesktop = screenWidth >= 960;
+  const isTablet = screenWidth >= 640 && screenWidth < 960;
 
   const { tenant } = useTenantBranding();
-  const { user, profile, signIn, signInWithGoogle, isLoading: authLoading } = useAuth();
+  const { user, profile, signIn, signInWithGoogle, signInWithGoogleToken, isLoading: authLoading } = useAuth();
 
-  const isAuthorized = !!user && !!profile && profile.is_active === true && ['employee', 'hr', 'admin'].includes(profile.role);
+  const isAuthorized =
+    !!user &&
+    !!profile &&
+    profile.is_active === true &&
+    ['employee', 'hr', 'admin'].includes(profile.role);
 
-  // Auto-redirect if user has an active, verified session
   useEffect(() => {
     if (isAuthorized && profile) {
       const targetRoute =
         profile.role === 'admin'
           ? '/(admin)/dashboard'
           : profile.role === 'hr'
-          ? '/(hr)/dashboard'
-          : '/(employee)/dashboard';
+            ? '/(hr)/dashboard'
+            : '/(employee)/dashboard';
       router.replace(targetRoute as never);
     }
   }, [isAuthorized, profile, router]);
@@ -70,19 +102,23 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [focusedInput, setFocusedInput] = useState<'email' | 'password' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
 
-  // Handle standard email/password login
+  // Phone input detector
+  const isPhoneMode = /^[0-9+()-\s]+$/.test(email.trim()) && email.trim().replace(/\D/g, '').length >= 3;
+
   const handleLogin = useCallback(async () => {
     if (loading || googleLoading || authLoading) return;
     const trimmedInput = email.trim();
     const trimmedPassword = password.trim();
 
     if (!trimmedInput || !trimmedPassword) {
-      setError('Please provide your email/phone and password.');
+      setError('Please enter your email or phone number and password.');
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
@@ -96,15 +132,15 @@ export default function LoginScreen() {
       let userRole: string = 'employee';
       let userName: string = '';
 
-      // If input looks like a phone number (contains numbers, optional +, -, spaces)
       const digitsOnly = trimmedInput.replace(/\D/g, '');
-      const isPhoneLike = (/^\+?[0-9\-\s]+$/.test(trimmedInput) && digitsOnly.length >= 6) || /^\d{10}$/.test(trimmedInput);
+      const isPhoneLike =
+        (/^\+?[0-9\-\s]+$/.test(trimmedInput) && digitsOnly.length >= 6) ||
+        /^\d{10}$/.test(trimmedInput);
 
       const { collection, query, where, getDocs, limit, doc, setDoc } = await import('firebase/firestore');
       const { db, auth } = await import('@/lib/firebase');
 
       if (isPhoneLike) {
-        // Extract clean 10-digit number
         const tenDigits = digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly;
         matchedPhone = tenDigits.length === 10 ? tenDigits : null;
         const phoneVariants = Array.from(new Set([
@@ -119,70 +155,60 @@ export default function LoginScreen() {
           `91${tenDigits}`,
         ])).filter(Boolean);
 
-        // 1. Check profiles collection
         let matchedEmail: string | null = null;
 
         const profQ = query(
           collection(db, 'profiles'),
           where('phone', 'in', phoneVariants.slice(0, 10)),
-          limit(1)
+          limit(1),
         );
         const profSnap = await getDocs(profQ);
-
         if (!profSnap.empty) {
-          const profData = profSnap.docs[0].data();
-          matchedEmail = profData.email;
-          userOrgId = profData.organization_id;
-          userRole = profData.role || 'employee';
-          userName = profData.full_name || '';
+          const d = profSnap.docs[0].data();
+          matchedEmail = d.email;
+          userOrgId = d.organization_id;
+          userRole = d.role || 'employee';
+          userName = d.full_name || '';
         }
 
-        // 2. If not found in profiles, check employees collection
         if (!matchedEmail) {
           const empQ = query(
             collection(db, 'employees'),
             where('phone', 'in', phoneVariants.slice(0, 10)),
-            limit(1)
+            limit(1),
           );
           const empSnap = await getDocs(empQ);
           if (!empSnap.empty) {
-            const empData = empSnap.docs[0].data();
-            matchedEmail = empData.email || empData.work_email;
-            userOrgId = empData.organization_id;
-            userRole = empData.role || 'employee';
-            userName = `${empData.first_name || ''} ${empData.last_name || ''}`.trim();
+            const d = empSnap.docs[0].data();
+            matchedEmail = d.email || d.work_email;
+            userOrgId = d.organization_id;
+            userRole = d.role || 'employee';
+            userName = `${d.first_name || ''} ${d.last_name || ''}`.trim();
           }
         }
 
-        // 3. Fallback: if not found via 'in' query, scan employees
         if (!matchedEmail && tenDigits.length === 10) {
-          const allEmpSnap = await getDocs(query(
-            collection(db, 'employees'),
-            where('organization_id', 'in', ['shanti-memorial-hospital', 'smh', 'gopal-trust', 'chikitsa'])
-          ));
-          for (const d of allEmpSnap.docs) {
-            const data = d.data();
-            const pDigits = (data.phone ? String(data.phone).replace(/\D/g, '') : '');
+          const allEmpSnap = await getDocs(collection(db, 'employees'));
+          for (const docSnap of allEmpSnap.docs) {
+            const d = docSnap.data();
+            const pDigits = d.phone ? String(d.phone).replace(/\D/g, '') : '';
             if (pDigits && pDigits.slice(-10) === tenDigits) {
-              matchedEmail = data.email || data.work_email;
-              userOrgId = data.organization_id;
-              userRole = data.role || 'employee';
-              userName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
+              matchedEmail = d.email || d.work_email;
+              userOrgId = d.organization_id;
+              userRole = d.role || 'employee';
+              userName = `${d.first_name || ''} ${d.last_name || ''}`.trim();
               break;
             }
           }
         }
 
         if (matchedEmail) {
-          if (!userOrgId) {
-            throw new Error('Access Denied: Your account is not linked to an organization.');
-          }
+          if (!userOrgId) throw new Error('Account not linked to an organization.');
           finalEmail = matchedEmail;
         } else {
-          throw new Error(`Access Denied: No account found for phone number ${tenDigits}. Please check the 10-digit number or sign in with your work email.`);
+          throw new Error(`No account found registered for mobile number ${tenDigits}.`);
         }
       } else {
-        // Username entered as email: find phone number and org for password resolution
         try {
           const cleanMail = finalEmail.toLowerCase().trim();
           const profQ = query(collection(db, 'profiles'), where('email', '==', cleanMail), limit(1));
@@ -206,25 +232,16 @@ export default function LoginScreen() {
               userName = `${empSnap.docs[0].data()?.first_name || ''} ${empSnap.docs[0].data()?.last_name || ''}`.trim();
             }
           }
-        } catch (e) {}
+        } catch {}
       }
 
-      // Build prioritized candidate passwords
       const candidatePasswords: string[] = [];
       if (trimmedPassword) candidatePasswords.push(trimmedPassword);
-
-      // If user typed phone number into password field with spaces/+91, extract 10 digits
       const pwdDigits = trimmedPassword.replace(/\D/g, '');
       if (pwdDigits.length >= 10 && !candidatePasswords.includes(pwdDigits.slice(-10))) {
         candidatePasswords.push(pwdDigits.slice(-10));
       }
-
-      // Default password: staff's 10-digit phone number!
-      if (matchedPhone && !candidatePasswords.includes(matchedPhone)) {
-        candidatePasswords.push(matchedPhone);
-      }
-
-      // Fallback defaults for legacy or unmigrated accounts
+      if (matchedPhone && !candidatePasswords.includes(matchedPhone)) candidatePasswords.push(matchedPhone);
       if (!candidatePasswords.includes('Password@123')) candidatePasswords.push('Password@123');
       if (!candidatePasswords.includes('Welcome@123')) candidatePasswords.push('Welcome@123');
 
@@ -248,53 +265,46 @@ export default function LoginScreen() {
             String(authErr?.message || '').toLowerCase().includes('password') ||
             String(authErr?.message || '').toLowerCase().includes('credential');
 
-          // If user does not exist in Firebase Auth yet, but is registered in DB, provision automatically!
           if (authErr?.code === 'auth/user-not-found' && matchedPhone && userOrgId) {
             try {
               const { createUserWithEmailAndPassword } = await import('firebase/auth');
               const newCred = await createUserWithEmailAndPassword(auth, finalEmail, matchedPhone);
               const now = new Date().toISOString();
-              await setDoc(doc(db, 'profiles', newCred.user.uid), {
-                id: newCred.user.uid,
-                email: finalEmail,
-                phone: matchedPhone,
-                full_name: userName || finalEmail.split('@')[0],
-                role: userRole,
-                organization_id: userOrgId,
-                is_active: true,
-                created_at: now,
-                updated_at: now,
-              }, { merge: true });
+              await setDoc(
+                doc(db, 'profiles', newCred.user.uid),
+                {
+                  id: newCred.user.uid,
+                  email: finalEmail,
+                  phone: matchedPhone,
+                  full_name: userName || finalEmail.split('@')[0],
+                  role: userRole,
+                  organization_id: userOrgId,
+                  is_active: true,
+                  created_at: now,
+                  updated_at: now,
+                },
+                { merge: true },
+              );
               await signIn(finalEmail, matchedPhone, tenant?.id || userOrgId);
               loggedIn = true;
               usedPassword = matchedPhone;
               break;
-            } catch (createErr) {
-              // continue trying remaining passwords
-            }
+            } catch {}
           }
 
-          if (!isCredErr) {
-            throw authErr;
-          }
+          if (!isCredErr) throw authErr;
         }
       }
 
       if (!loggedIn) {
-        throw lastError || new Error('Invalid email or password. Please verify your credentials.');
+        throw lastError || new Error('Invalid credentials. Please verify your email or phone.');
       }
 
-      // If logged in using legacy default (Password@123 or Welcome@123), and matchedPhone is known:
-      // Transparently upgrade their password in Firebase Auth to their phone number!
       if (matchedPhone && usedPassword !== matchedPhone) {
         try {
           const { updatePassword } = await import('firebase/auth');
-          if (auth.currentUser) {
-            await updatePassword(auth.currentUser, matchedPhone);
-          }
-        } catch (upgErr) {
-          console.warn('[Auth]: Background password upgrade note:', upgErr);
-        }
+          if (auth.currentUser) await updatePassword(auth.currentUser, matchedPhone);
+        } catch {}
       }
 
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -306,25 +316,56 @@ export default function LoginScreen() {
     }
   }, [email, password, loading, googleLoading, authLoading, signIn, tenant?.id]);
 
-  // Handle Google Sign-In
   const handleGoogleLogin = useCallback(async () => {
     if (loading || googleLoading || authLoading) return;
     setError(null);
-    setGoogleLoading(true);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    try {
-      await signInWithGoogle();
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (err: any) {
-      setError(err instanceof Error ? err.message : 'Google Sign-In failed.');
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setGoogleLoading(false);
+    if (Platform.OS === 'web') {
+      setGoogleLoading(true);
+      try {
+        await signInWithGoogle();
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (err: any) {
+        const msg = err instanceof Error ? err.message : 'Google Sign-In failed.';
+        setError(msg);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } finally {
+        setGoogleLoading(false);
+      }
+    } else {
+      setShowGoogleModal(true);
     }
   }, [loading, googleLoading, authLoading, signInWithGoogle]);
 
-  // Handle Biometric Login
+  const handleGoogleWebViewSuccess = useCallback(
+    async (idToken: string) => {
+      setShowGoogleModal(false);
+      setGoogleLoading(true);
+      setError(null);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      try {
+        await signInWithGoogleToken(idToken);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (err: any) {
+        const msg = err instanceof Error ? err.message : 'Google authentication failed.';
+        setError(msg);
+        Alert.alert('Sign-In Error', msg);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } finally {
+        setGoogleLoading(false);
+      }
+    },
+    [signInWithGoogleToken],
+  );
+
+  const handleGoogleWebViewError = useCallback((errMsg: string) => {
+    setShowGoogleModal(false);
+    setError(errMsg);
+    Alert.alert('Google Sign-In', errMsg);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  }, []);
+
   const handleBiometricLogin = useCallback(async () => {
     if (biometricLoading || authLoading) return;
     setError(null);
@@ -332,9 +373,7 @@ export default function LoginScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       const result = await authenticateWithBiometrics();
-      if (!result?.success) {
-        setError(result?.error || 'Biometric authentication failed.');
-      }
+      if (!result?.success) setError(result?.error || 'Biometric authentication failed.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Biometric authentication error.');
     } finally {
@@ -349,17 +388,15 @@ export default function LoginScreen() {
   if (authLoading || (isAuthorized && (user || profile))) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0D7377" />
-        <Text style={styles.loadingText}>
-          {isAuthorized ? 'Redirecting to your workspace...' : 'Verifying session...'}
-        </Text>
+        <ActivityIndicator size="large" color={THEME.primary} />
+        <Text style={styles.loadingText}>Initializing workspace...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.pageContainer}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+    <View style={[styles.page, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" {...({ backgroundColor: THEME.canvas } as any)} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -368,131 +405,189 @@ export default function LoginScreen() {
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingBottom: insets.bottom + 40 },
+            { paddingBottom: insets.bottom + 24 },
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.authContainer}>
-            <View style={styles.card}>
-              {/* Brand Logo */}
-              <View style={styles.brandHeader}>
+          {/* Main Card Shell (Split on Desktop, Single Clean Card on Mobile) */}
+          <View
+            style={[
+              styles.splitCardWrapper,
+              isDesktop && styles.splitCardWrapperDesktop,
+              isTablet && styles.splitCardWrapperTablet,
+            ]}
+          >
+            {/* LEFT HERO PANEL (Rendered on Desktop for brand presentation) */}
+            {isDesktop ? (
+              <View style={styles.heroPanel}>
+                <View>
+                  <Text style={styles.heroTitle}>
+                    Streamline operations with intelligence.
+                  </Text>
+                  <Text style={styles.heroSubtitle}>
+                    Unified attendance, shifts, leave management, and automated payroll in one seamless HRMS platform.
+                  </Text>
+                </View>
+
+                {/* Hand-Drawn Character SVG Artwork */}
+                <View style={styles.heroGraphicWrapper}>
+                  <SvgXml xml={STOCK_6_SVG} width={280} height={210} />
+                </View>
+              </View>
+            ) : null}
+
+            {/* RIGHT / MAIN AUTH CARD */}
+            <View style={[styles.authCard, isDesktop && styles.authCardDesktop]}>
+              {/* Top Brand & Logo */}
+              <View style={styles.brandRow}>
                 <Image
                   source={tenant?.logo_url ? { uri: tenant.logo_url } : SUBEDGE_LOGO}
-                  style={styles.logo}
+                  style={styles.logoImage}
                   resizeMode="contain"
                 />
+                <View style={styles.brandBadge}>
+                  <Text style={styles.brandBadgeText}>Oasis Suite</Text>
+                </View>
               </View>
 
-              {/* Form Title & Subtitle */}
-              <View style={styles.formHeader}>
-                <Text style={styles.title}>Sign in</Text>
-                <Text style={styles.subtitle}>
-                  Enter your email or phone number to access your account.
+              {/* Header Greeting */}
+              <View style={styles.greetingHeader}>
+                <View style={styles.greetingTitleRow}>
+                  <Text style={styles.greetingTitle}>Welcome back</Text>
+                  <Text style={styles.greetingEmoji}>👋</Text>
+                </View>
+                <Text style={styles.greetingSubtitle}>
+                  Sign in to access your attendance, roster, and payroll portal.
                 </Text>
               </View>
 
-              {/* Error alert banner */}
+              {/* Error Message Banner */}
               {error ? (
                 <View style={styles.errorBox}>
-                  <AlertCircle color="#DC2626" size={16} />
+                  <AlertCircle color={THEME.error} size={18} />
                   <Text style={styles.errorText}>{error}</Text>
                 </View>
               ) : null}
 
-              {/* Input Fields */}
+              {/* Inputs Group */}
               <View style={styles.inputsGroup}>
-                <View style={styles.inputWrap}>
-                  <Text style={styles.inputLabel}>Work Email or Phone Number</Text>
-                  <View style={styles.inputContainer}>
-                    <Mail color="#64748B" size={18} style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="10-digit phone or email"
-                      placeholderTextColor="#94A3B8"
-                      value={email}
-                      onChangeText={setEmail}
-                      autoCapitalize="none"
-                      keyboardType="email-address"
-                      autoComplete="email"
-                    />
+                {/* Email or Phone Input */}
+                <View
+                  style={[
+                    styles.inputFieldContainer,
+                    focusedInput === 'email' && styles.inputFieldFocused,
+                  ]}
+                >
+                  <View style={styles.inputIconBox}>
+                    {isPhoneMode ? (
+                      <Smartphone size={18} color={focusedInput === 'email' ? THEME.primary : THEME.textMuted} />
+                    ) : (
+                      <Mail size={18} color={focusedInput === 'email' ? THEME.primary : THEME.textMuted} />
+                    )}
                   </View>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Email address or 10-digit mobile"
+                    placeholderTextColor={THEME.textLight}
+                    value={email}
+                    onChangeText={setEmail}
+                    onFocus={() => setFocusedInput('email')}
+                    onBlur={() => setFocusedInput(null)}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    autoComplete="email"
+                    returnKeyType="next"
+                  />
+                  {isPhoneMode ? (
+                    <View style={styles.phoneTagPill}>
+                      <Text style={styles.phoneTagText}>Phone</Text>
+                    </View>
+                  ) : null}
                 </View>
 
-                <View style={styles.inputWrap}>
-                  <View style={styles.labelRow}>
-                    <Text style={styles.inputLabel}>Password</Text>
-                    <TouchableOpacity
-                      onPress={() => router.push('/(auth)/forgot-password')}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Text style={styles.forgotLink}>Forgot password?</Text>
-                    </TouchableOpacity>
+                {/* Password Input */}
+                <View
+                  style={[
+                    styles.inputFieldContainer,
+                    focusedInput === 'password' && styles.inputFieldFocused,
+                  ]}
+                >
+                  <View style={styles.inputIconBox}>
+                    <Lock size={18} color={focusedInput === 'password' ? THEME.primary : THEME.textMuted} />
                   </View>
-                  <View style={styles.inputContainer}>
-                    <Lock color="#64748B" size={18} style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="10-digit phone number"
-                      placeholderTextColor="#94A3B8"
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry={!showPassword}
-                      onSubmitEditing={handleLogin}
-                      returnKeyType="go"
-                    />
-                    <TouchableOpacity
-                      onPress={() => setShowPassword((s) => !s)}
-                      style={styles.eyeBtn}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      {showPassword ? (
-                        <EyeOff color="#64748B" size={18} />
-                      ) : (
-                        <Eye color="#64748B" size={18} />
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.pwdHintText}>
-                    Default password for staff is your 10-digit phone number
-                  </Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Enter your password"
+                    placeholderTextColor={THEME.textLight}
+                    value={password}
+                    onChangeText={setPassword}
+                    onFocus={() => setFocusedInput('password')}
+                    onBlur={() => setFocusedInput(null)}
+                    secureTextEntry={!showPassword}
+                    onSubmitEditing={handleLogin}
+                    returnKeyType="go"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword((s) => !s)}
+                    style={styles.eyeBtn}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
+                    {showPassword ? (
+                      <EyeOff color={THEME.textMuted} size={18} />
+                    ) : (
+                      <Eye color={THEME.textMuted} size={18} />
+                    )}
+                  </TouchableOpacity>
                 </View>
+              </View>
+
+              {/* Forgot Password Row */}
+              <View style={styles.forgotRow}>
+                <TouchableOpacity
+                  onPress={() => router.push('/(auth)/forgot-password')}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Text style={styles.forgotLink}>Forgot password?</Text>
+                </TouchableOpacity>
               </View>
 
               {/* Primary Sign In Button */}
-              <TouchableOpacity
+              <InteractiveTile
                 onPress={handleLogin}
                 disabled={busy}
-                activeOpacity={0.88}
                 style={[styles.primaryBtn, busy && styles.btnDisabled]}
               >
                 {loading ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <View style={styles.btnRow}>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <Text style={styles.primaryBtnText}>Authenticating...</Text>
+                  </View>
                 ) : (
-                  <View style={styles.btnContentRow}>
+                  <View style={styles.btnRow}>
                     <Text style={styles.primaryBtnText}>Sign In</Text>
-                    <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.2} />
+                    <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.4} />
                   </View>
                 )}
-              </TouchableOpacity>
+              </InteractiveTile>
 
               {/* Divider */}
               <View style={styles.dividerRow}>
-                <View style={styles.divider} />
-                <Text style={styles.dividerText}>OR</Text>
-                <View style={styles.divider} />
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>OR CONTINUE WITH</Text>
+                <View style={styles.dividerLine} />
               </View>
 
-              {/* SSO / Google Options */}
-              <View style={{ gap: 10 }}>
-                <TouchableOpacity
+              {/* Secondary Auth Stack */}
+              <View style={styles.secondaryGroup}>
+                {/* Google Sign In */}
+                <InteractiveTile
                   onPress={handleGoogleLogin}
                   disabled={busy}
-                  activeOpacity={0.85}
                   style={[styles.googleBtn, busy && styles.btnDisabled]}
                 >
                   {googleLoading ? (
-                    <ActivityIndicator size="small" color="#1A1A2E" />
+                    <ActivityIndicator size="small" color={THEME.textMain} />
                   ) : (
                     <ExpoImage
                       source={{ uri: GOOGLE_ICON_URL }}
@@ -500,12 +595,11 @@ export default function LoginScreen() {
                       contentFit="contain"
                     />
                   )}
-                  <Text style={styles.googleBtnText}>
-                    {googleLoading ? 'Connecting...' : 'Continue with Google'}
-                  </Text>
-                </TouchableOpacity>
+                  <Text style={styles.googleBtnText}>Continue with Google</Text>
+                </InteractiveTile>
 
-                <TouchableOpacity
+                {/* Subedge SSO */}
+                <InteractiveTile
                   onPress={() => {
                     const isLocal =
                       typeof window !== 'undefined' &&
@@ -513,7 +607,9 @@ export default function LoginScreen() {
                         window.location.hostname === '127.0.0.1');
                     const ssoBase = isLocal ? 'http://localhost:3001' : 'https://sso.subedge.com';
                     const returnUrl = encodeURIComponent(
-                      typeof window !== 'undefined' ? window.location.origin : 'https://oasis.subedge.com'
+                      typeof window !== 'undefined'
+                        ? window.location.origin
+                        : 'https://oasis.subedge.com',
                     );
                     if (typeof window !== 'undefined') {
                       window.location.href = `${ssoBase}/?redirect_url=${returnUrl}&app=HRMS`;
@@ -522,363 +618,391 @@ export default function LoginScreen() {
                     }
                   }}
                   disabled={busy}
-                  activeOpacity={0.85}
                   style={[styles.ssoBtn, busy && styles.btnDisabled]}
                 >
-                  <Zap size={16} color="#0D7377" />
+                  <Zap size={16} color={THEME.primary} />
                   <Text style={styles.ssoBtnText}>Sign in with Subedge SSO</Text>
-                </TouchableOpacity>
+                </InteractiveTile>
+
+                {/* Biometric Sign In (When available) */}
+                {showBiometric ? (
+                  <InteractiveTile
+                    onPress={handleBiometricLogin}
+                    disabled={biometricLoading || busy}
+                    style={[styles.biometricBtn, busy && styles.btnDisabled]}
+                  >
+                    <BiometricIcon color={THEME.primary} size={18} />
+                    <Text style={styles.biometricBtnText}>
+                      {biometricLoading ? 'Verifying biometric ID...' : `Unlock with ${biometricType || 'Biometrics'}`}
+                    </Text>
+                  </InteractiveTile>
+                ) : null}
               </View>
-
-              {/* Biometric Login */}
-              {showBiometric ? (
-                <TouchableOpacity
-                  onPress={handleBiometricLogin}
-                  disabled={biometricLoading || busy}
-                  activeOpacity={0.85}
-                  style={styles.bioBtn}
-                >
-                  <BiometricIcon color="#0D7377" size={18} />
-                  <Text style={styles.bioBtnText}>
-                    {biometricLoading ? 'Verifying biometrics…' : `Sign in with ${biometricType || 'Biometrics'}`}
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-
-              {/* Security note */}
-              <View style={styles.cardFooter}>
-                <LockKeyhole size={12} color="#94A3B8" />
-                <Text style={styles.cardFooterText}>
-                  256-bit Encrypted • Zero-trust Access
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Minimalist Footer */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              © {new Date().getFullYear()} Subedge Technology Pvt Ltd
-            </Text>
-            <View style={styles.footerLinksRow}>
-              <TouchableOpacity
-                onPress={() => void Linking.openURL('https://www.subedge.com/privacy')}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.footerLink}>Privacy Policy</Text>
-              </TouchableOpacity>
-              <Text style={styles.footerDot}>•</Text>
-              <TouchableOpacity
-                onPress={() => void Linking.openURL('https://www.subedge.com/terms')}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.footerLink}>Terms</Text>
-              </TouchableOpacity>
             </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Google Sign In WebView Modal for Mobile / Native */}
+      <GoogleAuthWebViewModal
+        visible={showGoogleModal}
+        onClose={() => setShowGoogleModal(false)}
+        onSuccess={handleGoogleWebViewSuccess}
+        onError={handleGoogleWebViewError}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  page: {
+    flex: 1,
+    backgroundColor: THEME.canvas,
+  },
+
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: THEME.canvas,
     minHeight: '100%',
+    gap: 12,
   },
   loadingText: {
-    marginTop: 16,
     fontSize: 14,
-    color: '#64748B',
-    fontWeight: '600',
+    color: THEME.textMuted,
+    fontWeight: '500',
   },
-  pageContainer: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
+
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
   },
-  authContainer: {
+
+  /* Split Container (Desktop: 2 Columns, Mobile: 1 Column Card) */
+  splitCardWrapper: {
     width: '100%',
     maxWidth: 440,
-    alignItems: 'center',
-  },
-  card: {
-    width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 24,
+    backgroundColor: THEME.card,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 32,
+    borderColor: THEME.border,
+    overflow: 'hidden',
     ...Platform.select({
       web: {
-        boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04)',
-      },
+        boxShadow: '0 20px 40px -15px rgba(124, 58, 237, 0.08), 0 0 1px 1px rgba(124, 58, 237, 0.04)',
+      } as any,
       default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.08,
-        shadowRadius: 18,
-        elevation: 3,
+        shadowColor: THEME.primary,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.07,
+        shadowRadius: 20,
+        elevation: 4,
       },
     }),
   },
-  brandHeader: {
+  splitCardWrapperTablet: {
+    maxWidth: 480,
+  },
+  splitCardWrapperDesktop: {
+    maxWidth: 960,
+    flexDirection: 'row',
+    minHeight: 620,
+  },
+
+  /* Left Hero Panel (Desktop Only) */
+  heroPanel: {
+    flex: 1,
+    backgroundColor: THEME.primarySoft,
+    padding: 40,
+    justifyContent: 'center',
+    borderRightWidth: 1,
+    borderRightColor: THEME.border,
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: THEME.textMain,
+    lineHeight: 36,
+    letterSpacing: -0.5,
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    color: THEME.textMuted,
+    lineHeight: 22,
+    marginTop: 8,
+  },
+  heroGraphicWrapper: {
     alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 24,
+  },
+
+  /* Right / Main Auth Card */
+  authCard: {
+    width: '100%',
+    padding: 24,
+    backgroundColor: THEME.card,
+  },
+  authCardDesktop: {
+    flex: 1,
+    maxWidth: 480,
+    padding: 40,
+    justifyContent: 'center',
+  },
+
+  /* Brand Header */
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 24,
   },
-  logo: {
-    width: 140,
-    height: 36,
+  logoImage: {
+    width: 130,
+    height: 32,
   },
-  formHeader: {
-    marginBottom: 22,
+  brandBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: THEME.primarySoft,
+    borderWidth: 1,
+    borderColor: THEME.border,
   },
-  title: {
+  brandBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: THEME.primary,
+    letterSpacing: 0.3,
+  },
+
+  /* Greeting */
+  greetingHeader: {
+    marginBottom: 20,
+  },
+  greetingTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  greetingTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: THEME.textMain,
+    letterSpacing: -0.4,
+  },
+  greetingEmoji: {
     fontSize: 22,
-    fontWeight: '800',
-    color: '#0F172A',
-    letterSpacing: -0.3,
   },
-  subtitle: {
+  greetingSubtitle: {
     fontSize: 13,
-    color: '#64748B',
-    marginTop: 6,
+    color: THEME.textMuted,
     lineHeight: 19,
+    marginTop: 4,
   },
+
+  /* Error Banner */
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     padding: 12,
-    borderRadius: 10,
-    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    backgroundColor: THEME.errorBg,
     borderWidth: 1,
-    borderColor: '#FCA5A5',
+    borderColor: THEME.errorBorder,
     marginBottom: 16,
   },
   errorText: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#DC2626',
+    color: THEME.error,
     flex: 1,
+    lineHeight: 18,
   },
+
+  /* Inputs Group */
   inputsGroup: {
-    gap: 16,
-    marginBottom: 20,
+    gap: 12,
+    marginBottom: 8,
   },
-  inputWrap: {
-    gap: 6,
-  },
-  labelRow: {
+  inputFieldContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  forgotLink: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#0D7377',
-  },
-  pwdHintText: {
-    fontSize: 11,
-    color: '#64748B',
-    marginTop: 4,
-    marginLeft: 2,
-    fontWeight: '500',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
+    backgroundColor: '#FAFAFD',
+    borderWidth: 1.5,
     borderColor: '#E2E8F0',
-    borderRadius: 12,
-    height: 46,
+    borderRadius: 14,
+    height: 50,
     paddingHorizontal: 12,
   },
-  inputIcon: {
-    marginRight: 8,
+  inputFieldFocused: {
+    borderColor: THEME.primary,
+    backgroundColor: '#FFFFFF',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 0 0 3px rgba(124, 58, 237, 0.12)',
+      } as any,
+    }),
+  },
+  inputIconBox: {
+    marginRight: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   textInput: {
     flex: 1,
     height: '100%',
     fontSize: 14,
-    color: '#0F172A',
-    borderWidth: 0,
+    color: THEME.textMain,
     backgroundColor: 'transparent',
     paddingHorizontal: 0,
+    ...Platform.select({
+      web: { outlineStyle: 'none' as any },
+    }),
+  },
+  phoneTagPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: THEME.primarySoft,
+  },
+  phoneTagText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: THEME.primary,
   },
   eyeBtn: {
     paddingHorizontal: 6,
     height: '100%',
     justifyContent: 'center',
   },
+
+  /* Forgot Password */
+  forgotRow: {
+    alignSelf: 'flex-end',
+    paddingVertical: 6,
+    marginBottom: 16,
+  },
+  forgotLink: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: THEME.primary,
+  },
+
+  /* Primary Button */
   primaryBtn: {
-    backgroundColor: '#0D7377',
-    height: 48,
-    borderRadius: 12,
+    backgroundColor: THEME.primary,
+    height: 50,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     ...Platform.select({
       web: {
-        cursor: 'pointer',
-        boxShadow: '0 8px 20px -4px rgba(13, 115, 119, 0.3)',
-      },
+        boxShadow: '0 8px 20px rgba(124, 58, 237, 0.3)',
+      } as any,
       default: {
-        elevation: 2,
-        shadowColor: '#0D7377',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.25,
-        shadowRadius: 8,
+        shadowColor: THEME.primary,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 4,
       },
     }),
   },
-  btnContentRow: {
+  btnRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
   },
   primaryBtnText: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#FFFFFF',
     letterSpacing: -0.2,
   },
+
+  /* Divider */
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     marginVertical: 18,
   },
-  divider: {
+  dividerLine: {
     flex: 1,
     height: 1,
     backgroundColor: '#E2E8F0',
   },
   dividerText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#94A3B8',
-    letterSpacing: 0.6,
+    fontWeight: '600',
+    color: THEME.textLight,
+    letterSpacing: 0.8,
+  },
+
+  /* Secondary Auth Group */
+  secondaryGroup: {
+    gap: 10,
   },
   googleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    height: 46,
-    borderRadius: 12,
+    height: 48,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     backgroundColor: '#FFFFFF',
-    ...Platform.select({
-      web: {
-        cursor: 'pointer',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-      },
-      default: {
-        elevation: 1,
-      },
-    }),
   },
   googleBtnText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1E293B',
+    color: THEME.textMain,
+    letterSpacing: -0.1,
   },
   ssoBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    height: 46,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: 'rgba(13, 115, 119, 0.25)',
-    backgroundColor: '#F0F7F7',
-    ...Platform.select({
-      web: {
-        cursor: 'pointer',
-      },
-      default: {
-        elevation: 1,
-      },
-    }),
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    backgroundColor: THEME.primarySoft,
   },
   ssoBtnText: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#0D7377',
+    fontWeight: '600',
+    color: THEME.primary,
+    letterSpacing: -0.1,
   },
-  bioBtn: {
+  biometricBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    height: 46,
-    borderRadius: 12,
+    height: 48,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
-    marginTop: 10,
+    borderColor: THEME.border,
+    backgroundColor: '#F3F0FF',
   },
-  bioBtnText: {
-    fontSize: 13,
+  biometricBtnText: {
+    fontSize: 14,
     fontWeight: '600',
-    color: '#1E293B',
+    color: THEME.primary,
+    letterSpacing: -0.1,
   },
+
   btnDisabled: {
     opacity: 0.6,
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 20,
-  },
-  cardFooterText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#94A3B8',
-  },
-  footer: {
-    alignItems: 'center',
-    marginTop: 28,
-    gap: 6,
-  },
-  footerText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#64748B',
-  },
-  footerLinksRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  footerLink: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#0D7377',
-  },
-  footerDot: {
-    fontSize: 12,
-    color: '#CBD5E1',
   },
 });

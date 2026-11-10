@@ -9,6 +9,14 @@ import {
   useWindowDimensions,
   RefreshControl,
 } from 'react-native';
+import {
+  CraftButton,
+  CraftCard,
+  CraftHeader,
+  Typography,
+  T,
+  S,
+} from '@/components/ui/CraftKit';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -200,16 +208,17 @@ export default function NotificationsScreen() {
 
             return (
               <Animated.View key={item.id} entering={FadeInDown.delay(idx * 40).duration(300).springify()}>
-                <TouchableOpacity
+                <CraftCard
+                  variant={isUnread ? 'pastel' : 'base'}
+                  pastelTint={isUnread ? T.mint : undefined}
                   style={[
                     styles.notifCard,
                     {
-                      backgroundColor: isUnread ? '#F0F7F7' : colors.surface,
                       borderBottomColor: colors.border,
                     },
                   ]}
-                  activeOpacity={0.75}
                   onPress={() => handleCardClick(item)}
+                  padding={14}
                 >
                   {isUnread && <View style={styles.unreadIndicator} />}
                   <View style={[styles.iconBox, { backgroundColor: color + '15' }]}>
@@ -224,7 +233,7 @@ export default function NotificationsScreen() {
                     </View>
                     <Text style={[styles.cardMessage, { color: colors.textSecondary }]}>{item.message}</Text>
                   </View>
-                </TouchableOpacity>
+                </CraftCard>
               </Animated.View>
             );
           })
@@ -235,16 +244,21 @@ export default function NotificationsScreen() {
 
   if (!isDesktop) {
     return (
-      <View style={[styles.root, { backgroundColor: colors.background }]}>
-        <View style={[styles.mHeader, { backgroundColor: '#FFFFFF', borderBottomColor: '#E2E8F0' }]}>
-          <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
-            <X size={24} color="#0F172A" />
-          </TouchableOpacity>
-          <Text style={styles.mHeaderTitle}>Notifications</Text>
-          <TouchableOpacity onPress={handleMarkAllRead}>
-            <CheckCircle2 size={20} color="#0D7377" />
-          </TouchableOpacity>
-        </View>
+      <View style={[styles.root, { backgroundColor: T.canvas }]}>
+        <CraftHeader
+          title="Notifications"
+          subtitle="Updates on leaves, expenses & company requests"
+          onBack={() => router.back()}
+          right={
+            <CraftButton
+              title="Mark all read"
+              variant="secondary"
+              size="sm"
+              icon={<CheckCircle2 size={13} color={T.ink} />}
+              onPress={handleMarkAllRead}
+            />
+          }
+        />
         {Content}
       </View>
     );
@@ -252,19 +266,19 @@ export default function NotificationsScreen() {
 
   // Desktop
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <View style={[styles.dHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <View>
-          <Text style={[styles.dTitle, { color: colors.text }]}>Notifications & Activity</Text>
-          <Text style={[styles.dSubtitle, { color: colors.textSecondary }]}>
-            Live updates on your leave approvals, expenses, and tickets
-          </Text>
-        </View>
-        <TouchableOpacity style={styles.dMarkBtn} onPress={handleMarkAllRead}>
-          <CheckCircle2 size={16} color="#0D7377" />
-          <Text style={styles.dMarkBtnText}>Mark all as read</Text>
-        </TouchableOpacity>
-      </View>
+    <View style={[styles.root, { backgroundColor: T.canvas }]}>
+      <CraftHeader
+        title="Notifications & Activity"
+        subtitle="Live updates on your leave approvals, expenses, and tickets"
+        right={
+          <CraftButton
+            title="Mark all as read"
+            variant="secondary"
+            icon={<CheckCircle2 size={14} color={T.ink} />}
+            onPress={handleMarkAllRead}
+          />
+        }
+      />
       <View style={styles.dContainer}>
         <View style={[styles.dCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           {Content}

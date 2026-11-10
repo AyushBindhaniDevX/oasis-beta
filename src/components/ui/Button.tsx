@@ -11,13 +11,24 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/hooks/use-theme';
-import { Shadows, BrandShadow } from '@/constants/theme';
+import { BorderRadius, BrandShadow, Shadows, NotionColors } from '@/constants/theme';
 import type { ThemeColors } from '@/constants/theme';
 
-type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost' | 'success';
-type ButtonSize = 'sm' | 'md' | 'lg';
+export type ButtonVariant =
+  | 'primary'
+  | 'secondary'
+  | 'dark'
+  | 'outline'
+  | 'ghost'
+  | 'link'
+  | 'onDark'
+  | 'secondaryOnDark'
+  | 'danger'
+  | 'success';
 
-interface ButtonProps {
+export type ButtonSize = 'sm' | 'md' | 'lg';
+
+export interface ButtonProps {
   title: string;
   onPress: () => void;
   variant?: ButtonVariant;
@@ -32,22 +43,95 @@ interface ButtonProps {
   iconRight?: React.ReactNode;
 }
 
-function getVariantStyles(variant: ButtonVariant, colors: ThemeColors) {
-  const map: Record<ButtonVariant, { bg: string; text: string; border?: string; shadow?: any }> = {
-    primary: { bg: colors.primary, text: colors.primaryForeground, shadow: BrandShadow },
-    secondary: { bg: colors.backgroundElement, text: colors.text, shadow: Shadows?.sm },
-    outline: { bg: 'transparent', text: colors.text, border: colors.border, shadow: undefined },
-    danger: { bg: colors.danger, text: '#FFFFFF', shadow: Shadows?.md },
-    ghost: { bg: 'transparent', text: colors.primary, shadow: undefined },
-    success: { bg: colors.success, text: '#FFFFFF', shadow: BrandShadow },
-  };
-  return map[variant];
+function getVariantStyles(variant: ButtonVariant, colors: ThemeColors, isPressed: boolean, disabled: boolean) {
+  if (disabled) {
+    return {
+      bg: colors.border,
+      text: colors.textMuted || colors.textTertiary,
+      border: 'transparent',
+      shadow: undefined,
+    };
+  }
+
+  switch (variant) {
+    case 'primary':
+      return {
+        bg: isPressed ? NotionColors.primaryPressed : NotionColors.primary,
+        text: NotionColors.onPrimary,
+        border: 'transparent',
+        shadow: BrandShadow,
+      };
+    case 'dark':
+      return {
+        bg: isPressed ? '#1e1e1e' : NotionColors.inkDeep,
+        text: NotionColors.onDark,
+        border: 'transparent',
+        shadow: Shadows?.sm,
+      };
+    case 'secondary':
+    case 'outline':
+      return {
+        bg: isPressed ? colors.surfaceMuted : 'transparent',
+        text: NotionColors.ink,
+        border: colors.borderStrong,
+        shadow: undefined,
+      };
+    case 'onDark':
+      return {
+        bg: isPressed ? 'rgba(255,255,255,0.85)' : NotionColors.onDark,
+        text: NotionColors.ink,
+        border: 'transparent',
+        shadow: Shadows?.sm,
+      };
+    case 'secondaryOnDark':
+      return {
+        bg: isPressed ? 'rgba(255,255,255,0.1)' : 'transparent',
+        text: NotionColors.onDark,
+        border: NotionColors.onDarkMuted,
+        shadow: undefined,
+      };
+    case 'ghost':
+      return {
+        bg: isPressed ? colors.surfaceMuted : 'transparent',
+        text: NotionColors.ink,
+        border: 'transparent',
+        shadow: undefined,
+      };
+    case 'link':
+      return {
+        bg: 'transparent',
+        text: isPressed ? NotionColors.linkBluePressed : NotionColors.linkBlue,
+        border: 'transparent',
+        shadow: undefined,
+      };
+    case 'danger':
+      return {
+        bg: isPressed ? '#c52828' : NotionColors.semanticError,
+        text: '#ffffff',
+        border: 'transparent',
+        shadow: Shadows?.sm,
+      };
+    case 'success':
+      return {
+        bg: isPressed ? '#158d2e' : NotionColors.semanticSuccess,
+        text: '#ffffff',
+        border: 'transparent',
+        shadow: Shadows?.sm,
+      };
+    default:
+      return {
+        bg: NotionColors.primary,
+        text: NotionColors.onPrimary,
+        border: 'transparent',
+        shadow: BrandShadow,
+      };
+  }
 }
 
-const sizeStyles: Record<ButtonSize, { h: number; px: number; fontSize: number; borderRadius: number }> = {
-  sm: { h: 48, px: 16, fontSize: 13, borderRadius: 12 },
-  md: { h: 52, px: 24, fontSize: 15, borderRadius: 16 },
-  lg: { h: 58, px: 32, fontSize: 16, borderRadius: 18 },
+const sizeMetrics: Record<ButtonSize, { h: number; px: number; fontSize: number; radius: number }> = {
+  sm: { h: 36, px: 12, fontSize: 13, radius: BorderRadius.sm }, // 6px
+  md: { h: 44, px: 18, fontSize: 14, radius: BorderRadius.md }, // 8px — Notion standard
+  lg: { h: 48, px: 22, fontSize: 15, radius: BorderRadius.md }, // 8px
 };
 
 export function Button({
@@ -65,16 +149,15 @@ export function Button({
   iconRight,
 }: ButtonProps) {
   const colors = useTheme();
-  const vs = getVariantStyles(variant, colors);
-  const ss = sizeStyles[size];
   const scale = useRef(new Animated.Value(1)).current;
+  const sm = sizeMetrics[size];
 
   const handlePressIn = () => {
-    Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, bounciness: 0 }).start();
+    Animated.spring(scale, { toValue: 0.98, useNativeDriver: Platform.OS !== 'web', bounciness: 0 }).start();
   };
 
   const handlePressOut = () => {
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true, bounciness: 0 }).start();
+    Animated.spring(scale, { toValue: 1, useNativeDriver: Platform.OS !== 'web', bounciness: 0 }).start();
   };
 
   const handlePress = () => {
@@ -84,6 +167,8 @@ export function Button({
     onPress();
   };
 
+  const isLink = variant === 'link';
+
   return (
     <Animated.View style={[{ transform: [{ scale }] }, fullWidth && { width: '100%' }]}>
       <Pressable
@@ -91,35 +176,64 @@ export function Button({
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         disabled={disabled || loading}
-        android_ripple={{
-          color: variant === 'primary' || variant === 'danger' || variant === 'success' ? 'rgba(255,255,255,0.22)' : 'rgba(15,23,42,0.06)',
-          borderless: false,
+        android_ripple={
+          isLink
+            ? undefined
+            : {
+                color:
+                  variant === 'primary' || variant === 'dark' || variant === 'danger' || variant === 'success'
+                    ? 'rgba(255, 255, 255, 0.2)'
+                    : 'rgba(0, 0, 0, 0.05)',
+                borderless: false,
+              }
+        }
+        style={({ pressed }) => {
+          const vs = getVariantStyles(variant, colors, pressed, disabled);
+          return [
+            styles.base,
+            !isLink && {
+              height: sm.h,
+              minHeight: 44, // Mobile touch target minimum
+              paddingHorizontal: sm.px,
+              borderRadius: sm.radius, // 8px standard
+              backgroundColor: vs.bg,
+              borderWidth: vs.border !== 'transparent' ? 1 : 0,
+              borderColor: vs.border,
+              ...(disabled ? {} : vs.shadow),
+            },
+            isLink && {
+              paddingVertical: 4,
+              backgroundColor: 'transparent',
+            },
+            fullWidth && { width: '100%' },
+            style,
+          ];
         }}
-        style={({ pressed }) => [
-          styles.base,
-          {
-            backgroundColor: vs.bg,
-            height: ss.h,
-            paddingHorizontal: ss.px,
-            borderRadius: ss.borderRadius,
-            borderColor: vs.border || 'transparent',
-            borderWidth: vs.border ? 1.5 : 0,
-            opacity: disabled ? 0.45 : pressed && Platform.OS === 'ios' ? 0.9 : 1,
-            ...(disabled ? {} : vs.shadow),
-          },
-          fullWidth && { width: '100%' },
-          style,
-        ]}
       >
-        {loading ? (
-          <ActivityIndicator size="small" color={vs.text} />
-        ) : (
-          <>
-            {icon}
-            <Text style={[styles.text, { color: vs.text, fontSize: ss.fontSize }, textStyle]}>{title}</Text>
-            {iconRight}
-          </>
-        )}
+        {({ pressed }) => {
+          const vs = getVariantStyles(variant, colors, pressed, disabled);
+          return loading ? (
+            <ActivityIndicator size="small" color={vs.text} />
+          ) : (
+            <>
+              {icon}
+              <Text
+                style={[
+                  styles.text,
+                  {
+                    color: vs.text,
+                    fontSize: isLink ? 14 : sm.fontSize,
+                    fontWeight: '500', // Notion font weight 500 for buttons
+                  },
+                  textStyle,
+                ]}
+              >
+                {title}
+              </Text>
+              {iconRight}
+            </>
+          );
+        }}
       </Pressable>
     </Animated.View>
   );
@@ -130,11 +244,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    overflow: Platform.OS === 'android' ? 'hidden' : 'visible',
+    gap: 8,
+    ...Platform.select({
+      web: { cursor: 'pointer', userSelect: 'none' } as any,
+    }),
   },
   text: {
-    fontWeight: '700',
-    letterSpacing: 0.2,
+    letterSpacing: -0.1,
+    lineHeight: 18,
   },
 });

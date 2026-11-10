@@ -15,7 +15,7 @@ import { ForcePasswordChangeModal } from '@/components/auth/ForcePasswordChangeM
 import { GluestackUIProvider } from '@gluestack-ui/themed';
 import { config } from '@gluestack-ui/config';
 
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, Platform } from 'react-native';
 
 // Immediately hide splash screen to avoid black splash / logo delay
 SplashScreen.hideAsync().catch(() => {});
@@ -67,7 +67,14 @@ export default function RootLayout() {
                   <NotificationProvider>
                     <AuthLayoutWrapper>
                       <SessionManager>
-                        <Stack screenOptions={{ headerShown: false }}>
+                        <Stack
+                          screenOptions={{
+                            headerShown: false,
+                            gestureEnabled: false,
+                            fullScreenGestureEnabled: false,
+                            animation: Platform.OS === 'web' ? 'none' : 'fade',
+                          }}
+                        >
                           <Stack.Screen name="index" />
                           <Stack.Screen name="careers" />
                           <Stack.Screen name="(auth)" />

@@ -1,16 +1,18 @@
 import React from 'react';
-import { SidebarLayout } from '@/components/layout/Sidebar';
+import {
+  CraftButton,
+  CraftCard,
+  Typography,
+  T,
+  S,
+} from '@/components/ui/CraftKit';
 import { HelpCenter } from '@/components/help/HelpCenter';
-import { LayoutDashboard, CalendarClock, CalendarDays, Banknote, Users } from 'lucide-react-native';
-
-const NAV_ITEMS = [
-  { label: 'Dashboard', href: '/(employee)/dashboard', icon: LayoutDashboard },
-  { label: 'Attendance', href: '/(employee)/attendance', icon: CalendarClock },
-  { label: 'Leave', href: '/(employee)/leave', icon: CalendarDays },
-  { label: 'Salary', href: '/(employee)/payslips', icon: Banknote },
-  { label: 'Directory', href: '/(employee)/directory', icon: Users },
-];
+import { View } from 'react-native';
 
 export default function EmployeeHelpScreen() {
-  return <HelpCenter />;
+  return (
+    <View style={{ flex: 1, backgroundColor: T.canvas }}>
+      <HelpCenter />
+    </View>
+  );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,17 +9,25 @@ import {
   useWindowDimensions,
   TextInput,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
+import Svg, { Path, SvgXml } from 'react-native-svg';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Modal } from '@/components/ui/Modal';
+import { TimePicker } from '@/components/ui/TimePicker';
 import { SidebarLayout } from '@/components/layout/Sidebar';
+import { InteractiveTile } from '@/components/ui/InteractiveTile';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
 import { LoadingState } from '@/components/ui/States';
+import { getNavForRole } from '@/constants/navigation';
+import { getTenantDefaultUnits, normalizeHospitalUnit } from '@/constants/config';
+import { STOCK_4_SVG, STOCK_8_SVG, STOCK_10_SVG, STOCK_12_SVG } from '@/constants/workManagementSvgs';
 import { getShifts, createShift, updateShift, getRoster, assignEmployeeShift } from '@/lib/services/shifts';
 import { getEmployees, getDepartments } from '@/lib/services/employee';
 import { WorkShift, EmployeeShift, Employee, Department } from '@/types';
-import { formatCurrency } from '@/utils/format';
+import { formatCurrency, getInitials } from '@/utils/format';
 import {
   Clock,
   Calendar,
@@ -41,26 +49,50 @@ import {
   MinusSquare,
   Square,
   RotateCcw,
+  RefreshCw,
+  Search,
+  Filter,
 } from 'lucide-react-native';
 import { Select } from '@/components/ui/Select';
 import { exportOrPrintPdf } from '@/utils/pdf';
+
+function MetricWave({ color, width = 85, height = 28 }: { color: string; width?: number; height?: number }) {
+  return (
+    <Svg width={width} height={height} viewBox="0 0 90 30" fill="none">
+      <Path
+        d="M 2 18 C 16 26, 26 8, 42 16 C 56 24, 66 6, 88 12"
+        stroke={color}
+        strokeWidth={2.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
 export default function ShiftsScreen() {
   const colors = useTheme();
   const { profile } = useAuth();
-  const { organization: tenantOrg } = useTenant();
+  const { organization: tenantOrg, units: tenantUnits } = useTenant();
   const { width } = useWindowDimensions();
+  const isDesktop = width >= 1024;
 
   const [shifts, setShifts] = useState<WorkShift[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDeptId, setSelectedDeptId] = useState<string>('all');
+  const [unitFilter, setUnitFilter] = useState<string>('all');
   const [rosterMap, setRosterMap] = useState<Record<string, string>>({}); // key: `${empId}_${date}` -> shiftId / 'OFF'
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedView, setSelectedView] = useState<'roster' | 'master'>('roster');
+
+  const availableUnits = useMemo(() => {
+    if (tenantUnits && tenantUnits.length > 0) return tenantUnits;
+    return getTenantDefaultUnits(tenantOrg?.name, tenantOrg?.id);
+  }, [tenantUnits, tenantOrg]);
 
   // Week offset from current week
   const [weekOffset, setWeekOffset] = useState(0);
@@ -85,7 +117,7 @@ export default function ShiftsScreen() {
   const [savingShift, setSavingShift] = useState(false);
 
   // Calculate dates for current week
-  const weekDates = React.useMemo(() => {
+  const weekDates = useMemo(() => {
     const now = new Date();
     const currentDay = now.getDay(); // 0 is Sun, 1 is Mon
     const distanceToMon = currentDay === 0 ? -6 : 1 - currentDay;
@@ -102,15 +134,19 @@ export default function ShiftsScreen() {
     });
   }, [weekOffset]);
 
-  const displayedEmployees = React.useMemo(() => {
-    const filtered = employees.filter(e => selectedDeptId === 'all' || e.department_id === selectedDeptId);
+  const displayedEmployees = useMemo(() => {
+    const filtered = employees.filter(e => {
+      const matchDept = selectedDeptId === 'all' || e.department_id === selectedDeptId;
+      const matchUnit = unitFilter === 'all' || (e.hospital_unit || '').toLowerCase() === unitFilter.toLowerCase();
+      return matchDept && matchUnit;
+    });
     const seen = new Set<string>();
     return filtered.filter(e => {
       if (!e.id || seen.has(e.id)) return false;
       seen.add(e.id);
       return true;
     });
-  }, [employees, selectedDeptId]);
+  }, [employees, selectedDeptId, unitFilter]);
 
   // Mass action selection state
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
@@ -159,7 +195,7 @@ export default function ShiftsScreen() {
             { name: 'General Day Shift (8h)', start_time: '09:00', end_time: '17:00', color: '#0D7377', allowance_per_day: 0, is_night_shift: false, organization_id: orgId },
             { name: 'Morning Shift (8h)', start_time: '07:00', end_time: '15:00', color: '#0284C7', allowance_per_day: 100, is_night_shift: false, organization_id: orgId },
             { name: 'Evening Shift (8h)', start_time: '14:00', end_time: '22:00', color: '#D97706', allowance_per_day: 150, is_night_shift: false, organization_id: orgId },
-            { name: 'Night Shift ICU (8h)', start_time: '21:00', end_time: '07:00', color: '#7C3AED', allowance_per_day: 300, is_night_shift: true, organization_id: orgId },
+            { name: 'Night Shift Operations (8h)', start_time: '21:00', end_time: '07:00', color: '#7C3AED', allowance_per_day: 300, is_night_shift: true, organization_id: orgId },
           ];
           for (const s of defaultShifts) {
             await createShift(s);
@@ -309,7 +345,7 @@ export default function ShiftsScreen() {
                 padding-bottom: 10px;
                 margin-bottom: 12px;
               }
-              .hospital-name {
+              .workplace-name {
                 font-size: 18px;
                 font-weight: 800;
                 color: #0D7377;
@@ -447,7 +483,7 @@ export default function ShiftsScreen() {
           <body>
             <div class="header-box">
               <div>
-                <div class="hospital-name">${unitName}</div>
+                <div class="workplace-name">${unitName}</div>
                 <div class="doc-title">Weekly Staff Duty Roster</div>
               </div>
               <div class="meta-info">
@@ -531,7 +567,7 @@ export default function ShiftsScreen() {
       await exportOrPrintPdf(htmlContent, fileName);
     } catch (error) {
       console.error('Failed to generate PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
+      Alert.alert('PDF Export Error', 'Failed to generate PDF. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -541,7 +577,7 @@ export default function ShiftsScreen() {
     if (!newShiftName.trim()) return;
     setSavingShift(true);
     try {
-      const orgId = tenantOrg?.id || profile?.organization_id || '00000000-0000-0000-0000-000000000002';
+      const orgId = tenantOrg?.id || profile?.organization_id || '';
       const shiftPayload = {
         name: newShiftName.trim(),
         start_time: newShiftStart.trim(),
@@ -587,67 +623,248 @@ export default function ShiftsScreen() {
 
   if (loading) return <LoadingState />;
 
+  const kpiCardWidth = isDesktop ? undefined : (width - 40 - 12) / 2;
+
   return (
-    <SidebarLayout>
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {/* Top Header */}
-        <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.title, { color: colors.text }]}>Shift Scheduling & Team Rosters</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Manage Weekly Rotational Schedules & Shift Allowances
+    <SidebarLayout items={getNavForRole(profile?.role || 'hr', profile?.email)}>
+      <ScrollView
+        style={[styles.container, { backgroundColor: '#FAF9FD' }]}
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
+      >
+        {/* Top Header Row with STOCK 4 SVG */}
+        <Animated.View entering={FadeInDown.duration(280)} style={styles.headerRow}>
+          <View style={{ flex: 1, minWidth: 260 }}>
+            <View style={styles.breadcrumbRow}>
+              <Text style={styles.breadcrumbMuted}>Dashboard</Text>
+              <Text style={styles.breadcrumbMuted}>/</Text>
+              <Text style={styles.breadcrumbActive}>Shifts & Rosters</Text>
+            </View>
+
+            <Text style={[styles.pageTitle, { color: '#0F172A' }]}>Shift Scheduling & Duty Rosters</Text>
+            <Text style={[styles.pageSubtitle, { color: '#64748B' }]}>
+              Manage weekly rotational shifts, 24x7 operational schedules, and duty roster assignments across{' '}
+              <Text style={{ fontWeight: '700', color: '#0F172A' }}>{tenantOrg?.name || 'Workspace'}</Text>.
             </Text>
           </View>
 
-          {selectedView === 'master' && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <TouchableOpacity
-            onPress={() => {
-              setEditingShiftId(null);
-              setNewShiftName('');
-              setNewShiftStart('09:00');
-              setNewShiftEnd('17:00');
-              setNewShiftColor('#0D7377');
-              setNewShiftAllowance('0');
-              setAddShiftOpen(true);
-            }}
-            style={[styles.addBtn, { backgroundColor: colors.primary }]}>
-              <Plus size={16} color="#FFF" />
-              <Text style={styles.addBtnText}>New Shift Type</Text>
+              style={styles.refreshBtn}
+              onPress={() => { setRefreshing(true); loadData(); }}
+              disabled={refreshing}
+              activeOpacity={0.8}
+            >
+              <RefreshCw size={15} color="#64748B" />
+              <Text style={styles.refreshBtnText}>Refresh</Text>
             </TouchableOpacity>
-          )}
 
-          {selectedView === 'roster' && (
-            <TouchableOpacity onPress={handleDownloadPDF} style={[styles.addBtn, { backgroundColor: '#10b981' }]}>
-              <Download size={16} color="#FFF" />
-              <Text style={styles.addBtnText}>Export PDF</Text>
+            <TouchableOpacity
+              onPress={handleDownloadPDF}
+              style={[styles.refreshBtn, { backgroundColor: '#F0FDFA', borderColor: '#99F6E4' }]}
+              activeOpacity={0.8}
+            >
+              <Download size={15} color="#0D7377" />
+              <Text style={[styles.refreshBtnText, { color: '#0D7377', fontWeight: '700' }]}>Export PDF</Text>
             </TouchableOpacity>
-          )}
-        </View>
 
-        {/* View Switcher */}
-        <View style={styles.tabBar}>
+            <View style={{ opacity: 0.95 }}>
+              <SvgXml xml={STOCK_4_SVG} width={isDesktop ? 120 : 85} height={isDesktop ? 85 : 60} />
+            </View>
+
+            <TouchableOpacity
+              onPress={() => {
+                setEditingShiftId(null);
+                setNewShiftName('');
+                setNewShiftStart('09:00');
+                setNewShiftEnd('17:00');
+                setNewShiftColor('#0D7377');
+                setNewShiftAllowance('0');
+                setAddShiftOpen(true);
+              }}
+              style={[styles.headerPrimaryBtn, { backgroundColor: '#7C3AED' }]}
+              activeOpacity={0.88}
+            >
+              <Plus size={16} color="#FFFFFF" strokeWidth={2.5} />
+              <Text style={styles.headerPrimaryBtnText}>New Shift Pattern</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+
+        {/* 4 Pastel KPI Metric Cards with InteractiveTile */}
+        <Animated.View entering={FadeInDown.delay(50).duration(280)} style={styles.kpiRow}>
+          {/* Tile 1: Active Shift Patterns */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#F3EEFE',
+                borderColor: '#E4DCFD',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                <Clock size={18} color="#7C3AED" />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>{shifts.length}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#8B5CF6', marginTop: 1 }}>Patterns</Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Active Shift Patterns</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#8B5CF6" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+
+          {/* Tile 2: Scheduled Staff */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#EDFAF2',
+                borderColor: '#CEF2DE',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                <Users size={18} color="#10B981" />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#064E3B' }]}>{displayedEmployees.length}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>Staff</Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Scheduled Staff</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#10B981" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+
+          {/* Tile 3: Night Duty Rosters */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#FFF4EB',
+                borderColor: '#FFE2CD',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                <Moon size={18} color="#EA580C" />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>
+                  {shifts.filter((s) => s.is_night_shift).length}
+                </Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Night Shifts</Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Night Duty Protocols</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#F97316" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+
+          {/* Tile 4: Departments */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#EFF6FF',
+                borderColor: '#DBEAFE',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
+                <Building2 size={18} color="#2563EB" />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#1E3A8A' }]}>{departments.length}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>Depts</Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Roster Departments</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#3B82F6" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+        </Animated.View>
+
+        {/* View Switcher Tabs */}
+        <View style={styles.viewModeTabs}>
           <TouchableOpacity
             onPress={() => setSelectedView('roster')}
-            style={[styles.tabBtn, selectedView === 'roster' && styles.tabBtnActive]}
+            style={[styles.viewTabBtn, selectedView === 'roster' && styles.viewTabBtnActive]}
           >
-            <Text style={[styles.tabText, selectedView === 'roster' && styles.tabTextActive]}>
+            <Calendar size={15} color={selectedView === 'roster' ? '#7C3AED' : '#64748B'} />
+            <Text style={[styles.viewTabBtnText, selectedView === 'roster' && styles.viewTabBtnTextActive]}>
               Weekly Roster Matrix
             </Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             onPress={() => setSelectedView('master')}
-            style={[styles.tabBtn, selectedView === 'master' && styles.tabBtnActive]}
+            style={[styles.viewTabBtn, selectedView === 'master' && styles.viewTabBtnActive]}
           >
-            <Text style={[styles.tabText, selectedView === 'master' && styles.tabTextActive]}>
-              Shift Master ({shifts.length})
+            <Clock size={15} color={selectedView === 'master' ? '#7C3AED' : '#64748B'} />
+            <Text style={[styles.viewTabBtnText, selectedView === 'master' && styles.viewTabBtnTextActive]}>
+              Shift Patterns & Masters ({shifts.length})
             </Text>
           </TouchableOpacity>
         </View>
 
-        <ScrollView
-          style={{ flex: 1, padding: 20 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
-        >
+        {/* Workplace Units Filter Pills */}
+        <View style={styles.unitFilterContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.unitPillsRow}>
+            <TouchableOpacity
+              style={[styles.unitFilterPill, unitFilter === 'all' && styles.unitFilterPillActive]}
+              onPress={() => setUnitFilter('all')}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.unitFilterPillText, unitFilter === 'all' && styles.unitFilterPillTextActive]}>
+                All Units ({employees.length} Staff)
+              </Text>
+            </TouchableOpacity>
+
+            {availableUnits.map((u) => {
+              const normalized = normalizeHospitalUnit(u);
+              const active = unitFilter.toLowerCase() === u.toLowerCase();
+              return (
+                <TouchableOpacity
+                  key={u}
+                  style={[styles.unitFilterPill, active && styles.unitFilterPillActive]}
+                  onPress={() => setUnitFilter(active ? 'all' : u)}
+                  activeOpacity={0.8}
+                >
+                  <Building2 size={12} color={active ? '#7C3AED' : '#64748B'} />
+                  <Text style={[styles.unitFilterPillText, active && styles.unitFilterPillTextActive]}>
+                    {normalized}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        <View style={{ paddingVertical: 10 }}>
           {selectedView === 'roster' ? (
             <View style={{ gap: 16 }}>
               {/* HOD Roster Assignment Notice & Department Selector */}
@@ -917,46 +1134,64 @@ export default function ShiftsScreen() {
               </View>
             </View>
           ) : (
-            /* Shift Master View */
-            <View style={styles.grid}>
+            /* Shift Master View (Modern Cards matching Image 1) */
+            <View style={{ gap: 10 }}>
               {shifts.map((s) => (
-                <View key={s.id} style={styles.shiftCard}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <View style={[styles.shiftDot, { backgroundColor: s.color }]} />
+                <View key={s.id} style={styles.modernShiftRowCard}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                    <View style={[styles.shiftDotLarge, { backgroundColor: s.color || '#7C3AED' }]} />
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={styles.shiftTitleModern}>{s.name}</Text>
+                        {s.is_night_shift && (
+                          <View style={styles.nightBadge}>
+                            <Moon size={11} color="#7C3AED" />
+                            <Text style={styles.nightBadgeText}>Night Shift Protocol</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.shiftSubModern}>Rotational Operational Pattern</Text>
+                    </View>
+                  </View>
+
+                  {/* Timing Column */}
+                  <View style={{ width: 180 }}>
+                    <Text style={styles.colHeaderLabel}>Shift Window</Text>
+                    <View style={styles.timePillModern}>
+                      <Clock size={12} color="#475569" />
+                      <Text style={styles.timePillText}>{s.start_time} — {s.end_time} IST</Text>
+                    </View>
+                  </View>
+
+                  {/* Allowance Column */}
+                  <View style={{ width: 140 }}>
+                    <Text style={styles.colHeaderLabel}>Shift Allowance</Text>
                     {s.allowance_per_day > 0 ? (
-                      <View style={styles.allowanceBadge}>
-                        <Text style={styles.allowanceText}>+{formatCurrency(s.allowance_per_day)} / Day</Text>
+                      <View style={styles.allowancePillGreen}>
+                        <Text style={styles.allowancePillGreenText}>+{formatCurrency(s.allowance_per_day)} / Day</Text>
                       </View>
                     ) : (
-                      <View style={[styles.allowanceBadge, { backgroundColor: '#F1F5F9' }]}>
-                        <Text style={[styles.allowanceText, { color: '#64748B' }]}>Standard</Text>
+                      <View style={styles.allowancePillMuted}>
+                        <Text style={styles.allowancePillMutedText}>Standard</Text>
                       </View>
                     )}
                   </View>
 
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text style={styles.shiftName}>{s.name}</Text>
-                    <TouchableOpacity onPress={() => openEditShift(s)}>
-                      <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '600' }}>Edit</Text>
+                  {/* Actions Column */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => openEditShift(s)}
+                      style={styles.shiftEditBtn}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.shiftEditBtnText}>Edit Pattern</Text>
                     </TouchableOpacity>
                   </View>
-                  <View style={styles.timeBox}>
-                    <Clock size={16} color="#0D7377" />
-                    <Text style={styles.timeText}>
-                      {s.start_time} — {s.end_time} IST
-                    </Text>
-                  </View>
-                  {s.is_night_shift && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
-                      <Moon size={14} color="#7C3AED" />
-                      <Text style={{ fontSize: 12, color: '#7C3AED', fontWeight: '600' }}>Night Shift Protocol Active</Text>
-                    </View>
-                  )}
                 </View>
               ))}
             </View>
           )}
-        </ScrollView>
+        </View>
 
         {/* Assign Shift Modal */}
         <Modal
@@ -1192,7 +1427,7 @@ export default function ShiftsScreen() {
               <Text style={styles.inputLabel}>Shift Name</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="e.g. ICU Night Duty"
+                placeholder="e.g. Night Operations Shift"
                 value={newShiftName}
                 onChangeText={setNewShiftName}
               />
@@ -1200,21 +1435,21 @@ export default function ShiftsScreen() {
 
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>Start Time</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="09:00"
+                <TimePicker
+                  label="Start Time"
                   value={newShiftStart}
-                  onChangeText={setNewShiftStart}
+                  onChange={setNewShiftStart}
+                  format="HH:mm"
+                  placeholder="09:00"
                 />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>End Time</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="17:00"
+                <TimePicker
+                  label="End Time"
                   value={newShiftEnd}
-                  onChangeText={setNewShiftEnd}
+                  onChange={setNewShiftEnd}
+                  format="HH:mm"
+                  placeholder="17:00"
                 />
               </View>
             </View>
@@ -1239,13 +1474,318 @@ export default function ShiftsScreen() {
             </TouchableOpacity>
           </View>
         </Modal>
-      </View>
+      </ScrollView>
     </SidebarLayout>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  contentContainer: { padding: 24, paddingBottom: 64 },
+
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 16,
+    marginBottom: 20,
+  },
+  breadcrumbRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  breadcrumbMuted: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
+  breadcrumbActive: {
+    fontSize: 12,
+    color: '#7C3AED',
+    fontWeight: '700',
+  },
+  eyebrowChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: '#F3EEFE',
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginBottom: 6,
+  },
+  eyebrowText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#7C3AED',
+    letterSpacing: 0.5,
+  },
+  pageTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
+  pageSubtitle: {
+    fontSize: 13,
+    marginTop: 4,
+    maxWidth: 620,
+    lineHeight: 19,
+  },
+  refreshBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  refreshBtnText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  headerPrimaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 9,
+  },
+  headerPrimaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  kpiRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 16,
+  },
+  pastelMetricCard: {
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  iconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metricValueText: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  metricLabelText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  waveContainer: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    opacity: 0.8,
+  },
+
+  viewModeTabs: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    padding: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 12,
+    gap: 4,
+    flexWrap: 'wrap',
+  },
+  viewTabBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 9,
+  },
+  viewTabBtnActive: {
+    backgroundColor: '#F3EEFE',
+  },
+  viewTabBtnText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  viewTabBtnTextActive: {
+    color: '#7C3AED',
+    fontWeight: '700',
+  },
+
+  unitFilterContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 10,
+    marginBottom: 12,
+  },
+  unitPillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  unitFilterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  unitFilterPillActive: {
+    backgroundColor: '#FAF5FF',
+    borderColor: '#C084FC',
+  },
+  unitFilterPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  unitFilterPillTextActive: {
+    color: '#7C3AED',
+    fontWeight: '700',
+  },
+
+  modernShiftRowCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+    gap: 12,
+  },
+  shiftDotLarge: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  shiftTitleModern: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  shiftSubModern: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  nightBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F3EEFE',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  nightBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#7C3AED',
+  },
+  colHeaderLabel: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: '#94A3B8',
+    marginBottom: 3,
+    textTransform: 'uppercase',
+  },
+  timePillModern: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  timePillText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  allowancePillGreen: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  allowancePillGreenText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  allowancePillMuted: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  allowancePillMutedText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  shiftEditBtn: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  shiftEditBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 18, borderBottomWidth: 1 },
   title: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
   subtitle: { fontSize: 13, marginTop: 2 },

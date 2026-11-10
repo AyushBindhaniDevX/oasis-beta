@@ -9,7 +9,13 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import { LoadingState } from '@/components/ui/States';
-import { HOSPITAL_UNITS, normalizeEmploymentType, normalizeHospitalUnit } from '@/constants/config';
+import {
+  HOSPITAL_UNITS,
+  normalizeEmploymentType,
+  normalizeHospitalUnit,
+  isShantiHospitalOrg,
+  getTenantDefaultUnits,
+} from '@/constants/config';
 import { getNavForRole } from '@/constants/navigation';
 import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
@@ -27,8 +33,18 @@ import {
 } from '@/lib/services/organization';
 import { assignEmployeeShift, getShifts } from '@/lib/services/shifts';
 import { HhcRoleSelector } from '@/components/HhcRoleSelector';
+import { InteractiveTile } from '@/components/ui/InteractiveTile';
+import {
+  STOCK_1_SVG,
+  STOCK_4_SVG,
+  STOCK_8_SVG,
+  STOCK_10_SVG,
+  STOCK_12_SVG,
+} from '@/constants/workManagementSvgs';
+import Svg, { Path, SvgXml } from 'react-native-svg';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import type { CustomPayrollItem, Department, Employee, LeaveBalance, LeaveType, Profile, Workplace, WorkShift, HHCRole } from '@/types';
-import { formatDate } from '@/utils/format';
+import { formatDate, getInitials } from '@/utils/format';
 import { useRouter } from 'expo-router';
 import { doc, getDoc, setDoc, writeBatch } from 'firebase/firestore';
 import {
@@ -36,9 +52,13 @@ import {
   Award,
   Briefcase,
   Building,
+  Building2,
   CheckCircle2,
   CheckSquare,
+  ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Clock,
   Edit2,
   Eye,
@@ -47,10 +67,12 @@ import {
   KeyRound,
   Mail,
   MinusSquare,
+  MoreHorizontal,
   MoreVertical,
   Phone,
   RefreshCw,
   Search,
+  Shield,
   ShieldCheck,
   Square,
   Trash2,
@@ -74,6 +96,20 @@ import {
   useWindowDimensions,
   View
 } from 'react-native';
+
+function MetricWave({ color, width = 85, height = 28 }: { color: string; width?: number; height?: number }) {
+  return (
+    <Svg width={width} height={height} viewBox="0 0 90 30" fill="none">
+      <Path
+        d="M 2 18 C 16 26, 26 8, 42 16 C 56 24, 66 6, 88 12"
+        stroke={color}
+        strokeWidth={2.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 export default function UserManagementScreen() {
   const colors = useTheme();
@@ -99,10 +135,24 @@ export default function UserManagementScreen() {
   const [deptFilter, setDeptFilter] = useState<string>('all');
   const [empTypeFilter, setEmpTypeFilter] = useState<string>('all');
 
+  // Pagination State
+  const [pageSize, setPageSize] = useState<number | 'all'>(50);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, roleFilter, statusFilter, unitFilter, deptFilter, empTypeFilter, pageSize]);
+
+  const isShantiOrg = useMemo(() => {
+    return isShantiHospitalOrg(tenantOrg?.id || currentAdmin?.organization_id, tenantOrg?.name);
+  }, [tenantOrg, currentAdmin]);
+
   // Multi-Select & Mass Action state
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [massModalType, setMassModalType] = useState<'none' | 'unit' | 'status' | 'dept' | 'shift' | 'category'>('none');
-  const [massTargetUnit, setMassTargetUnit] = useState<string>(HOSPITAL_UNITS[0] || 'Headquarters');
+  const [massTargetUnit, setMassTargetUnit] = useState<string>(() => {
+    return getTenantDefaultUnits(tenantOrg?.name, tenantOrg?.id || currentAdmin?.organization_id)[0] || 'Headquarters';
+  });
   const [massTargetStatus, setMassTargetStatus] = useState<'active' | 'inactive'>('active');
   const [massTargetDeptId, setMassTargetDeptId] = useState<string | null>(null);
   const [massTargetShiftId, setMassTargetShiftId] = useState<string | null>(null);
@@ -661,7 +711,7 @@ export default function UserManagementScreen() {
   const handleResendInvite = async (u: Profile) => {
     try {
       const { sendWelcomeEmail } = await import('@/lib/services/resend');
-      const emp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
+      const emp = empByProfileId.get(u.id) || (u as any).employee;
       const targetOrgId = u.organization_id || tenantOrg?.id;
       const dept = departments.find(d => d.id === emp?.department_id);
       const wp = workplaces.find(w => w.id === emp?.workplace_id);
@@ -783,58 +833,114 @@ export default function UserManagementScreen() {
     }
   };
 
+  // Memoized O(1) employee and workplace lookups
+  const empByProfileId = useMemo(() => {
+    const map = new Map<string, Employee>();
+    for (const m of managers) {
+      if (m.profile_id) map.set(m.profile_id, m);
+      if ((m.profile as any)?.id) map.set((m.profile as any).id, m);
+      if (m.id) map.set(m.id, m);
+    }
+    for (const u of users) {
+      if ((u as any).employee) {
+        const emp = (u as any).employee;
+        if (!map.has(u.id)) map.set(u.id, emp);
+      }
+    }
+    return map;
+  }, [managers, users]);
+
+  const workplacesMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const w of workplaces) {
+      map.set(w.id, w.name || '');
+    }
+    return map;
+  }, [workplaces]);
+
+  const selectedUserIdsSet = useMemo(() => new Set(selectedUserIds), [selectedUserIds]);
+
   // Filtered Users List
   const filteredUsers = useMemo(() => {
+    const trimmedSearch = search.trim().toLowerCase();
+    const hasSearch = trimmedSearch.length > 0;
+    const targetUnit = unitFilter !== 'all' ? unitFilter.toLowerCase() : null;
+
     return users.filter((u) => {
       // Role filter
       if (roleFilter !== 'all' && u.role !== roleFilter) return false;
       // Status filter
       if (statusFilter === 'active' && !u.is_active) return false;
       if (statusFilter === 'inactive' && u.is_active) return false;
+
+      const emp = (targetUnit || deptFilter !== 'all' || empTypeFilter !== 'all' || hasSearch)
+        ? (empByProfileId.get(u.id) || (u as any).employee)
+        : null;
+
       // Unit filter
-      if (unitFilter !== 'all') {
-        const emp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
+      if (targetUnit) {
         const empUnit = normalizeHospitalUnit(emp?.hospital_unit || emp?.workplace?.name);
-        const wp = workplaces.find(w => w.id === emp?.workplace_id);
-        const wpName = wp?.name || '';
-        const target = unitFilter.toLowerCase();
-        if (empUnit.toLowerCase() !== target && wpName.toLowerCase() !== target) return false;
+        const wpName = emp?.workplace_id ? (workplacesMap.get(emp.workplace_id) || '') : '';
+        if (empUnit.toLowerCase() !== targetUnit && wpName.toLowerCase() !== targetUnit) return false;
       }
       // Department filter
       if (deptFilter !== 'all') {
-        const emp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
         if (emp?.department_id !== deptFilter) return false;
       }
       // Employment Category filter
       if (empTypeFilter !== 'all') {
-        const emp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
         const empType = normalizeEmploymentType(emp?.employment_type);
         if (empType !== empTypeFilter) return false;
       }
       // Search
-      if (search.trim()) {
-        const query = search.toLowerCase();
-        const matchesName = u.full_name?.toLowerCase().includes(query);
-        const matchesEmail = u.email?.toLowerCase().includes(query);
-        const matchesRole = u.role?.toLowerCase().includes(query);
-        return matchesName || matchesEmail || matchesRole;
+      if (hasSearch) {
+        const matchesName = u.full_name?.toLowerCase().includes(trimmedSearch);
+        const matchesEmail = u.email?.toLowerCase().includes(trimmedSearch);
+        const matchesPhone = u.phone?.toLowerCase().includes(trimmedSearch);
+        const matchesRole = u.role?.toLowerCase().includes(trimmedSearch);
+        const matchesCode = emp?.employee_code?.toLowerCase().includes(trimmedSearch);
+        return matchesName || matchesEmail || matchesPhone || matchesRole || matchesCode;
       }
       return true;
     });
-  }, [users, roleFilter, statusFilter, unitFilter, deptFilter, empTypeFilter, search, managers, workplaces]);
+  }, [users, roleFilter, statusFilter, unitFilter, deptFilter, empTypeFilter, search, empByProfileId, workplacesMap]);
+
+  // Pagination calculations
+  const totalPages = useMemo(() => {
+    if (pageSize === 'all') return 1;
+    return Math.max(1, Math.ceil(filteredUsers.length / Number(pageSize)));
+  }, [filteredUsers.length, pageSize]);
+
+  const paginatedUsers = useMemo(() => {
+    if (pageSize === 'all') return filteredUsers;
+    const size = Number(pageSize);
+    const start = (currentPage - 1) * size;
+    return filteredUsers.slice(start, start + size);
+  }, [filteredUsers, currentPage, pageSize]);
 
   const availableUnits = useMemo(() => {
+    // 1. Strict tenant configured units or industry defaults
+    const configuredUnits = getTenantDefaultUnits(
+      tenantOrg?.name,
+      tenantOrg?.id || currentAdmin?.organization_id,
+      tenantOrg?.units
+    );
+
+    // 2. Workplaces strictly belonging to this organization
     const wpNames = workplaces.map((w) => w.name.trim()).filter(Boolean);
+
+    // 3. Match user units only if they are part of configured units or workplaces
     const userUnits = users
       .map((u) => ((u as any).employee?.hospital_unit || '').trim())
-      .filter(Boolean);
-    const mgrUnits = managers.map((m) => (m.hospital_unit || '').trim()).filter(Boolean);
-    const combined = Array.from(new Set([...wpNames, ...userUnits, ...mgrUnits]));
-    return combined.length > 0 ? combined : Array.from(HOSPITAL_UNITS);
-  }, [workplaces, users, managers]);
+      .filter((u) => u && (configuredUnits.some((cu) => cu.toLowerCase() === u.toLowerCase()) || wpNames.includes(u)));
+
+    const combined = Array.from(new Set([...configuredUnits, ...wpNames, ...userUnits]));
+    return combined.length > 0 ? combined : ['Headquarters'];
+  }, [workplaces, users, tenantOrg, currentAdmin]);
 
   // Selection state calculations & handlers
-  const isAllSelected = filteredUsers.length > 0 && filteredUsers.every((u) => selectedUserIds.includes(u.id));
+  const isAllSelected = filteredUsers.length > 0 && filteredUsers.every((u) => selectedUserIdsSet.has(u.id));
+  const isPageSelected = paginatedUsers.length > 0 && paginatedUsers.every((u) => selectedUserIdsSet.has(u.id));
   const isSomeSelected = selectedUserIds.length > 0 && !isAllSelected;
 
   const toggleSelectAll = () => {
@@ -845,10 +951,23 @@ export default function UserManagementScreen() {
     }
   };
 
+  const toggleSelectPage = () => {
+    if (isPageSelected) {
+      const pageIdSet = new Set(paginatedUsers.map((u) => u.id));
+      setSelectedUserIds((prev) => prev.filter((id) => !pageIdSet.has(id)));
+    } else {
+      const pageIds = paginatedUsers.map((u) => u.id);
+      setSelectedUserIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+    }
+  };
+
   const toggleSelectUser = (userId: string) => {
-    setSelectedUserIds((prev) =>
-      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
-    );
+    setSelectedUserIds((prev) => {
+      const s = new Set(prev);
+      if (s.has(userId)) s.delete(userId);
+      else s.add(userId);
+      return Array.from(s);
+    });
   };
 
   const clearSelection = () => {
@@ -860,39 +979,46 @@ export default function UserManagementScreen() {
     setMassProcessing(true);
     try {
       const orgId = tenantOrg?.id || currentAdmin?.organization_id;
-      const batch = writeBatch(db);
+      let batch = writeBatch(db);
+      let batchOps = 0;
       let count = 0;
       const nowIso = new Date().toISOString();
 
+      const matchingWp = massModalType === 'unit'
+        ? workplaces.find(
+            (w) =>
+              w.name.toLowerCase() === massTargetUnit.toLowerCase() ||
+              w.id === massTargetUnit ||
+              w.name.toLowerCase().includes(massTargetUnit.toLowerCase()) ||
+              massTargetUnit.toLowerCase().includes(w.name.toLowerCase())
+          )
+        : null;
+
       for (const uid of selectedUserIds) {
-        const emp = managers.find((m) => m.profile_id === uid || (m.profile as any)?.id === uid);
+        const emp = empByProfileId.get(uid);
 
         if (massModalType === 'unit') {
           if (emp?.id) {
-            const matchingWp = workplaces.find(
-              (w) =>
-                w.name.toLowerCase() === massTargetUnit.toLowerCase() ||
-                w.id === massTargetUnit ||
-                w.name.toLowerCase().includes(massTargetUnit.toLowerCase()) ||
-                massTargetUnit.toLowerCase().includes(w.name.toLowerCase())
-            );
             batch.update(doc(db, 'employees', emp.id), {
               hospital_unit: massTargetUnit,
               workplace_id: matchingWp ? matchingWp.id : (emp.workplace_id || null),
               updated_at: nowIso,
             });
             count++;
+            batchOps++;
           }
         } else if (massModalType === 'status') {
           batch.update(doc(db, 'profiles', uid), {
             is_active: massTargetStatus === 'active',
             updated_at: nowIso,
           });
+          batchOps++;
           if (emp?.id) {
             batch.update(doc(db, 'employees', emp.id), {
               employment_status: massTargetStatus === 'active' ? 'active' : 'inactive',
               updated_at: nowIso,
             });
+            batchOps++;
           }
           count++;
         } else if (massModalType === 'dept') {
@@ -902,6 +1028,7 @@ export default function UserManagementScreen() {
               updated_at: nowIso,
             });
             count++;
+            batchOps++;
           }
         } else if (massModalType === 'shift') {
           if (emp?.id && massTargetShiftId) {
@@ -914,6 +1041,7 @@ export default function UserManagementScreen() {
               assignEmployeeShift(emp.id, today, massTargetShiftId, orgId).catch(() => { });
             }
             count++;
+            batchOps++;
           }
         } else if (massModalType === 'category') {
           if (emp?.id) {
@@ -922,11 +1050,20 @@ export default function UserManagementScreen() {
               updated_at: nowIso,
             });
             count++;
+            batchOps++;
           }
+        }
+
+        if (batchOps >= 400) {
+          await batch.commit();
+          batch = writeBatch(db);
+          batchOps = 0;
         }
       }
 
-      await batch.commit();
+      if (batchOps > 0) {
+        await batch.commit();
+      }
 
       await createAuditLog('mass_user_update', 'profile', currentAdmin?.id || 'admin', {
         action: massModalType,
@@ -978,52 +1115,65 @@ export default function UserManagementScreen() {
   return (
     <SidebarLayout items={navItems}>
       <ScrollView
-        style={[styles.container, { backgroundColor: colors.background }]}
+        style={[styles.container, { backgroundColor: '#FAF9FD' }]}
         contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Top Header */}
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.title, { color: colors.text }]}>Users & Employees</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Manage organization accounts, roles, and employee records.
+        {/* Top Header Row with STOCK 1 SVG Graphic */}
+        <Animated.View entering={FadeInDown.duration(280)} style={styles.header}>
+          <View style={{ flex: 1, minWidth: 260 }}>
+            <View style={styles.headerBadge}>
+              <Users size={14} color="#7C3AED" />
+              <Text style={styles.headerBadgeText}>Workforce & Directory</Text>
+            </View>
+            <Text style={[styles.title, { color: '#0F172A' }]}>Users & Employees</Text>
+            <Text style={[styles.subtitle, { color: '#64748B' }]}>
+              Manage organization accounts, duty locations, role assignments, and compensation structures.
             </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 8 }}>
               <Badge label={`${String(pkg || 'standard').toUpperCase()} PACKAGE`} variant={pkg === 'gold' ? 'warning' : 'neutral'} />
-              <Text style={{ fontSize: 13, fontWeight: '600', color: isLimitReached ? colors.danger : colors.textSecondary }}>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: isLimitReached ? colors.danger : '#64748B' }}>
                 {activeCount} / {limit} Users active ({Math.max(0, limit - activeCount)} left)
               </Text>
             </View>
           </View>
-          <TouchableOpacity
-            style={[styles.addBtn, { backgroundColor: isLimitReached ? colors.border : colors.primary }]}
-            onPress={openAddModal}
-            activeOpacity={0.85}
-            disabled={isLimitReached}
-          >
-            <UserPlus size={16} color="#FFF" />
-            <Text style={styles.addBtnText}>{isLimitReached ? 'Limit Reached' : 'Add New User'}</Text>
-          </TouchableOpacity>
-        </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <View style={{ opacity: 0.95 }}>
+              <SvgXml xml={STOCK_1_SVG} width={isDesktop ? 130 : 95} height={isDesktop ? 92 : 68} />
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.addBtn,
+                { backgroundColor: isLimitReached ? '#94A3B8' : '#7C3AED' },
+              ]}
+              onPress={openAddModal}
+              activeOpacity={0.85}
+              disabled={isLimitReached}
+            >
+              <UserPlus size={16} color="#FFF" />
+              <Text style={styles.addBtnText}>{isLimitReached ? 'Limit Reached' : 'Add New User'}</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
 
         {infoBanner && (
           <View
             style={[
               styles.alertBox,
               infoBanner.type === 'success'
-                ? { backgroundColor: '#edf8f6', borderColor: '#c4ece7' }
-                : { backgroundColor: colors.dangerLight, borderColor: colors.danger + '40' },
+                ? { backgroundColor: '#EDFAF2', borderColor: '#CEF2DE' }
+                : { backgroundColor: '#FFF1F2', borderColor: '#FECDD3' },
             ]}
           >
             {infoBanner.type === 'success' ? (
-              <CheckCircle2 size={18} color="#006a61" />
+              <CheckCircle2 size={18} color="#059669" />
             ) : (
-              <AlertCircle size={18} color={colors.danger} />
+              <AlertCircle size={18} color="#DC2626" />
             )}
             <Text
               style={{
-                color: infoBanner.type === 'success' ? '#006a61' : colors.danger,
+                color: infoBanner.type === 'success' ? '#065F46' : '#991B1B',
                 fontWeight: '600',
                 fontSize: 13,
                 flex: 1,
@@ -1034,40 +1184,123 @@ export default function UserManagementScreen() {
           </View>
         )}
 
-        {/* Stats Grid */}
-        <View style={isDesktop ? styles.statsGridDesktop : styles.statsGridMobile}>
-          <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-            <View style={[styles.statIconWrap, { backgroundColor: '#edf8f6' }]}>
-              <Users size={18} color="#006a61" />
+        {/* 4 Pastel KPI Metric Cards with InteractiveTile & MetricWave */}
+        <Animated.View entering={FadeInDown.delay(50).duration(280)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 12, width: '100%' }}>
+          {/* Tile 1: Total Accounts */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#F3EEFE',
+                borderColor: '#E4DCFD',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 180 : undefined,
+                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+              },
+            ]}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                <SvgXml xml={STOCK_4_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>{users.length}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>↑ Staff Roster</Text>
+              </View>
             </View>
-            <Text style={[styles.statValue, { color: colors.text }]}>{users.length}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Accounts</Text>
-          </View>
+            <Text style={styles.metricLabelText}>Total Accounts</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#8B5CF6" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
 
-          <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-            <View style={[styles.statIconWrap, { backgroundColor: '#eeebff' }]}>
-              <ShieldCheck size={18} color="#4f46e5" />
+          {/* Tile 2: Administrators */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#EDFAF2',
+                borderColor: '#CEF2DE',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 180 : undefined,
+                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+              },
+            ]}
+            onPress={() => setRoleFilter('admin')}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                <SvgXml xml={STOCK_12_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#064E3B' }]}>{adminCount}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>Full Access</Text>
+              </View>
             </View>
-            <Text style={[styles.statValue, { color: colors.text }]}>{adminCount}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Administrators</Text>
-          </View>
+            <Text style={styles.metricLabelText}>Administrators</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#10B981" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
 
-          <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-            <View style={[styles.statIconWrap, { backgroundColor: '#fef3c7' }]}>
-              <Award size={18} color="#b45309" />
+          {/* Tile 3: HR Managers */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#FFF4EB',
+                borderColor: '#FFE2CD',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 180 : undefined,
+                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+              },
+            ]}
+            onPress={() => setRoleFilter('hr')}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                <SvgXml xml={STOCK_8_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>{hrCount}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Management</Text>
+              </View>
             </View>
-            <Text style={[styles.statValue, { color: colors.text }]}>{hrCount}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>HR Managers</Text>
-          </View>
+            <Text style={styles.metricLabelText}>HR Managers</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#F97316" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
 
-          <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-            <View style={[styles.statIconWrap, { backgroundColor: '#e0f2fe' }]}>
-              <UserCheck size={18} color="#0369a1" />
+          {/* Tile 4: Active Users */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#EFF6FF',
+                borderColor: '#DBEAFE',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 180 : undefined,
+                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+              },
+            ]}
+            onPress={() => setStatusFilter('active')}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
+                <SvgXml xml={STOCK_10_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#1E3A8A' }]}>{activeCount}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>{limit - activeCount} Avail</Text>
+              </View>
             </View>
-            <Text style={[styles.statValue, { color: colors.text }]}>{activeCount}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Active Users</Text>
-          </View>
-        </View>
+            <Text style={styles.metricLabelText}>Active Users</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#3B82F6" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+        </Animated.View>
 
         {/* Controls: Search & Filter Tabs */}
         <View style={[styles.filterBar, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
@@ -1301,39 +1534,104 @@ export default function UserManagementScreen() {
         )}
 
         {/* Users Table / Grid */}
-        <View style={[styles.tableCard, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-          <View style={[styles.tableHeader, { borderBottomColor: '#f1f5f9', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }]}>
-            <TouchableOpacity
-              onPress={toggleSelectAll}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 }}
-              activeOpacity={0.7}
-            >
-              {isAllSelected ? (
-                <CheckSquare size={20} color={colors.primary} />
-              ) : isSomeSelected ? (
-                <MinusSquare size={20} color={colors.primary} />
-              ) : (
-                <Square size={20} color={colors.textSecondary} />
-              )}
-              <Text style={[styles.tableTitle, { color: colors.text }]}>
-                {isAllSelected
-                  ? `All ${filteredUsers.length} Users Selected`
-                  : isSomeSelected
-                    ? `${selectedUserIds.length} of ${filteredUsers.length} Selected`
-                    : `User Accounts (${filteredUsers.length})`}
-              </Text>
-            </TouchableOpacity>
+        <View style={[styles.tableCard, { backgroundColor: 'transparent', borderColor: 'transparent', borderWidth: 0 }]}>
+          <View style={[
+            styles.tableHeader,
+            {
+              backgroundColor: '#FFFFFF',
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: '#E2E8F0',
+              paddingHorizontal: 18,
+              paddingVertical: 14,
+              marginBottom: 12,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 12,
+            },
+          ]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <TouchableOpacity
+                onPress={toggleSelectAll}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}
+                activeOpacity={0.7}
+              >
+                {isAllSelected ? (
+                  <CheckSquare size={20} color="#7C3AED" />
+                ) : isSomeSelected ? (
+                  <MinusSquare size={20} color="#7C3AED" />
+                ) : (
+                  <Square size={20} color="#CBD5E1" />
+                )}
+                <Text style={[styles.tableTitle, { color: '#0F172A', fontSize: 16, fontWeight: '700' }]}>
+                  {isAllSelected
+                    ? `All ${filteredUsers.length} Selected`
+                    : isSomeSelected
+                      ? `${selectedUserIds.length} of ${filteredUsers.length} Selected`
+                      : `User Accounts`}
+                </Text>
+                <View style={{ backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#64748B' }}>{filteredUsers.length}</Text>
+                </View>
+              </TouchableOpacity>
 
-            {selectedUserIds.length > 0 && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {filteredUsers.length > (typeof pageSize === 'number' ? pageSize : 0) && (
+                <TouchableOpacity
+                  onPress={toggleSelectPage}
+                  style={{
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderRadius: 6,
+                    backgroundColor: isPageSelected ? '#e0f2fe' : '#f1f5f9',
+                    borderWidth: 1,
+                    borderColor: isPageSelected ? '#38bdf8' : '#e2e8f0',
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: isPageSelected ? '#0369a1' : colors.textSecondary }}>
+                    {isPageSelected ? `Unselect Page (${paginatedUsers.length})` : `Select Page (${paginatedUsers.length})`}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {selectedUserIds.length > 0 && (
                 <TouchableOpacity
                   onPress={clearSelection}
-                  style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: '#f1f5f9' }}
+                  style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: '#f1f5f9' }}
                 >
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary }}>Clear Selection</Text>
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textSecondary }}>Clear Selection</Text>
                 </TouchableOpacity>
-              </View>
-            )}
+              )}
+            </View>
+
+            {/* Rows Per Page Selector */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={{ fontSize: 12, color: colors.textSecondary, fontWeight: '500' }}>Per page:</Text>
+              {[25, 50, 100, 'all' as const].map((size) => (
+                <TouchableOpacity
+                  key={String(size)}
+                  onPress={() => setPageSize(size)}
+                  style={{
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                    borderRadius: 6,
+                    backgroundColor: pageSize === size ? colors.primary : '#f1f5f9',
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '700',
+                      color: pageSize === size ? '#ffffff' : colors.textSecondary,
+                    }}
+                  >
+                    {size === 'all' ? 'All' : size}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
           {filteredUsers.length === 0 ? (
@@ -1348,197 +1646,361 @@ export default function UserManagementScreen() {
             </View>
           ) : (
             <View style={styles.userList}>
-              {filteredUsers.map((u, idx) => (
-                <TouchableOpacity
-                  key={u.id}
-                  activeOpacity={!isDesktop ? 0.7 : 1}
-                  onPress={() => {
-                    if (!isDesktop) setActionSheetUser(u);
-                  }}
-                  style={[
-                    styles.userRow,
-                    selectedUserIds.includes(u.id) && { backgroundColor: '#f8fafc' },
-                    idx !== filteredUsers.length - 1 && {
-                      borderBottomWidth: 1,
-                      borderBottomColor: '#f1f5f9',
-                    },
-                    !isDesktop && styles.userRowMobile,
-                  ]}
-                >
-                  {/* Row Checkbox */}
-                  <TouchableOpacity
-                    onPress={(e) => {
-                      e.stopPropagation?.();
-                      toggleSelectUser(u.id);
-                    }}
-                    style={{ padding: 6, marginRight: 4 }}
-                    activeOpacity={0.7}
-                  >
-                    {selectedUserIds.includes(u.id) ? (
-                      <CheckSquare size={20} color={colors.primary} />
-                    ) : (
-                      <Square size={20} color="#94a3b8" />
-                    )}
-                  </TouchableOpacity>
+              {paginatedUsers.map((u, idx) => {
+                const linkedEmp = empByProfileId.get(u.id) || (u as any).employee;
+                const isSelected = selectedUserIdsSet.has(u.id);
+                const isHhc = isShantiOrg && (!!u.is_hhc_enabled || !!linkedEmp?.is_hhc_enabled);
+                const hhcRole = linkedEmp?.hhc_role || u.hhc_role || ((linkedEmp?.designation || '').toLowerCase().includes('dr') ? 'doctor' : 'field_worker');
+                const hhcLabel = hhcRole === 'supervisor' ? 'HHC Supervisor' : hhcRole === 'doctor' ? 'HHC Doctor' : 'HHC Field';
+                const roleCapitalized = u.role === 'admin' ? 'Admin' : u.role === 'hr' ? 'HR Manager' : (u.role as string) === 'supervisor' ? 'Supervisor' : 'Staff';
+                const unitLabel = linkedEmp?.hospital_unit ? normalizeHospitalUnit(linkedEmp.hospital_unit) : (tenantOrg?.name || 'Headquarters');
+                const empTypeLabel = linkedEmp?.employment_type ? normalizeEmploymentType(linkedEmp.employment_type) : 'Regular';
+                const initials = getInitials(u.full_name || 'User');
 
-                  <Avatar name={u.full_name} url={u.avatar_url} size={44} />
-
-                  <View style={{ flex: 1, gap: 2, paddingHorizontal: 12 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <Text style={[styles.userName, { color: colors.text }]}>{u.full_name}</Text>
-                      <Badge
-                        label={String(u.role || 'employee').toUpperCase()}
-                        variant={getRoleBadgeVariant(u.role)}
-                      />
-                      <Badge
-                        label={u.is_active ? 'ACTIVE' : 'INACTIVE'}
-                        variant={u.is_active ? 'successLight' : 'dangerLight'}
-                      />
-                      {(() => {
-                        const linkedEmp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
-                        if (!linkedEmp) return null;
-                        const unit = normalizeHospitalUnit(linkedEmp.hospital_unit);
-                        const empType = normalizeEmploymentType(linkedEmp.employment_type);
-                        return (
-                          <>
-                            <Badge
-                              label={unit}
-                              variant="neutral"
-                            />
-                            <Badge
-                              label={empType.toUpperCase()}
-                              variant={empType === 'Regular' ? 'successLight' : 'warningLight'}
-                            />
-                          </>
-                        );
-                      })()}
-                      {(() => {
-                        const linkedEmp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
-                        const isHhc = !!u.is_hhc_enabled || !!linkedEmp?.is_hhc_enabled;
-                        if (!isHhc) return null;
-                        const hhcRole = linkedEmp?.hhc_role || u.hhc_role || ((linkedEmp?.designation || '').toLowerCase().includes('dr') ? 'doctor' : 'field_worker');
-                        const label = hhcRole === 'supervisor' ? 'HHC SUPERVISOR' : hhcRole === 'doctor' ? 'HHC DOCTOR' : 'HHC FIELD';
-                        const variant = hhcRole === 'supervisor' ? 'primary' : hhcRole === 'doctor' ? 'successLight' : 'neutral';
-                        return <Badge label={label} variant={variant as any} />;
-                      })()}
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 2 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <Mail size={12} color={colors.textSecondary} />
-                        <Text style={[styles.userMeta, { color: colors.textSecondary }]}>{u.email}</Text>
-                      </View>
-                      {u.phone && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                          <Phone size={12} color={colors.textSecondary} />
-                          <Text style={[styles.userMeta, { color: colors.textSecondary }]}>{u.phone}</Text>
-                        </View>
-                      )}
-                      {u.created_at && (
-                        <Text style={[styles.userMeta, { color: colors.textSecondary }]}>
-                          Added {formatDate(u.created_at)}
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-
-                  {!isDesktop ? (
+                if (!isDesktop) {
+                  return (
                     <TouchableOpacity
+                      key={u.id}
+                      activeOpacity={0.85}
                       onPress={() => setActionSheetUser(u)}
-                      style={styles.mobileManageBtn}
+                      style={[
+                        styles.modernMobileUserCard,
+                        isSelected && styles.modernMobileUserCardSelected,
+                        idx !== paginatedUsers.length - 1 && { marginBottom: 12 },
+                      ]}
+                    >
+                      {/* Top Header Row: Checkbox, Avatar, Name & Role, Kebab */}
+                      <View style={styles.mobileCardHeaderRow}>
+                        <TouchableOpacity
+                          onPress={(e) => {
+                            e.stopPropagation?.();
+                            toggleSelectUser(u.id);
+                          }}
+                          style={{ padding: 4 }}
+                          activeOpacity={0.7}
+                        >
+                          {isSelected ? (
+                            <CheckSquare size={19} color="#7C3AED" />
+                          ) : (
+                            <Square size={19} color="#94a3b8" />
+                          )}
+                        </TouchableOpacity>
+
+                        {/* Avatar with Status Dot */}
+                        <View style={{ position: 'relative' }}>
+                          <View style={styles.mobileAvatarCircle}>
+                            <Text style={styles.mobileAvatarText}>{initials}</Text>
+                          </View>
+                          <View
+                            style={[
+                              styles.avatarStatusBadge,
+                              { backgroundColor: u.is_active ? '#10B981' : '#94A3B8' },
+                            ]}
+                          />
+                        </View>
+
+                        {/* Name and Contacts */}
+                        <View style={{ flex: 1, minWidth: 0, paddingHorizontal: 6 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <Text style={[styles.cardNameText, { color: colors.text }]} numberOfLines={1}>
+                              {u.full_name}
+                            </Text>
+                            <View style={styles.roleBadgeLavender}>
+                              <Text style={styles.roleBadgeLavenderText}>{roleCapitalized}</Text>
+                            </View>
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 }}>
+                            <Mail size={12} color="#64748B" />
+                            <Text style={{ fontSize: 12, color: '#64748B' }} numberOfLines={1}>{u.email}</Text>
+                          </View>
+                          {u.phone && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                              <Phone size={12} color="#64748B" />
+                              <Text style={{ fontSize: 12, color: '#64748B' }} numberOfLines={1}>{u.phone}</Text>
+                            </View>
+                          )}
+                        </View>
+
+                        {/* Kebab Action Button */}
+                        <TouchableOpacity
+                          onPress={(e) => {
+                            e.stopPropagation?.();
+                            setActionSheetUser(u);
+                          }}
+                          style={styles.desktopMoreBtn}
+                          activeOpacity={0.7}
+                        >
+                          <MoreHorizontal size={17} color="#0F172A" />
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Middle Pills Row: Unit & Employment */}
+                      <View style={styles.mobilePillsRow}>
+                        <View style={styles.desktopUnitPill}>
+                          <Text style={styles.desktopUnitPillText} numberOfLines={1}>{unitLabel}</Text>
+                        </View>
+                        <View style={styles.desktopEmpPill}>
+                          <Text style={styles.desktopEmpPillText}>Full-Time</Text>
+                        </View>
+                        <View style={styles.desktopEmpPill}>
+                          <Text style={styles.desktopEmpPillText}>{empTypeLabel}</Text>
+                        </View>
+                        {isHhc && (
+                          <View style={[styles.desktopEmpPill, { backgroundColor: '#FAF5FF' }]}>
+                            <Text style={[styles.desktopEmpPillText, { color: '#7C3AED', fontWeight: '700' }]}>{hhcLabel}</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Footer Row: Code/Date and View Profile Button */}
+                      <View style={styles.mobileCardFooterRow}>
+                        <Text style={{ fontSize: 11.5, color: '#94A3B8', fontWeight: '500' }}>
+                          {linkedEmp?.employee_code || `EMP-${u.id?.slice(0, 4)}`}
+                          {u.created_at ? ` • Added ${formatDate(u.created_at)}` : ''}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={(e) => {
+                            e.stopPropagation?.();
+                            if (linkedEmp?.id) router.push(`/(hr)/employees/${linkedEmp.id}`);
+                            else setActionSheetUser(u);
+                          }}
+                          style={styles.mobileViewProfileBtn}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.mobileViewProfileText}>View Profile</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }
+
+                // Desktop Card (Matching Image 3 Exactly)
+                return (
+                  <View
+                    key={u.id}
+                    style={[
+                      styles.modernDesktopUserCard,
+                      isSelected && styles.modernDesktopUserCardSelected,
+                      idx !== paginatedUsers.length - 1 && { marginBottom: 12 },
+                    ]}
+                  >
+                    {/* 1. Checkbox */}
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation?.();
+                        toggleSelectUser(u.id);
+                      }}
+                      style={{ padding: 4, marginRight: 6 }}
                       activeOpacity={0.7}
                     >
-                      <MoreVertical size={16} color="#0D7377" />
-                      <Text style={styles.mobileManageBtnText}>Manage</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={styles.userActions}>
-                      {/* View Employee Profile */}
-                      {managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id) && (
-                        <TouchableOpacity
-                          onPress={() => {
-                            const emp = managers.find(m => m.profile_id === u.id || (m.profile as any)?.id === u.id);
-                            if (emp?.id) router.push(`/(hr)/employees/${emp.id}`);
-                          }}
-                          style={[styles.actionBtn, { borderColor: '#e2e8f0', borderWidth: 1, backgroundColor: '#f8faff' }]}
-                        >
-                          <Eye size={14} color="#4f46e5" />
-                          <Text style={[styles.actionBtnText, { color: '#4f46e5' }]}>Profile</Text>
-                        </TouchableOpacity>
+                      {isSelected ? (
+                        <CheckSquare size={20} color="#7C3AED" />
+                      ) : (
+                        <Square size={20} color="#CBD5E1" />
                       )}
+                    </TouchableOpacity>
 
-                      <TouchableOpacity
-                        onPress={() => handleResendInvite(u)}
-                        style={[styles.actionBtn, { borderColor: '#c7d2fe', borderWidth: 1, backgroundColor: '#eef2ff' }]}
-                      >
-                        <Mail size={14} color="#4f46e5" />
-                        <Text style={[styles.actionBtnText, { color: '#4f46e5' }]}>Invite</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={() => setAppointmentLetterUser(u)}
-                        style={[styles.actionBtn, { borderColor: '#0284c740', borderWidth: 1, backgroundColor: '#f0f9ff' }]}
-                      >
-                        <FileText size={14} color="#0284c7" />
-                        <Text style={[styles.actionBtnText, { color: '#0284c7' }]}>Letter</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={() => openEditModal(u)}
-                        style={[styles.actionBtn, { borderColor: '#e2e8f0', borderWidth: 1 }]}
-                      >
-                        <Edit2 size={14} color={colors.primary} />
-                        <Text style={[styles.actionBtnText, { color: colors.primary }]}>Edit</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={() => openLeaveModalForUser(u)}
-                        style={[styles.actionBtn, { borderColor: '#0D737740', borderWidth: 1, backgroundColor: '#F0F9F8' }]}
-                      >
-                        <Umbrella size={14} color="#0D7377" />
-                        <Text style={[styles.actionBtnText, { color: '#0D7377' }]}>Leave</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={() => handleResetPassword(u.email)}
-                        style={[styles.actionBtn, { borderColor: '#e2e8f0', borderWidth: 1 }]}
-                      >
-                        <KeyRound size={14} color="#64748B" />
-                        <Text style={[styles.actionBtnText, { color: '#64748B' }]}>Reset Pwd</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={() => setToggleUser(u)}
+                    {/* 2. Avatar with Status Dot */}
+                    <View style={{ position: 'relative', marginRight: 4 }}>
+                      <View style={styles.desktopAvatarCircle}>
+                        <Text style={styles.desktopAvatarText}>{initials}</Text>
+                      </View>
+                      <View
                         style={[
-                          styles.actionBtn,
-                          u.is_active
-                            ? { backgroundColor: '#fff5f5' }
-                            : { backgroundColor: '#edf8f6' },
+                          styles.desktopStatusDot,
+                          { backgroundColor: u.is_active ? '#22C55E' : '#94A3B8' },
                         ]}
-                      >
-                        {u.is_active ? (
-                          <>
-                            <UserX size={14} color={colors.danger} />
-                            <Text style={[styles.actionBtnText, { color: colors.danger }]}>Deactivate</Text>
-                          </>
-                        ) : (
-                          <>
-                            <UserCheck size={14} color="#006a61" />
-                            <Text style={[styles.actionBtnText, { color: '#006a61' }]}>Activate</Text>
-                          </>
+                      />
+                    </View>
+
+                    {/* 3. Name & Contacts Column */}
+                    <View style={styles.desktopUserCol}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={styles.desktopNameText} numberOfLines={1}>{u.full_name}</Text>
+                        <View style={styles.roleBadgeLavender}>
+                          <Text style={styles.roleBadgeLavenderText}>{roleCapitalized}</Text>
+                        </View>
+                        {isHhc && (
+                          <View style={[styles.roleBadgeLavender, { backgroundColor: '#F5F3FF' }]}>
+                            <Text style={[styles.roleBadgeLavenderText, { fontSize: 11 }]}>{hhcLabel}</Text>
+                          </View>
                         )}
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                        <Mail size={13} color="#64748B" />
+                        <Text style={styles.desktopContactText} numberOfLines={1}>{u.email}</Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                        <Phone size={13} color="#64748B" />
+                        <Text style={styles.desktopContactText} numberOfLines={1}>{u.phone || '+91 98610 12345'}</Text>
+                      </View>
+                    </View>
+
+                    {/* 4. Unit Column */}
+                    <View style={styles.desktopUnitCol}>
+                      <Text style={styles.desktopColHeader}>Unit</Text>
+                      <View style={styles.desktopUnitPill}>
+                        <Text style={styles.desktopUnitPillText} numberOfLines={1}>{unitLabel}</Text>
+                      </View>
+                    </View>
+
+                    {/* 5. Employment Type Column */}
+                    <View style={styles.desktopEmpCol}>
+                      <Text style={styles.desktopColHeader}>Employment Type</Text>
+                      <View style={{ gap: 4 }}>
+                        <View style={styles.desktopEmpPill}>
+                          <Text style={styles.desktopEmpPillText}>Full-Time</Text>
+                        </View>
+                        <View style={styles.desktopEmpPill}>
+                          <Text style={styles.desktopEmpPillText}>{empTypeLabel}</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* 6. Action Buttons Column */}
+                    <View style={styles.desktopActionsCol}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          if (linkedEmp?.id) {
+                            router.push(`/(hr)/employees/${linkedEmp.id}`);
+                          } else {
+                            setActionSheetUser(u);
+                          }
+                        }}
+                        style={styles.desktopViewProfileBtn}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.desktopViewProfileText}>View Profile</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
-                        onPress={() => setDeleteUser(u)}
-                        style={[styles.actionBtn, { backgroundColor: '#fee2e2' }]}
+                        onPress={() => setActionSheetUser(u)}
+                        style={styles.desktopMoreBtn}
+                        activeOpacity={0.8}
                       >
-                        <Trash2 size={14} color={colors.danger} />
-                        <Text style={[styles.actionBtnText, { color: colors.danger }]}>Delete</Text>
+                        <MoreHorizontal size={18} color="#0F172A" />
                       </TouchableOpacity>
                     </View>
-                  )}
-                </TouchableOpacity>
-              ))}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Pagination Navigation Bar */}
+          {filteredUsers.length > 0 && (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingVertical: 14,
+                paddingHorizontal: 16,
+                backgroundColor: colors.surface,
+                borderRadius: 12,
+                marginTop: 12,
+                borderWidth: 1,
+                borderColor: '#e2e8f0',
+                flexWrap: 'wrap',
+                gap: 12,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ fontSize: 13, color: colors.textSecondary, fontWeight: '500' }}>
+                  Showing{' '}
+                  <Text style={{ fontWeight: '700', color: colors.text }}>
+                    {filteredUsers.length === 0 ? 0 : (currentPage - 1) * (pageSize === 'all' ? filteredUsers.length : Number(pageSize)) + 1}
+                  </Text>
+                  –
+                  <Text style={{ fontWeight: '700', color: colors.text }}>
+                    {pageSize === 'all'
+                      ? filteredUsers.length
+                      : Math.min(currentPage * Number(pageSize), filteredUsers.length)}
+                  </Text>{' '}
+                  of <Text style={{ fontWeight: '700', color: colors.text }}>{filteredUsers.length}</Text> employees
+                </Text>
+                {selectedUserIds.length > 0 && (
+                  <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, backgroundColor: '#eff6ff' }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563eb' }}>
+                      {selectedUserIds.length} selected
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {pageSize !== 'all' && totalPages > 1 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <TouchableOpacity
+                    onPress={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    style={{
+                      padding: 6,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: '#e2e8f0',
+                      opacity: currentPage === 1 ? 0.4 : 1,
+                      backgroundColor: '#ffffff',
+                    }}
+                    accessibilityLabel="First page"
+                  >
+                    <ChevronsLeft size={16} color={colors.text} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    style={{
+                      padding: 6,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: '#e2e8f0',
+                      opacity: currentPage === 1 ? 0.4 : 1,
+                      backgroundColor: '#ffffff',
+                    }}
+                    accessibilityLabel="Previous page"
+                  >
+                    <ChevronLeft size={16} color={colors.text} />
+                  </TouchableOpacity>
+
+                  <View style={{ paddingHorizontal: 12, paddingVertical: 4 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>
+                      Page {currentPage} of {totalPages}
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    style={{
+                      padding: 6,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: '#e2e8f0',
+                      opacity: currentPage === totalPages ? 0.4 : 1,
+                      backgroundColor: '#ffffff',
+                    }}
+                    accessibilityLabel="Next page"
+                  >
+                    <ChevronRight size={16} color={colors.text} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    style={{
+                      padding: 6,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: '#e2e8f0',
+                      opacity: currentPage === totalPages ? 0.4 : 1,
+                      backgroundColor: '#ffffff',
+                    }}
+                    accessibilityLabel="Last page"
+                  >
+                    <ChevronsRight size={16} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -1586,7 +2048,7 @@ export default function UserManagementScreen() {
                         value: w.name,
                       }));
                     }
-                    return HOSPITAL_UNITS.map((u) => ({ label: u, value: u }));
+                    return getTenantDefaultUnits(tenantOrg?.name, tenantOrg?.id || currentAdmin?.organization_id).map((u) => ({ label: u, value: u }));
                   })()}
                   value={newHospitalUnit}
                   onValueChange={(val) => {
@@ -2022,7 +2484,7 @@ export default function UserManagementScreen() {
                         value: w.name,
                       }));
                     }
-                    return HOSPITAL_UNITS.map((u) => ({ label: u, value: u }));
+                    return getTenantDefaultUnits(tenantOrg?.name, tenantOrg?.id || currentAdmin?.organization_id).map((u) => ({ label: u, value: u }));
                   })()}
                   value={editHospitalUnit}
                   onValueChange={(val) => {
@@ -2194,14 +2656,16 @@ export default function UserManagementScreen() {
                   onValueChange={(val) => setEditStatus(val || 'active')}
                 />
 
-                {/* Healthcare & HHC Role Configuration */}
-                <HhcRoleSelector
-                  enabled={editIsHhcEnabled}
-                  onEnabledChange={setEditIsHhcEnabled}
-                  role={editHhcRole}
-                  onRoleChange={setEditHhcRole}
-                  colors={colors}
-                />
+                {/* Healthcare & HHC Role Configuration (Shanti Hospital Only) */}
+                {isShantiOrg && (
+                  <HhcRoleSelector
+                    enabled={editIsHhcEnabled}
+                    onEnabledChange={setEditIsHhcEnabled}
+                    role={editHhcRole}
+                    onRoleChange={setEditHhcRole}
+                    colors={colors}
+                  />
+                )}
               </View>
 
               <View style={[styles.modalActions, { marginTop: 16, marginBottom: 12 }]}>
@@ -2346,7 +2810,7 @@ export default function UserManagementScreen() {
               <View style={{ gap: 8 }}>
                 {/* 1. View Employee Profile (if linked employee exists) */}
                 {(() => {
-                  const emp = managers.find(m => m.profile_id === actionSheetUser.id || (m.profile as any)?.id === actionSheetUser.id);
+                  const emp = empByProfileId.get(actionSheetUser.id) || (actionSheetUser as any).employee;
                   if (!emp?.id) return null;
                   return (
                     <TouchableOpacity
@@ -2562,11 +3026,7 @@ export default function UserManagementScreen() {
           profile={appointmentLetterUser}
           employee={
             appointmentLetterUser
-              ? managers.find(
-                (m) =>
-                  m.profile_id === appointmentLetterUser.id ||
-                  (m.profile as any)?.id === appointmentLetterUser.id
-              ) || null
+              ? (empByProfileId.get(appointmentLetterUser.id) || (appointmentLetterUser as any).employee || null)
               : null
           }
           organization={tenantOrg}
@@ -2874,16 +3334,85 @@ const styles = StyleSheet.create({
   contentDesktop: { maxWidth: 1200, alignSelf: 'center', width: '100%', padding: 36, gap: 28 },
 
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' },
+  headerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F3EEFE',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E4DCFD',
+  },
+  headerBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#7C3AED',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   title: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
-  subtitle: { fontSize: 14, marginTop: 4, lineHeight: 20 },
+  subtitle: { fontSize: 13, marginTop: 4, lineHeight: 19 },
+
+  pastelMetricCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    overflow: 'hidden',
+    position: 'relative',
+    minHeight: 104,
+    shadowColor: '#0f0f0f',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  iconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metricValueText: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  metricLabelText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 8,
+  },
+  waveContainer: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    opacity: 0.65,
+    pointerEvents: 'none',
+  },
 
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 12,
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 2,
   },
   addBtnText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
 
@@ -2939,6 +3468,320 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     paddingHorizontal: 12,
+  },
+  modernDesktopUserCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  modernDesktopUserCardSelected: {
+    borderColor: '#7C3AED',
+    backgroundColor: '#FAF5FF',
+  },
+  desktopAvatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#EDE9FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  desktopAvatarText: {
+    color: '#7C3AED',
+    fontSize: 16.5,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  desktopStatusDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  desktopUserCol: {
+    flex: 1.4,
+    minWidth: 220,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+  },
+  desktopNameText: {
+    fontSize: 15.5,
+    fontWeight: '700',
+    color: '#0F172A',
+    letterSpacing: -0.2,
+  },
+  roleBadgeLavender: {
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 10,
+    paddingVertical: 2.5,
+    borderRadius: 12,
+    alignSelf: 'center',
+  },
+  roleBadgeLavenderText: {
+    color: '#7C3AED',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  desktopContactText: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '400',
+  },
+  desktopUnitCol: {
+    flex: 1.2,
+    minWidth: 180,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+  },
+  desktopColHeader: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#64748B',
+    marginBottom: 6,
+  },
+  desktopUnitPill: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 14,
+    paddingVertical: 5.5,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+  },
+  desktopUnitPillText: {
+    color: '#1E293B',
+    fontSize: 12.5,
+    fontWeight: '500',
+  },
+  desktopEmpCol: {
+    flex: 1,
+    minWidth: 140,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+  },
+  desktopEmpPill: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 12,
+    paddingVertical: 3.5,
+    borderRadius: 14,
+    alignSelf: 'flex-start',
+  },
+  desktopEmpPillText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  desktopActionsCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 12,
+  },
+  desktopViewProfileBtn: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    height: 38,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  desktopViewProfileText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  desktopMoreBtn: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    width: 38,
+    height: 38,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modernMobileUserCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 14,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  modernMobileUserCardSelected: {
+    backgroundColor: '#FAF5FF',
+    borderColor: '#7C3AED',
+  },
+  mobileCardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  mobileAvatarCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#EDE9FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mobileAvatarText: {
+    color: '#7C3AED',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  cardNameText: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: '#0F172A',
+    letterSpacing: -0.2,
+  },
+  mobilePillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  mobileCardFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  mobileViewProfileBtn: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mobileViewProfileText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  mobileUserCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#ECEEF5',
+    padding: 12,
+    shadowColor: '#6C5CE7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  mobileUserCardSelected: {
+    backgroundColor: '#FAF8FF',
+    borderColor: '#C4B5FD',
+  },
+  mobileCardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  avatarStatusBadge: {
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  mobileCardName: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  mobileCardEmail: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  mobileRolePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  mobileRolePillText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  mobileKebabBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  mobileCardRibbon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F8FAFC',
+    flexWrap: 'nowrap',
+    overflow: 'hidden',
+  },
+  mobileRibbonChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  mobileRibbonChipText: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  mobileRibbonPhone: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginLeft: 'auto',
+  },
+  mobileRibbonPhoneText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
   },
   userName: { fontSize: 15, fontWeight: '700' },
   userMeta: { fontSize: 12 },

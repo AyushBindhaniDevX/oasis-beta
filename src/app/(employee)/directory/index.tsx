@@ -1,7 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, useWindowDimensions, Linking, Modal, Platform, StatusBar, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  CraftButton,
+  CraftCard,
+  CraftHeader,
+  Typography,
+  T,
+  S,
+} from '@/components/ui/CraftKit';
 import { useTheme } from '@/hooks/use-theme';
+import { BorderRadius, NotionColors, BrandShadow, Shadows } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
 import { Avatar } from '@/components/ui/Avatar';
@@ -9,7 +18,7 @@ import { LoadingState } from '@/components/ui/States';
 import { Badge } from '@/components/ui/Badge';
 import { getDirectory, getDepartments } from '@/lib/services/employee';
 import type { Employee, Department } from '@/types';
-import { Mail, MessageSquare, Search, Users, Phone, Building, Briefcase, MapPin, Calendar, X } from 'lucide-react-native';
+import { Mail, MessageSquare, Search, Users, Phone, Building, Briefcase, MapPin, Calendar, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
 
@@ -34,6 +43,26 @@ export default function DirectoryScreen() {
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [selectedEmp, setSelectedEmp] = useState<Employee | null>(null);
+
+  // Pagination for smooth 700+ employee navigation
+  const [pageSize, setPageSize] = useState<number | 'all'>(30);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, deptFilter, pageSize]);
+
+  const totalPages = useMemo(() => {
+    if (pageSize === 'all') return 1;
+    return Math.max(1, Math.ceil(employees.length / Number(pageSize)));
+  }, [employees.length, pageSize]);
+
+  const paginatedEmployees = useMemo(() => {
+    if (pageSize === 'all') return employees;
+    const size = Number(pageSize);
+    const start = (currentPage - 1) * size;
+    return employees.slice(start, start + size);
+  }, [employees, currentPage, pageSize]);
 
   useEffect(() => {
     (async () => {
@@ -85,10 +114,10 @@ export default function DirectoryScreen() {
   if (loading) return <LoadingState />;
 
   return (
-    <View style={{ flex: 1, backgroundColor: isDesktop ? colors.background : '#004D47' }}>
-      {!isDesktop && <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />}
+    <View style={{ flex: 1, backgroundColor: isDesktop ? colors.background : NotionColors.brandNavy }}>
+      {!isDesktop && <StatusBar barStyle="light-content" {...({ translucent: true, backgroundColor: 'transparent' } as any)} />}
       <View style={{ flex: 1, backgroundColor: colors.background }}>
-        {!isDesktop && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: '#004D47' }} />}
+        {!isDesktop && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 350, backgroundColor: NotionColors.brandNavy }} />}
 
         <ScrollView
           style={[styles.container, { backgroundColor: colors.background }]}
@@ -97,54 +126,43 @@ export default function DirectoryScreen() {
           automaticallyAdjustContentInsets={false}
           showsVerticalScrollIndicator={false}
         >
-          {/* Header */}
-          {isDesktop ? (
-            <View style={styles.header}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.title, { color: colors.text }]}>Company Directory</Text>
-                <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-                  Find and connect with {employees.length} colleagues across {organization?.name || 'the organization'}.
-                </Text>
-              </View>
-            </View>
-          ) : (
-            <View style={[styles.mHeroGradient, { paddingTop: topPadding + 10 }]}>
-              <Text style={styles.mHeroTag}>PEOPLE & TEAMS</Text>
-              <Text style={styles.mHeroTitle}>Company Directory</Text>
-              <Text style={styles.mHeroSub}>{employees.length} colleagues in {organization?.name || 'Oasis'}</Text>
-            </View>
-          )}
+          {/* Constant Craft Header */}
+          <CraftHeader
+            title="Company Directory"
+            subtitle={`Find and connect with ${employees.length} colleagues across ${organization?.name || 'the organization'}.`}
+            style={{ marginBottom: 8 }}
+          />
 
       {/* Search + Filters */}
       <View style={[styles.controls, !isDesktop && { paddingHorizontal: 20, marginTop: 16 }]}>
-        <View style={[styles.searchBox, { backgroundColor: '#FFFFFF', borderColor: '#E2E8F0', borderRadius: 14 }]}>
-          <Search size={16} color="#94A3B8" />
+        <View style={[styles.searchBox, { backgroundColor: NotionColors.surface, borderColor: NotionColors.hairline, borderRadius: BorderRadius.md }]}>
+          <Search size={16} color={NotionColors.steel} />
           <TextInput
             placeholder="Search name, role, dept..."
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor={NotionColors.steel}
             value={searchInput}
             onChangeText={setSearchInput}
-            style={[styles.searchInput, { color: '#0F172A' }]}
+            style={[styles.searchInput, { color: NotionColors.ink }]}
           />
           {searching && (
-            <View style={[styles.searchDot, { backgroundColor: '#006a61' }]} />
+            <View style={[styles.searchDot, { backgroundColor: NotionColors.primary }]} />
           )}
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
           <TouchableOpacity
-            style={[styles.filterPill, !deptFilter ? { backgroundColor: '#006a61' } : { backgroundColor: '#F1F5F9' }]}
+            style={[styles.filterPill, !deptFilter ? { backgroundColor: NotionColors.inkDeep, borderColor: NotionColors.inkDeep } : { backgroundColor: 'transparent', borderColor: NotionColors.hairline }]}
             onPress={() => { setDeptFilter(null); runSearch(searchInput, null); }}
           >
-            <Text style={[styles.filterText, { color: !deptFilter ? '#FFF' : '#64748B' }]}>All</Text>
+            <Text style={[styles.filterText, { color: !deptFilter ? '#FFF' : NotionColors.steel }]}>All</Text>
           </TouchableOpacity>
           {departments.map(d => (
             <TouchableOpacity
               key={d.id}
-              style={[styles.filterPill, deptFilter === d.id ? { backgroundColor: '#006a61' } : { backgroundColor: '#F1F5F9' }]}
+              style={[styles.filterPill, deptFilter === d.id ? { backgroundColor: NotionColors.inkDeep, borderColor: NotionColors.inkDeep } : { backgroundColor: 'transparent', borderColor: NotionColors.hairline }]}
               onPress={() => { setDeptFilter(d.id); runSearch(searchInput, d.id); }}
             >
-              <Text style={[styles.filterText, { color: deptFilter === d.id ? '#FFF' : '#64748B' }]}>{d.name}</Text>
+              <Text style={[styles.filterText, { color: deptFilter === d.id ? '#FFF' : NotionColors.steel }]}>{d.name}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -162,19 +180,19 @@ export default function DirectoryScreen() {
       ) : (
         <View style={{ flex: 1, minHeight: 600, width: '100%' }}>
           <AnyFlashList
-            data={employees}
+            data={paginatedEmployees}
             numColumns={isDesktop ? 3 : 1}
             estimatedItemSize={220}
             contentContainerStyle={{ paddingBottom: 110 }}
             renderItem={({ item: emp }: any) => (
               <View style={{ flex: 1, padding: 8 }}>
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={() => setSelectedEmp(emp)}
+                <CraftCard
+                  variant="base"
                   style={[
                     styles.card,
-                    { backgroundColor: colors.surface, borderColor: colors.border, width: '100%', minWidth: 'auto' },
+                    { width: '100%', minWidth: 'auto' },
                   ]}
+                  onPress={() => setSelectedEmp(emp)}
                 >
                   <View style={styles.avatarContainer}>
                     <Avatar name={emp.profile?.full_name || emp.employee_code || ''} url={emp.profile?.avatar_url} size={72} />
@@ -188,10 +206,19 @@ export default function DirectoryScreen() {
                     <Text style={[styles.empRole, { color: colors.textSecondary }]} numberOfLines={1}>
                       {emp.designation || 'Employee'}
                     </Text>
-                    <View style={[styles.deptPill, { backgroundColor: colors.primary + '15' }]}>
-                      <Text style={[styles.deptText, { color: colors.primary }]} numberOfLines={1}>
-                        {emp.department?.name || 'General'}
-                      </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 }}>
+                      <View style={[styles.deptPill, { backgroundColor: colors.primary + '15' }]}>
+                        <Text style={[styles.deptText, { color: colors.primary }]} numberOfLines={1}>
+                          {emp.department?.name || (emp as any).department_id || 'General'}
+                        </Text>
+                      </View>
+                      {Boolean(emp.hospital_unit || emp.workplace?.name) && (
+                        <View style={[styles.deptPill, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', borderWidth: 0.5 }]}>
+                          <Text style={[styles.deptText, { color: '#1D4ED8' }]} numberOfLines={1}>
+                            {emp.hospital_unit || emp.workplace?.name}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                   </View>
 
@@ -202,25 +229,160 @@ export default function DirectoryScreen() {
                   )}
 
                   <View style={styles.actionsContainer}>
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.actionBtnOutline, { borderColor: colors.primary }]}
+                    <CraftButton
+                      title="Email"
+                      variant="secondary"
+                      size="sm"
+                      icon={<Mail size={14} color={T.ink} />}
                       onPress={() => handleEmail(emp.profile?.email)}
-                    >
-                      <Mail size={14} color={colors.primary} />
-                      <Text style={[styles.actionBtnText, { color: colors.primary }]}>Email</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.actionBtnSolid, { backgroundColor: colors.primary }]}
+                      style={{ flex: 1 }}
+                    />
+                    <CraftButton
+                      title="Chat"
+                      variant="primary"
+                      size="sm"
+                      icon={<MessageSquare size={14} color={T.card} />}
                       onPress={() => handleChat(emp)}
-                    >
-                      <MessageSquare size={14} color="#FFF" />
-                      <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Chat</Text>
-                    </TouchableOpacity>
+                      style={{ flex: 1 }}
+                    />
                   </View>
-                </TouchableOpacity>
+                </CraftCard>
               </View>
             )}
           />
+
+          {/* Pagination Navigation Bar */}
+          {employees.length > 0 && (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingVertical: 14,
+                paddingHorizontal: 16,
+                backgroundColor: colors.surface,
+                borderRadius: 12,
+                marginTop: 16,
+                borderWidth: 1,
+                borderColor: colors.border,
+                flexWrap: 'wrap',
+                gap: 12,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <Text style={{ fontSize: 13, color: colors.textSecondary, fontWeight: '500' }}>
+                  Showing{' '}
+                  <Text style={{ fontWeight: '700', color: colors.text }}>
+                    {employees.length === 0 ? 0 : (currentPage - 1) * (pageSize === 'all' ? employees.length : Number(pageSize)) + 1}
+                  </Text>
+                  –
+                  <Text style={{ fontWeight: '700', color: colors.text }}>
+                    {pageSize === 'all'
+                      ? employees.length
+                      : Math.min(currentPage * Number(pageSize), employees.length)}
+                  </Text>{' '}
+                  of <Text style={{ fontWeight: '700', color: colors.text }}>{employees.length}</Text> colleagues
+                </Text>
+
+                {/* Per Page Selector */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Text style={{ fontSize: 11, color: colors.textSecondary }}>Per page:</Text>
+                  {[30, 60, 120, 'all' as const].map((size) => (
+                    <TouchableOpacity
+                      key={String(size)}
+                      onPress={() => setPageSize(size)}
+                      style={{
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                        borderRadius: 6,
+                        backgroundColor: pageSize === size ? '#006a61' : '#f1f5f9',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          fontWeight: '700',
+                          color: pageSize === size ? '#ffffff' : colors.textSecondary,
+                        }}
+                      >
+                        {size === 'all' ? 'All' : size}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {pageSize !== 'all' && totalPages > 1 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <TouchableOpacity
+                    onPress={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    style={{
+                      padding: 6,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      opacity: currentPage === 1 ? 0.4 : 1,
+                      backgroundColor: colors.surface,
+                    }}
+                  >
+                    <ChevronsLeft size={16} color={colors.text} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    style={{
+                      padding: 6,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      opacity: currentPage === 1 ? 0.4 : 1,
+                      backgroundColor: colors.surface,
+                    }}
+                  >
+                    <ChevronLeft size={16} color={colors.text} />
+                  </TouchableOpacity>
+
+                  <View style={{ paddingHorizontal: 10, paddingVertical: 4 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>
+                      Page {currentPage} of {totalPages}
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    style={{
+                      padding: 6,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      opacity: currentPage === totalPages ? 0.4 : 1,
+                      backgroundColor: colors.surface,
+                    }}
+                  >
+                    <ChevronRight size={16} color={colors.text} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    style={{
+                      padding: 6,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      opacity: currentPage === totalPages ? 0.4 : 1,
+                      backgroundColor: colors.surface,
+                    }}
+                  >
+                    <ChevronsRight size={16} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
         </View>
       )}
 
@@ -267,6 +429,14 @@ export default function DirectoryScreen() {
                       <Phone size={16} color={colors.textSecondary} />
                       <Text style={{ color: colors.textSecondary, fontSize: 13, width: 90 }}>Phone:</Text>
                       <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', flex: 1 }}>{selectedEmp.profile.phone}</Text>
+                    </View>
+                  )}
+
+                  {Boolean(selectedEmp.hospital_unit || selectedEmp.workplace?.name) && (
+                    <View style={styles.detailRow}>
+                      <MapPin size={16} color={colors.textSecondary} />
+                      <Text style={{ color: colors.textSecondary, fontSize: 13, width: 90 }}>Unit:</Text>
+                      <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', flex: 1 }}>{selectedEmp.hospital_unit || selectedEmp.workplace?.name}</Text>
                     </View>
                   )}
 

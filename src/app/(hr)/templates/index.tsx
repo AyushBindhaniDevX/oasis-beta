@@ -114,7 +114,7 @@ export default function TemplatesScreen() {
     }
     return {
       id: selectedOrgId,
-      name: organization?.name || companyName || 'Shanti Memorial Hospital',
+      name: organization?.name || companyName || 'Oasis Workspace',
     };
   }, [availableOrgs, selectedOrgId, organization?.name, companyName]);
 

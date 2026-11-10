@@ -14,6 +14,7 @@ import { X, CalendarClock, AlertCircle, CheckCircle2, Trash2, History } from 'lu
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/use-theme';
 import { DatePicker } from '@/components/ui/DatePicker';
+import { TimePicker } from '@/components/ui/TimePicker';
 import { Badge } from '@/components/ui/Badge';
 import {
   getMyRegularizations,
@@ -259,30 +260,27 @@ export function RegularizationModal({
             })()}
 
             {/* Date */}
-            <DatePicker label="Date to Regularize" value={date} onChange={setDate} />
+            <DatePicker label="Date to Regularize" value={date} onChange={setDate} required />
 
             {/* Times */}
             <View style={styles.timeRow}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Corrected Clock In</Text>
-                <TextInput
-                  placeholder="09:30"
-                  placeholderTextColor={colors.textSecondary}
+                <TimePicker
+                  label="Corrected Clock In"
                   value={clockIn}
-                  onChangeText={setClockIn}
-                  keyboardType="numbers-and-punctuation"
-                  style={[styles.input, { borderColor: colors.border, color: colors.text }]}
+                  onChange={setClockIn}
+                  format="HH:mm"
+                  placeholder="09:30"
                 />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.label, { color: colors.textSecondary }]}>Corrected Clock Out</Text>
-                <TextInput
-                  placeholder="18:30"
-                  placeholderTextColor={colors.textSecondary}
+                <TimePicker
+                  label="Corrected Clock Out"
                   value={clockOut}
-                  onChangeText={setClockOut}
-                  keyboardType="numbers-and-punctuation"
-                  style={[styles.input, { borderColor: colors.border, color: colors.text }]}
+                  onChange={setClockOut}
+                  format="HH:mm"
+                  minTime={clockIn || undefined}
+                  placeholder="18:30"
                 />
               </View>
             </View>

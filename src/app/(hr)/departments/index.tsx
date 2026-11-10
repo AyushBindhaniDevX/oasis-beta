@@ -1,4 +1,3 @@
-import { HR_NAV, ADMIN_NAV } from '@/constants/navigation';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -12,32 +11,9 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { useTheme } from '@/hooks/use-theme';
-import { useAuth } from '@/hooks/useAuth';
-import { useTenant } from '@/context/TenantContext';
-import { Avatar } from '@/components/ui/Avatar';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Modal } from '@/components/ui/Modal';
-import { Select } from '@/components/ui/Select';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { LoadingState } from '@/components/ui/States';
-import { SidebarLayout } from '@/components/layout/Sidebar';
-import {
-  getDepartmentsWithStats,
-  createDepartment,
-  updateDepartment,
-  deleteDepartment,
-  getAllEmployees,
-  updateEmployee,
-  updateReportingManager,
-  getOrgHierarchy,
-  getWorkplaces,
-} from '@/lib/services/employee';
-import { updateUserRole, getOrgUsers } from '@/lib/services/organization';
-import { createAuditLog } from '@/lib/services/audit';
-import type { Department, Employee, Workplace, Profile } from '@/types';
+import Svg, { Path, SvgXml } from 'react-native-svg';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useRouter } from 'expo-router';
 import {
   Building2,
   Network,
@@ -59,22 +35,97 @@ import {
   MoveRight,
   Lock,
   X,
+  Award,
+  SlidersHorizontal,
+  FolderTree,
+  UserCheck,
+  UserX,
+  ArrowRight,
+  MoreHorizontal,
 } from 'lucide-react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 
-type StudioMode = 'departments' | 'workplaces' | 'roles' | 'org-chart';
+import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/context/TenantContext';
+import { Avatar } from '@/components/ui/Avatar';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
+import { Select } from '@/components/ui/Select';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { LoadingState } from '@/components/ui/States';
+import { InteractiveTile } from '@/components/ui/InteractiveTile';
+import { SidebarLayout } from '@/components/layout/Sidebar';
+import { getNavForRole } from '@/constants/navigation';
+import {
+  HOSPITAL_UNITS,
+  normalizeHospitalUnit,
+  getTenantDefaultUnits,
+  isShantiHospitalOrg,
+} from '@/constants/config';
+import {
+  STOCK_1_SVG,
+  STOCK_4_SVG,
+  STOCK_8_SVG,
+  STOCK_12_SVG,
+} from '@/constants/workManagementSvgs';
+import {
+  getDepartmentsWithStats,
+  createDepartment,
+  updateDepartment,
+  deleteDepartment,
+  getOrgHierarchy,
+  getWorkplaces,
+  updateEmployee,
+  updateReportingManager,
+} from '@/lib/services/employee';
+import { updateUserRole, getOrgUsers } from '@/lib/services/organization';
+import { createAuditLog } from '@/lib/services/audit';
+import type { Department, Employee, Workplace, Profile } from '@/types';
+import { getInitials } from '@/utils/format';
+
+type StudioMode = 'directory' | 'departments' | 'workplaces' | 'roles' | 'org-chart';
+
+const DEPT_COLOR_PALETTES = [
+  { color: '#7C3AED', bg: '#EDE9FE', border: '#DDD6FE' },
+  { color: '#0284C7', bg: '#E0F2FE', border: '#BAE6FD' },
+  { color: '#0D9488', bg: '#CCFBF1', border: '#99F6E4' },
+  { color: '#D97706', bg: '#FEF3C7', border: '#FDE68A' },
+  { color: '#EC4899', bg: '#FCE7F3', border: '#FBCFE8' },
+  { color: '#4F46E5', bg: '#EEF2FF', border: '#C7D2FE' },
+  { color: '#16A34A', bg: '#DCFCE7', border: '#BBF7D0' },
+  { color: '#9333EA', bg: '#F3E8FF', border: '#E9D5FF' },
+];
+
+function MetricWave({ color, width = 85, height = 28 }: { color: string; width?: number; height?: number }) {
+  return (
+    <Svg width={width} height={height} viewBox="0 0 90 30" fill="none">
+      <Path
+        d="M 2 18 C 16 26, 26 8, 42 16 C 56 24, 66 6, 88 12"
+        stroke={color}
+        strokeWidth={2.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 export default function DepartmentsAndHierarchyScreen() {
+  const router = useRouter();
   const colors = useTheme();
   const { profile, role } = useAuth();
   const { organization: tenantOrg } = useTenant();
   const { width } = useWindowDimensions();
+
   const isDesktop = width >= 1024;
+  const isTablet = width >= 640 && width < 1024;
 
-  const navItems = role === 'admin' ? ADMIN_NAV : HR_NAV;
+  const navItems = getNavForRole(role, profile?.email);
 
-  // Active Studio Mode: 'departments' | 'workplaces' | 'roles' | 'org-chart'
-  const [activeMode, setActiveMode] = useState<StudioMode>('departments');
+  // Active Studio Mode: 'directory' | 'departments' | 'workplaces' | 'roles' | 'org-chart'
+  const [activeMode, setActiveMode] = useState<StudioMode>('directory');
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [workplaces, setWorkplaces] = useState<Workplace[]>([]);
@@ -83,7 +134,13 @@ export default function DepartmentsAndHierarchyScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  const [unitFilter, setUnitFilter] = useState<string>('all');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  // Available Tenant Hospital Units from constants
+  const availableUnits = useMemo(() => {
+    return getTenantDefaultUnits(tenantOrg?.name, tenantOrg?.id);
+  }, [tenantOrg]);
 
   // Drag and drop state
   const [draggedEmpId, setDraggedEmpId] = useState<string | null>(null);
@@ -92,34 +149,20 @@ export default function DepartmentsAndHierarchyScreen() {
   // Modals state
   const [createDeptModalOpen, setCreateDeptModalOpen] = useState(false);
   const [savingDept, setSavingDept] = useState(false);
+  const [editDept, setEditDept] = useState<Department | null>(null);
+  const [deleteDept, setDeleteDept] = useState<Department | null>(null);
 
-  const [createWpModalOpen, setCreateWpModalOpen] = useState(false);
-  const [newWpName, setNewWpName] = useState('');
-  const [newWpAddress, setNewWpAddress] = useState('');
-  const [newWpLat, setNewWpLat] = useState('12.9716');
-  const [newWpLng, setNewWpLng] = useState('77.5946');
-  const [newWpRadius, setNewWpRadius] = useState('150');
-  const [savingWp, setSavingWp] = useState(false);
-  const [wpFormError, setWpFormError] = useState('');
-
-  const [editRoleUser, setEditRoleUser] = useState<Profile | null>(null);
-  const [selectedRole, setSelectedRole] = useState<'admin' | 'hr' | 'employee'>('employee');
-  const [savingRole, setSavingRole] = useState(false);
-  const [roleFormError, setRoleFormError] = useState('');
-
-  const [editReportingEmp, setEditReportingEmp] = useState<Employee | null>(null);
+  const [assignManagerModalOpen, setAssignManagerModalOpen] = useState(false);
   const [selectedEmpId, setSelectedEmpId] = useState<string | null>(null);
   const [selectedMgrId, setSelectedMgrId] = useState<string | null>(null);
   const [savingReporting, setSavingReporting] = useState(false);
   const [reportingError, setReportingError] = useState('');
-  const [assignManagerModalOpen, setAssignManagerModalOpen] = useState(false);
+
   const [quickMoveModalEmp, setQuickMoveModalEmp] = useState<Employee | null>(null);
   const [formError, setFormError] = useState('');
   const [deptName, setDeptName] = useState('');
   const [deptDesc, setDeptDesc] = useState('');
   const [deptManagerId, setDeptManagerId] = useState<string | null>(null);
-  const [editDept, setEditDept] = useState<Department | null>(null);
-  const [deleteDept, setDeleteDept] = useState<Department | null>(null);
 
   // Collapsed branches in Org Chart
   const [collapsedNodes, setCollapsedNodes] = useState<Record<string, boolean>>({});
@@ -191,7 +234,7 @@ export default function DepartmentsAndHierarchyScreen() {
 
     setActionLoadingId(empId);
     try {
-      if (activeMode === 'departments') {
+      if (activeMode === 'departments' || activeMode === 'directory') {
         const targetDeptId = targetColId === 'unassigned' ? null : targetColId;
         if (emp.department_id !== targetDeptId) {
           await updateEmployee(emp.id, { department_id: targetDeptId });
@@ -234,7 +277,7 @@ export default function DepartmentsAndHierarchyScreen() {
     if (!quickMoveModalEmp) return;
     setActionLoadingId(quickMoveModalEmp.id);
     try {
-      if (activeMode === 'departments') {
+      if (activeMode === 'departments' || activeMode === 'directory') {
         const deptId = targetId === 'unassigned' ? null : targetId;
         await updateEmployee(quickMoveModalEmp.id, { department_id: deptId });
       } else if (activeMode === 'workplaces') {
@@ -395,7 +438,6 @@ export default function DepartmentsAndHierarchyScreen() {
         updated_by: profile?.id,
       });
 
-      // Auto-expand the assigned manager's node so user sees the newly added report immediately!
       if (resolvedMgrId) {
         setCollapsedNodes((prev) => ({ ...prev, [resolvedMgrId]: false }));
       }
@@ -429,18 +471,47 @@ export default function DepartmentsAndHierarchyScreen() {
     setCollapsedNodes(newCollapsed);
   };
 
-  // Filtered employees for search
+  // Filtered employees for search and unit
   const filteredEmployees = useMemo(() => {
-    if (!search.trim()) return employees;
-    const q = search.toLowerCase();
-    return employees.filter(
-      (e) =>
-        e.profile?.full_name?.toLowerCase().includes(q) ||
-        e.designation?.toLowerCase().includes(q) ||
-        e.employee_code?.toLowerCase().includes(q) ||
-        e.department?.name?.toLowerCase().includes(q)
-    );
-  }, [employees, search]);
+    let list = employees;
+
+    if (unitFilter !== 'all') {
+      list = list.filter((e) => {
+        const empUnit = normalizeHospitalUnit(e.hospital_unit || e.workplace?.name);
+        return empUnit.toLowerCase() === unitFilter.toLowerCase();
+      });
+    }
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (e) =>
+          e.profile?.full_name?.toLowerCase().includes(q) ||
+          e.designation?.toLowerCase().includes(q) ||
+          e.employee_code?.toLowerCase().includes(q) ||
+          e.department?.name?.toLowerCase().includes(q)
+      );
+    }
+
+    return list;
+  }, [employees, search, unitFilter]);
+
+  // Filtered departments for directory and kanban
+  const filteredDepartments = useMemo(() => {
+    let list = departments;
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (d) =>
+          d.name.toLowerCase().includes(q) ||
+          (d.description && d.description.toLowerCase().includes(q)) ||
+          (d.manager?.profile?.full_name && d.manager.profile.full_name.toLowerCase().includes(q))
+      );
+    }
+
+    return list;
+  }, [departments, search]);
 
   // Root employees and unassigned employees for Org Chart
   const { rootEmployees, unassignedEmployees } = useMemo(() => {
@@ -458,17 +529,14 @@ export default function DepartmentsAndHierarchyScreen() {
         emp.manager_id !== emp.id;
 
       if (!hasValidManager) {
-        // If they have direct reports, they are an Executive / Leadership Root
         if (emp.direct_reports && emp.direct_reports.length > 0) {
           roots.push(emp);
         } else {
-          // If they have no manager AND no reports, they are standalone/unassigned
           unassigned.push(emp);
         }
       }
     }
 
-    // Safety fallback: If roots is empty (e.g. everyone is linked in a loop or tree root is missing)
     if (roots.length === 0 && employees.length > 0) {
       const sorted = [...employees].sort(
         (a, b) => (b.direct_reports?.length || 0) - (a.direct_reports?.length || 0)
@@ -479,7 +547,6 @@ export default function DepartmentsAndHierarchyScreen() {
     return { rootEmployees: roots, unassignedEmployees: unassigned };
   }, [employees]);
 
-  // Filtered roots when searching in org chart
   const searchedRoots = useMemo(() => {
     if (!search.trim()) return rootEmployees;
     const q = search.toLowerCase();
@@ -533,39 +600,67 @@ export default function DepartmentsAndHierarchyScreen() {
     ];
   }, [employees, selectedEmpId, getDescendantIds]);
 
+  // Metric stats
+  const assignedStaffCount = useMemo(() => employees.filter((e) => !!e.department_id).length, [employees]);
+  const unassignedStaffCount = useMemo(() => employees.filter((e) => !e.department_id).length, [employees]);
+  const hodCount = useMemo(() => departments.filter((d) => !!d.manager_id).length, [departments]);
+
   if (loading) return <LoadingState />;
 
   return (
-    <SidebarLayout>
+    <SidebarLayout items={navItems}>
       <ScrollView
-        style={[styles.container, { backgroundColor: colors.background }]}
+        style={[styles.container, { backgroundColor: '#FAF9FD' }]}
         contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero Header */}
-        <Animated.View entering={FadeInDown.duration(350).springify()}>
-          <View style={[styles.heroBar, { backgroundColor: '#0b1c30' }]}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.heroSubHeader}>VISUAL WORKSPACE & GROUPING STUDIO</Text>
-              <Text style={styles.heroTitle}>Organization Drag & Drop Studio</Text>
-              <Text style={styles.heroSub}>
-                Reassign employees across Departments, Office Workplaces, and Role Groups by dragging cards.
-              </Text>
-            </View>
+        {/* ─── Breadcrumbs & Header ─────────────────────────────────────────── */}
+        <View style={styles.breadcrumbRow}>
+          <TouchableOpacity
+            onPress={() => router.push(role === 'admin' ? '/(admin)/dashboard' : '/(hr)/dashboard' as never)}
+            style={styles.breadcrumbLink}
+          >
+            <Text style={styles.breadcrumbText}>Dashboard</Text>
+          </TouchableOpacity>
+          <ChevronRight size={13} color="#94A3B8" />
+          <Text style={[styles.breadcrumbText, { color: '#7C3AED', fontWeight: '700' }]}>
+            Departments & Hierarchy
+          </Text>
+        </View>
 
-            <View style={styles.heroActions}>
+        {/* ─── Modern SaaS Header Row with Illustration ────────────────────── */}
+        <Animated.View entering={FadeInDown.duration(320)} style={styles.headerRow}>
+          <View style={{ flex: 1, minWidth: 280 }}>
+            <View style={styles.headerBadge}>
+              <Sparkles size={12} color="#7C3AED" />
+              <Text style={styles.headerBadgeText}>Organizational Architecture</Text>
+            </View>
+            <Text style={styles.headerTitle}>Departments & Hierarchy Studio</Text>
+            <Text style={styles.headerSubtitle}>
+              Configure departmental headcount, appointed HOD leads, and reporting chains for{' '}
+              <Text style={{ fontWeight: '700', color: '#1E293B' }}>{tenantOrg?.name || 'Organization Workspace'}</Text>.
+            </Text>
+          </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            {isDesktop && (
+              <View style={{ opacity: 0.95 }}>
+                <SvgXml xml={STOCK_4_SVG} width={130} height={92} />
+              </View>
+            )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <TouchableOpacity
-                style={[styles.actionBtnHero, { backgroundColor: '#006a61' }]}
+                style={styles.headerPrimaryBtn}
                 onPress={openCreateModal}
                 activeOpacity={0.85}
               >
                 <Plus size={16} color="#FFF" />
-                <Text style={styles.actionBtnText}>New Department</Text>
+                <Text style={styles.headerPrimaryBtnText}>New Department</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.actionBtnHero, { backgroundColor: 'rgba(255,255,255,0.15)' }]}
+                style={styles.headerSecondaryBtn}
                 onPress={() => {
                   setReportingError('');
                   setSelectedEmpId(null);
@@ -574,115 +669,406 @@ export default function DepartmentsAndHierarchyScreen() {
                 }}
                 activeOpacity={0.85}
               >
-                <GitFork size={16} color="#FFF" />
-                <Text style={styles.actionBtnText}>Reporting Line</Text>
+                <GitFork size={15} color="#7C3AED" />
+                <Text style={styles.headerSecondaryBtnText}>Reporting Line</Text>
               </TouchableOpacity>
             </View>
           </View>
         </Animated.View>
 
-        {/* 4 Mode Selector Tabs */}
-        <View style={[styles.modeTabsBar, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+        {/* ─── Metric Stat Cards Row with Wave Lines ────────────────────────── */}
+        <Animated.View entering={FadeInDown.delay(70).duration(280)} style={styles.metricsRow}>
+          {/* Card 1: Total Departments */}
+          <InteractiveTile
+            style={[
+              styles.metricCard,
+              {
+                backgroundColor: '#F3EEFE',
+                borderColor: '#E4DCFD',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 180 : undefined,
+                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+              },
+            ]}
+            onPress={() => setActiveMode('directory')}
+          >
+            <View style={styles.metricCardHeader}>
+              <Text style={styles.metricValueText}>{departments.length}</Text>
+              <View style={[styles.metricIconBox, { backgroundColor: '#EDE9FE' }]}>
+                <Building2 size={16} color="#7C3AED" />
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Total Departments</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#8B5CF6" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+
+          {/* Card 2: Assigned Staff */}
+          <InteractiveTile
+            style={[
+              styles.metricCard,
+              {
+                backgroundColor: '#EDFAF2',
+                borderColor: '#CEF2DE',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 180 : undefined,
+                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+              },
+            ]}
+            onPress={() => setActiveMode('departments')}
+          >
+            <View style={styles.metricCardHeader}>
+              <Text style={styles.metricValueText}>{assignedStaffCount}</Text>
+              <View style={[styles.metricIconBox, { backgroundColor: '#DCFCE7' }]}>
+                <Users size={16} color="#10B981" />
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Assigned Staff</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#10B981" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+
+          {/* Card 3: Appointed HODs */}
+          <InteractiveTile
+            style={[
+              styles.metricCard,
+              {
+                backgroundColor: '#FFF4EB',
+                borderColor: '#FFE2CD',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 180 : undefined,
+                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+              },
+            ]}
+            onPress={() => setActiveMode('org-chart')}
+          >
+            <View style={styles.metricCardHeader}>
+              <Text style={styles.metricValueText}>{hodCount}</Text>
+              <View style={[styles.metricIconBox, { backgroundColor: '#FFEDD5' }]}>
+                <Award size={16} color="#F97316" />
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Appointed HODs</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#F97316" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+
+          {/* Card 4: Unassigned Staff */}
+          <InteractiveTile
+            style={[
+              styles.metricCard,
+              {
+                backgroundColor: '#EFF6FF',
+                borderColor: '#DBEAFE',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 180 : undefined,
+                width: isDesktop ? undefined : (width - 40 - 12) / 2,
+              },
+            ]}
+            onPress={() => setActiveMode('departments')}
+          >
+            <View style={styles.metricCardHeader}>
+              <Text style={styles.metricValueText}>{unassignedStaffCount}</Text>
+              <View style={[styles.metricIconBox, { backgroundColor: '#DBEAFE' }]}>
+                <AlertCircle size={16} color="#3B82F6" />
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Unassigned Staff</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#3B82F6" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+        </Animated.View>
+
+        {/* ─── Search & Studio Mode Filters Bar ─────────────────────────────── */}
+        <Animated.View entering={FadeInDown.delay(120).duration(280)} style={styles.filtersContainer}>
+          {/* Top Search & Unit Filters Row */}
+          <View style={styles.searchAndUnitRow}>
+            {/* Search Input */}
+            <View style={styles.searchBox}>
+              <Search size={17} color="#64748B" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search departments, specialities, leads, or staff..."
+                placeholderTextColor="#94A3B8"
+                value={search}
+                onChangeText={setSearch}
+              />
+              {search.length > 0 && (
+                <TouchableOpacity onPress={() => setSearch('')} style={{ padding: 4 }}>
+                  <X size={15} color="#64748B" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Hospital Unit Selector Pills */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.unitScroll}
+            >
+              <TouchableOpacity
+                style={[styles.unitPill, unitFilter === 'all' && styles.unitPillActive]}
+                onPress={() => setUnitFilter('all')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.unitPillText, unitFilter === 'all' && styles.unitPillTextActive]}>
+                  All Workplaces
+                </Text>
+              </TouchableOpacity>
+              {availableUnits.map((u) => {
+                const isSelected = unitFilter.toLowerCase() === u.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={u}
+                    style={[styles.unitPill, isSelected && styles.unitPillActive]}
+                    onPress={() => setUnitFilter(isSelected ? 'all' : u)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.unitPillText, isSelected && styles.unitPillTextActive]}>
+                      {u}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* Mode Selector Tabs */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.modeTabsScroll}
+          >
+            <TouchableOpacity
+              onPress={() => setActiveMode('directory')}
+              style={[styles.modeTab, activeMode === 'directory' && styles.modeTabActive]}
+              activeOpacity={0.7}
+            >
+              <Building2 size={15} color={activeMode === 'directory' ? '#FFFFFF' : '#64748B'} />
+              <Text style={[styles.modeTabText, activeMode === 'directory' && styles.modeTabTextActive]}>
+                Department Directory ({departments.length})
+              </Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               onPress={() => setActiveMode('departments')}
-              style={[
-                styles.modeTab,
-                activeMode === 'departments'
-                  ? { backgroundColor: colors.primary }
-                  : { backgroundColor: '#f1f5f9' },
-              ]}
+              style={[styles.modeTab, activeMode === 'departments' && styles.modeTabActive]}
+              activeOpacity={0.7}
             >
-              <Building2 size={16} color={activeMode === 'departments' ? '#FFF' : colors.text} />
-              <Text
-                style={[
-                  styles.modeTabText,
-                  { color: activeMode === 'departments' ? '#FFF' : colors.text },
-                ]}
-              >
-                Department Grouping
+              <Layers size={15} color={activeMode === 'departments' ? '#FFFFFF' : '#64748B'} />
+              <Text style={[styles.modeTabText, activeMode === 'departments' && styles.modeTabTextActive]}>
+                Visual Kanban
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveMode('org-chart')}
+              style={[styles.modeTab, activeMode === 'org-chart' && styles.modeTabActive]}
+              activeOpacity={0.7}
+            >
+              <Network size={15} color={activeMode === 'org-chart' ? '#FFFFFF' : '#64748B'} />
+              <Text style={[styles.modeTabText, activeMode === 'org-chart' && styles.modeTabTextActive]}>
+                Hierarchy Org Tree
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => setActiveMode('workplaces')}
-              style={[
-                styles.modeTab,
-                activeMode === 'workplaces'
-                  ? { backgroundColor: colors.primary }
-                  : { backgroundColor: '#f1f5f9' },
-              ]}
+              style={[styles.modeTab, activeMode === 'workplaces' && styles.modeTabActive]}
+              activeOpacity={0.7}
             >
-              <MapPin size={16} color={activeMode === 'workplaces' ? '#FFF' : colors.text} />
-              <Text
-                style={[
-                  styles.modeTabText,
-                  { color: activeMode === 'workplaces' ? '#FFF' : colors.text },
-                ]}
-              >
+              <MapPin size={15} color={activeMode === 'workplaces' ? '#FFFFFF' : '#64748B'} />
+              <Text style={[styles.modeTabText, activeMode === 'workplaces' && styles.modeTabTextActive]}>
                 Office Locations & Geofence
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => setActiveMode('roles')}
-              style={[
-                styles.modeTab,
-                activeMode === 'roles'
-                  ? { backgroundColor: colors.primary }
-                  : { backgroundColor: '#f1f5f9' },
-              ]}
+              style={[styles.modeTab, activeMode === 'roles' && styles.modeTabActive]}
+              activeOpacity={0.7}
             >
-              <ShieldCheck size={16} color={activeMode === 'roles' ? '#FFF' : colors.text} />
-              <Text
-                style={[
-                  styles.modeTabText,
-                  { color: activeMode === 'roles' ? '#FFF' : colors.text },
-                ]}
-              >
-                Role & Permission Groups
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setActiveMode('org-chart')}
-              style={[
-                styles.modeTab,
-                activeMode === 'org-chart'
-                  ? { backgroundColor: colors.primary }
-                  : { backgroundColor: '#f1f5f9' },
-              ]}
-            >
-              <Network size={16} color={activeMode === 'org-chart' ? '#FFF' : colors.text} />
-              <Text
-                style={[
-                  styles.modeTabText,
-                  { color: activeMode === 'org-chart' ? '#FFF' : colors.text },
-                ]}
-              >
-                Hierarchy Chart
+              <ShieldCheck size={15} color={activeMode === 'roles' ? '#FFFFFF' : '#64748B'} />
+              <Text style={[styles.modeTabText, activeMode === 'roles' && styles.modeTabTextActive]}>
+                Role Groups
               </Text>
             </TouchableOpacity>
           </ScrollView>
+        </Animated.View>
 
-          <View style={[styles.searchBox, { borderColor: '#e2e8f0' }]}>
-            <Search size={15} color={colors.textSecondary} />
-            <TextInput
-              placeholder="Search employee, designation, or department..."
-              placeholderTextColor={colors.textSecondary}
-              value={search}
-              onChangeText={setSearch}
-              style={[styles.searchInput, { color: colors.text }]}
-            />
-            {search.length > 0 && (
-              <TouchableOpacity onPress={() => setSearch('')} style={{ padding: 4 }}>
-                <X size={14} color={colors.textSecondary} />
-              </TouchableOpacity>
+        {/* ─── MODE 1: MODERN DEPARTMENT CARDS DIRECTORY ────────────────────── */}
+        {activeMode === 'directory' && (
+          <Animated.View entering={FadeInDown.delay(160).duration(300)}>
+            {filteredDepartments.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconCircle}>
+                  <Building2 size={26} color="#94A3B8" />
+                </View>
+                <Text style={styles.emptyTitle}>No matching departments found</Text>
+                <Text style={styles.emptySubtitle}>
+                  {search ? 'Try clearing your search query' : 'Create your first department or business division to get started.'}
+                </Text>
+                <TouchableOpacity style={styles.emptyAddBtn} onPress={openCreateModal}>
+                  <Text style={styles.emptyAddBtnText}>+ Create New Department</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={[styles.deptGrid, isDesktop && styles.deptGridDesktop]}>
+                {filteredDepartments.map((dept, idx) => {
+                  const palette = DEPT_COLOR_PALETTES[idx % DEPT_COLOR_PALETTES.length];
+                  const deptEmps = employees.filter((e) => e.department_id === dept.id);
+                  const previewEmps = deptEmps.slice(0, 4);
+                  const moreCount = Math.max(0, deptEmps.length - 4);
+                  const managerEmp = dept.manager || employees.find((e) => e.id === dept.manager_id);
+                  const managerName = managerEmp?.profile?.full_name;
+
+                  return (
+                    <InteractiveTile
+                      key={dept.id}
+                      style={[
+                        styles.deptCard,
+                        isDesktop && styles.deptCardDesktop,
+                        isTablet && styles.deptCardTablet,
+                      ]}
+                      onPress={() => openEditModal(dept)}
+                    >
+                      {/* Card Top Row */}
+                      <View style={styles.deptCardTopRow}>
+                        <View style={[styles.deptIconBox, { backgroundColor: palette.bg }]}>
+                          <Building2 size={22} color={palette.color} />
+                        </View>
+
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <View style={[styles.deptCountPill, { backgroundColor: palette.bg }]}>
+                            <Users size={11} color={palette.color} />
+                            <Text style={[styles.deptCountPillText, { color: palette.color }]}>
+                              {deptEmps.length} Staff
+                            </Text>
+                          </View>
+
+                          <TouchableOpacity
+                            onPress={(e) => {
+                              e.stopPropagation?.();
+                              openEditModal(dept);
+                            }}
+                            style={styles.cardActionIconBtn}
+                            activeOpacity={0.7}
+                          >
+                            <Edit2 size={14} color="#64748B" />
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            onPress={(e) => {
+                              e.stopPropagation?.();
+                              setDeleteDept(dept);
+                            }}
+                            style={styles.cardActionIconBtn}
+                            activeOpacity={0.7}
+                          >
+                            <Trash2 size={14} color="#EF4444" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+
+                      {/* Department Title & Description */}
+                      <View style={{ marginTop: 12, flex: 1 }}>
+                        <Text style={styles.deptCardTitle} numberOfLines={1}>
+                          {dept.name}
+                        </Text>
+                        <Text style={styles.deptCardDesc} numberOfLines={2}>
+                          {dept.description || 'Operational department and business division.'}
+                        </Text>
+                      </View>
+
+                      {/* HOD / Leadership Mini Box */}
+                      <View style={styles.hodMiniCard}>
+                        {managerName ? (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+                            <Avatar
+                              name={managerName}
+                              url={managerEmp?.profile?.avatar_url}
+                              size={32}
+                            />
+                            <View style={{ flex: 1 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                                <Text style={styles.hodNameText} numberOfLines={1}>{managerName}</Text>
+                                <View style={styles.hodBadgeDot} />
+                              </View>
+                              <Text style={styles.hodSubText} numberOfLines={1}>
+                                {managerEmp?.designation || 'Head of Department (HOD)'}
+                              </Text>
+                            </View>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.unassignedHodRow}
+                            onPress={(e) => {
+                              e.stopPropagation?.();
+                              openEditModal(dept);
+                            }}
+                          >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <AlertCircle size={14} color="#D97706" />
+                              <Text style={styles.unassignedHodText}>No HOD Appointed</Text>
+                            </View>
+                            <Text style={styles.unassignedHodAction}>+ Assign</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+
+                      {/* Staff Avatars Stack & Action Bar */}
+                      <View style={styles.deptCardFooter}>
+                        <View style={styles.avatarStack}>
+                          {previewEmps.map((emp, i) => (
+                            <View
+                              key={emp.id}
+                              style={[
+                                styles.avatarStackItem,
+                                { marginLeft: i > 0 ? -8 : 0, zIndex: 10 - i },
+                              ]}
+                            >
+                              <Avatar
+                                name={emp.profile?.full_name || 'Staff'}
+                                url={emp.profile?.avatar_url}
+                                size={26}
+                              />
+                            </View>
+                          ))}
+                          {moreCount > 0 && (
+                            <View style={[styles.avatarStackMore, { marginLeft: -8, zIndex: 5 }]}>
+                              <Text style={styles.avatarStackMoreText}>+{moreCount}</Text>
+                            </View>
+                          )}
+                          {deptEmps.length === 0 && (
+                            <Text style={{ fontSize: 11, color: '#94A3B8' }}>No members yet</Text>
+                          )}
+                        </View>
+
+                        <TouchableOpacity
+                          style={styles.manageStaffBtn}
+                          onPress={(e) => {
+                            e.stopPropagation?.();
+                            setActiveMode('departments');
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.manageStaffBtnText}>Reassign</Text>
+                          <ArrowRight size={12} color="#7C3AED" />
+                        </TouchableOpacity>
+                      </View>
+                    </InteractiveTile>
+                  );
+                })}
+              </View>
             )}
-          </View>
-        </View>
+          </Animated.View>
+        )}
 
-        {/* ── MODE 1: DEPARTMENT GROUPING KANBAN ────────────────────────────── */}
+        {/* ─── MODE 2: VISUAL KANBAN DRAG & DROP ────────────────────────────── */}
         {activeMode === 'departments' && (
           <View style={styles.kanbanBoardWrap}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.boardColumns}>
@@ -691,8 +1077,8 @@ export default function DepartmentsAndHierarchyScreen() {
                 id="unassigned"
                 title="Unassigned Department"
                 count={filteredEmployees.filter((e) => !e.department_id).length}
-                color="#64748b"
-                bg="#f8faff"
+                color="#64748B"
+                bg="#F8FAFC"
                 employees={filteredEmployees.filter((e) => !e.department_id)}
                 isDropTarget={dropTargetColId === 'unassigned'}
                 onDragStart={handleDragStart}
@@ -705,17 +1091,19 @@ export default function DepartmentsAndHierarchyScreen() {
               />
 
               {/* Each Department Column */}
-              {departments.map((dept) => {
+              {departments.map((dept, idx) => {
+                const palette = DEPT_COLOR_PALETTES[idx % DEPT_COLOR_PALETTES.length];
                 const colEmps = filteredEmployees.filter((e) => e.department_id === dept.id);
+                const managerEmp = dept.manager || employees.find((e) => e.id === dept.manager_id);
                 return (
                   <KanbanColumn
                     key={dept.id}
                     id={dept.id}
                     title={dept.name}
-                    sub={dept.manager?.profile?.full_name ? `Lead: ${dept.manager.profile.full_name}` : undefined}
+                    sub={managerEmp?.profile?.full_name ? `Lead: ${managerEmp.profile.full_name}` : undefined}
                     count={colEmps.length}
-                    color="#006a61"
-                    bg="#edf8f6"
+                    color={palette.color}
+                    bg={palette.bg}
                     employees={colEmps}
                     isDropTarget={dropTargetColId === dept.id}
                     onDragStart={handleDragStart}
@@ -733,18 +1121,18 @@ export default function DepartmentsAndHierarchyScreen() {
           </View>
         )}
 
-        {/* ── MODE 2: WORKPLACE / OFFICE GROUPING KANBAN ───────────────────── */}
+        {/* ─── MODE 3: WORKPLACE / OFFICE GROUPING KANBAN ───────────────────── */}
         {activeMode === 'workplaces' && (
           <View style={styles.kanbanBoardWrap}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.boardColumns}>
-              {/* Unassigned / Remote Column */}
+              {/* Remote / Unassigned Column */}
               <KanbanColumn
                 id="unassigned"
                 title="Remote / Unassigned"
                 sub="No geofenced office"
                 count={filteredEmployees.filter((e) => !e.workplace_id).length}
-                color="#64748b"
-                bg="#f8faff"
+                color="#64748B"
+                bg="#F8FAFC"
                 employees={filteredEmployees.filter((e) => !e.workplace_id)}
                 isDropTarget={dropTargetColId === 'unassigned'}
                 onDragStart={handleDragStart}
@@ -764,10 +1152,10 @@ export default function DepartmentsAndHierarchyScreen() {
                     key={wp.id}
                     id={wp.id}
                     title={wp.name}
-                    sub={`${wp.radius_meters}m geofence`}
+                    sub={`${wp.radius_meters}m geofence radius`}
                     count={colEmps.length}
-                    color="#0369a1"
-                    bg="#e0f2fe"
+                    color="#0369A1"
+                    bg="#E0F2FE"
                     employees={colEmps}
                     isDropTarget={dropTargetColId === wp.id}
                     onDragStart={handleDragStart}
@@ -784,7 +1172,7 @@ export default function DepartmentsAndHierarchyScreen() {
           </View>
         )}
 
-        {/* ── MODE 3: ROLE & PERMISSION GROUPING KANBAN ─────────────────────── */}
+        {/* ─── MODE 4: ROLE & PERMISSION GROUPING KANBAN ────────────────────── */}
         {activeMode === 'roles' && (
           <View style={styles.kanbanBoardWrap}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.boardColumns}>
@@ -794,8 +1182,8 @@ export default function DepartmentsAndHierarchyScreen() {
                 title="Administrators"
                 sub="Full org & settings access"
                 count={filteredEmployees.filter((e) => e.profile?.role === 'admin').length}
-                color="#4f46e5"
-                bg="#eeebff"
+                color="#7C3AED"
+                bg="#EDE9FE"
                 employees={filteredEmployees.filter((e) => e.profile?.role === 'admin')}
                 isDropTarget={dropTargetColId === 'admin'}
                 onDragStart={handleDragStart}
@@ -813,8 +1201,8 @@ export default function DepartmentsAndHierarchyScreen() {
                 title="HR Managers"
                 sub="Attendance, leave & payroll"
                 count={filteredEmployees.filter((e) => e.profile?.role === 'hr').length}
-                color="#b45309"
-                bg="#fef3c7"
+                color="#D97706"
+                bg="#FEF3C7"
                 employees={filteredEmployees.filter((e) => e.profile?.role === 'hr')}
                 isDropTarget={dropTargetColId === 'hr'}
                 onDragStart={handleDragStart}
@@ -829,11 +1217,11 @@ export default function DepartmentsAndHierarchyScreen() {
               {/* Standard Employees */}
               <KanbanColumn
                 id="employee"
-                title="Standard Employees"
+                title="Standard Staff & Team Members"
                 sub="Self-service portal"
                 count={filteredEmployees.filter((e) => e.profile?.role === 'employee').length}
-                color="#006a61"
-                bg="#edf8f6"
+                color="#0D9488"
+                bg="#CCFBF1"
                 employees={filteredEmployees.filter((e) => e.profile?.role === 'employee')}
                 isDropTarget={dropTargetColId === 'employee'}
                 onDragStart={handleDragStart}
@@ -848,20 +1236,18 @@ export default function DepartmentsAndHierarchyScreen() {
           </View>
         )}
 
-        {/* ── MODE 4: HIERARCHY ORG TREE ───────────────────────────────────── */}
+        {/* ─── MODE 5: HIERARCHY ORG TREE ──────────────────────────────────── */}
         {activeMode === 'org-chart' && (
-          <View style={[styles.treeContainer, { backgroundColor: colors.surface, borderColor: '#e2e8f0' }]}>
-            <View style={[styles.treeHead, { borderBottomColor: '#f1f5f9', flexWrap: 'wrap', gap: 12 }]}>
+          <View style={styles.treeContainer}>
+            <View style={styles.treeHead}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 260 }}>
-                <View style={[styles.treeIconWrap, { backgroundColor: '#eeebff' }]}>
-                  <Network size={20} color="#4f46e5" />
+                <View style={[styles.treeIconWrap, { backgroundColor: '#EDE9FE' }]}>
+                  <Network size={20} color="#7C3AED" />
                 </View>
                 <View>
-                  <Text style={[styles.treeTitle, { color: colors.text }]}>
-                    Executive Chains of Command & Reporting Lines
-                  </Text>
-                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>
-                    {searchedRoots.length} Leadership Root{searchedRoots.length !== 1 ? 's' : ''} · {employees.length} Total Staff · {unassignedEmployees.length} Unassigned
+                  <Text style={styles.treeTitle}>Executive Chains of Command & Reporting Lines</Text>
+                  <Text style={{ fontSize: 12, color: '#64748B' }}>
+                    {searchedRoots.length} Leadership Root{searchedRoots.length !== 1 ? 's' : ''} · {employees.length} Total Staff · {unassignedEmployees.length} Standalone
                   </Text>
                 </View>
               </View>
@@ -869,15 +1255,17 @@ export default function DepartmentsAndHierarchyScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <TouchableOpacity
                   onPress={expandAllNodes}
-                  style={[treeStyles.editLineBtn, { borderColor: '#e2e8f0', backgroundColor: '#f8fafc' }]}
+                  style={styles.treeActionBtn}
+                  activeOpacity={0.7}
                 >
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text }}>Expand All</Text>
+                  <Text style={styles.treeActionBtnText}>Expand All</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={collapseAllNodes}
-                  style={[treeStyles.editLineBtn, { borderColor: '#e2e8f0', backgroundColor: '#f8fafc' }]}
+                  style={styles.treeActionBtn}
+                  activeOpacity={0.7}
                 >
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text }}>Collapse All</Text>
+                  <Text style={styles.treeActionBtnText}>Collapse All</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => {
@@ -886,10 +1274,11 @@ export default function DepartmentsAndHierarchyScreen() {
                     setReportingError('');
                     setAssignManagerModalOpen(true);
                   }}
-                  style={[treeStyles.editLineBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                  style={styles.treeActionPrimaryBtn}
+                  activeOpacity={0.8}
                 >
                   <GitFork size={13} color="#FFF" />
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#FFF' }}>Set Reporting Line</Text>
+                  <Text style={styles.treeActionPrimaryBtnText}>Set Reporting Line</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -914,55 +1303,53 @@ export default function DepartmentsAndHierarchyScreen() {
                 ))
               ) : (
                 <View style={{ padding: 24, alignItems: 'center', gap: 8 }}>
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A' }}>
                     {search ? 'No matching hierarchy nodes found' : 'No leadership hierarchy established yet'}
                   </Text>
-                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>
-                    {search ? 'Try clearing your search query' : 'Assign managers to staff members below to start structuring your organization chart.'}
+                  <Text style={{ fontSize: 12, color: '#64748B' }}>
+                    {search ? 'Try clearing your search query' : 'Assign supervisors to staff members below to start structuring your organization chart.'}
                   </Text>
                 </View>
               )}
 
               {/* Standalone / Unassigned Employees Section */}
               {searchedUnassigned.length > 0 && (
-                <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#e2e8f0' }}>
+                <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#E2E8F0' }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                     <View>
-                      <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                         Unassigned Staff Without Supervisor ({searchedUnassigned.length})
                       </Text>
-                      <Text style={{ fontSize: 12, color: colors.textSecondary }}>
-                        Staff currently without a direct reporting manager
+                      <Text style={{ fontSize: 12, color: '#64748B' }}>
+                        Staff currently without a direct reporting supervisor
                       </Text>
                     </View>
                   </View>
 
                   <View style={{ gap: 8 }}>
                     {searchedUnassigned.map((emp) => (
-                      <View
-                        key={emp.id}
-                        style={[
-                          treeStyles.nodeCard,
-                          { backgroundColor: colors.surface, borderColor: '#f1f5f9', borderLeftWidth: 3, borderLeftColor: '#d97706' },
-                        ]}
-                      >
+                      <View key={emp.id} style={styles.unassignedTreeCard}>
                         <Avatar name={emp.profile?.full_name || 'Staff Member'} url={emp.profile?.avatar_url} size={36} />
                         <View style={{ flex: 1, gap: 2 }}>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <Text style={[treeStyles.empName, { color: colors.text }]}>
+                            <Text style={styles.unassignedEmpName}>
                               {emp.profile?.full_name || 'Staff Member'}
                             </Text>
-                            <Badge label="NO MANAGER" variant="warning" />
+                            <View style={styles.unassignedWarningBadge}>
+                              <Text style={styles.unassignedWarningBadgeText}>NO SUPERVISOR</Text>
+                            </View>
                             {emp.department?.name && (
-                              <Badge label={emp.department.name} variant="neutral" />
+                              <View style={styles.deptNeutralBadge}>
+                                <Text style={styles.deptNeutralBadgeText}>{emp.department.name}</Text>
+                              </View>
                             )}
                           </View>
-                          <Text style={[treeStyles.designation, { color: colors.textSecondary }]}>
+                          <Text style={styles.unassignedEmpSub}>
                             {emp.designation || 'Staff'} · {emp.employee_code || 'EMP'}
                           </Text>
                         </View>
                         <TouchableOpacity
-                          style={[treeStyles.editLineBtn, { backgroundColor: '#f0fdfa', borderColor: '#99f6e4' }]}
+                          style={styles.assignSupervisorBtn}
                           onPress={() => {
                             setSelectedEmpId(emp.id);
                             setSelectedMgrId(emp.manager_id || null);
@@ -970,8 +1357,8 @@ export default function DepartmentsAndHierarchyScreen() {
                             setAssignManagerModalOpen(true);
                           }}
                         >
-                          <GitFork size={13} color="#0d7377" />
-                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#0d7377' }}>Assign Manager</Text>
+                          <GitFork size={13} color="#7C3AED" />
+                          <Text style={styles.assignSupervisorBtnText}>Assign Supervisor</Text>
                         </TouchableOpacity>
                       </View>
                     ))}
@@ -981,267 +1368,282 @@ export default function DepartmentsAndHierarchyScreen() {
             </View>
           </View>
         )}
+      </ScrollView>
 
-        {/* ── MODAL: Create Department ─────────────────────────────────────── */}
-        <Modal visible={createDeptModalOpen} onClose={() => setCreateDeptModalOpen(false)} title="Create Department">
-          <View style={{ gap: 14 }}>
-            {formError ? (
-              <View style={[styles.alertBox, { backgroundColor: colors.dangerLight, borderColor: colors.danger + '40' }]}>
-                <AlertCircle size={16} color={colors.danger} />
-                <Text style={{ color: colors.danger, fontSize: 13, flex: 1 }}>{formError}</Text>
-              </View>
-            ) : null}
-
-            <Input
-              label="Department Name *"
-              placeholder="e.g. Engineering, Sales, Product"
-              value={deptName}
-              onChangeText={setDeptName}
-            />
-
-            <Input
-              label="Description"
-              placeholder="Primary mission & responsibilities..."
-              value={deptDesc}
-              onChangeText={setDeptDesc}
-              multiline
-            />
-
-            <Select
-              label="Department Head / Lead"
-              placeholder="Select department manager..."
-              options={[{ label: 'Unassigned', value: '' }, ...employeeOptions]}
-              value={deptManagerId || ''}
-              onValueChange={(v) => setDeptManagerId(v || null)}
-            />
-
-            <View style={styles.modalActions}>
-              <Button
-                title="Cancel"
-                onPress={() => setCreateDeptModalOpen(false)}
-                variant="outline"
-                style={{ flex: 1, borderRadius: 8 }}
-              />
-              <Button
-                title="Create Department"
-                onPress={handleCreateDept}
-                loading={savingDept}
-                style={{ flex: 2, backgroundColor: colors.primary, borderRadius: 8 }}
-              />
+      {/* ─── MODAL: Create Department ─────────────────────────────────────── */}
+      <Modal
+        visible={createDeptModalOpen}
+        onClose={() => setCreateDeptModalOpen(false)}
+        title="Create Department"
+        subtitle="Register a new department or operational division"
+        size="md"
+        icon={<Building2 size={20} color="#7C3AED" />}
+        iconBgColor="#EDE9FE"
+        iconBorderColor="#DDD6FE"
+        badge={{ text: 'Structure', variant: 'primary' }}
+        primaryAction={{
+          label: 'Create Department',
+          onPress: handleCreateDept,
+          loading: savingDept,
+          variant: 'primary',
+        }}
+        secondaryAction={{
+          label: 'Cancel',
+          onPress: () => setCreateDeptModalOpen(false),
+        }}
+      >
+        <View style={{ gap: 14 }}>
+          {formError ? (
+            <View style={styles.modalAlertBox}>
+              <AlertCircle size={16} color="#DC2626" />
+              <Text style={{ color: "#DC2626", fontSize: 13, flex: 1 }}>{formError}</Text>
             </View>
-          </View>
-        </Modal>
+          ) : null}
 
-        {/* ── MODAL: Edit Department ───────────────────────────────────────── */}
-        <Modal visible={!!editDept} onClose={() => setEditDept(null)} title="Edit Department">
-          <View style={{ gap: 14 }}>
-            {formError ? (
-              <View style={[styles.alertBox, { backgroundColor: colors.dangerLight, borderColor: colors.danger + '40' }]}>
-                <AlertCircle size={16} color={colors.danger} />
-                <Text style={{ color: colors.danger, fontSize: 13, flex: 1 }}>{formError}</Text>
-              </View>
-            ) : null}
+          <Input
+            label="Department Name *"
+            placeholder="e.g. Engineering, Operations, Human Resources, Finance"
+            value={deptName}
+            onChangeText={setDeptName}
+          />
 
-            <Input
-              label="Department Name *"
-              value={deptName}
-              onChangeText={setDeptName}
-              placeholder="Department Name"
-            />
+          <Input
+            label="Description & Scope"
+            placeholder="Key operational responsibilities, deliverables, or mission..."
+            value={deptDesc}
+            onChangeText={setDeptDesc}
+            multiline
+          />
 
-            <Input
-              label="Description"
-              value={deptDesc}
-              onChangeText={setDeptDesc}
-              placeholder="Description"
-              multiline
-            />
+          <Select
+            label="Head of Department (HOD) / Lead"
+            placeholder="Select appointed supervisor or director..."
+            options={[{ label: 'Unassigned (No HOD)', value: '' }, ...employeeOptions]}
+            value={deptManagerId || ''}
+            onValueChange={(v) => setDeptManagerId(v || null)}
+          />
+        </View>
+      </Modal>
 
-            <Select
-              label="Department Head"
-              placeholder="Select department manager..."
-              options={[{ label: 'Unassigned', value: '' }, ...employeeOptions]}
-              value={deptManagerId || ''}
-              onValueChange={(v) => setDeptManagerId(v || null)}
-            />
-
-            <View style={styles.modalActions}>
-              <Button
-                title="Cancel"
-                onPress={() => setEditDept(null)}
-                variant="outline"
-                style={{ flex: 1, borderRadius: 8 }}
-              />
-              <Button
-                title="Save Changes"
-                onPress={handleSaveEditDept}
-                loading={savingDept}
-                style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 8 }}
-              />
+      {/* ─── MODAL: Edit Department ───────────────────────────────────────── */}
+      <Modal
+        visible={!!editDept}
+        onClose={() => setEditDept(null)}
+        title="Edit Department"
+        subtitle={`Updating configuration for ${editDept?.name || 'Department'}`}
+        size="md"
+        icon={<Edit2 size={20} color="#7C3AED" />}
+        iconBgColor="#EDE9FE"
+        iconBorderColor="#DDD6FE"
+        primaryAction={{
+          label: 'Save Changes',
+          onPress: handleSaveEditDept,
+          loading: savingDept,
+          variant: 'primary',
+        }}
+        secondaryAction={{
+          label: 'Cancel',
+          onPress: () => setEditDept(null),
+        }}
+      >
+        <View style={{ gap: 14 }}>
+          {formError ? (
+            <View style={styles.modalAlertBox}>
+              <AlertCircle size={16} color="#DC2626" />
+              <Text style={{ color: "#DC2626", fontSize: 13, flex: 1 }}>{formError}</Text>
             </View>
-          </View>
-        </Modal>
+          ) : null}
 
-        {/* ── MODAL: Assign Reporting Manager ──────────────────────────────── */}
-        <Modal
-          visible={assignManagerModalOpen}
-          onClose={() => setAssignManagerModalOpen(false)}
-          title="Set Reporting Hierarchy"
-        >
-          <View style={{ gap: 14 }}>
-            {reportingError ? (
-              <View style={[styles.alertBox, { backgroundColor: colors.dangerLight, borderColor: colors.danger + '40' }]}>
-                <AlertCircle size={16} color={colors.danger} />
-                <Text style={{ color: colors.danger, fontSize: 13, flex: 1 }}>{reportingError}</Text>
-              </View>
-            ) : null}
+          <Input
+            label="Department Name *"
+            value={deptName}
+            onChangeText={setDeptName}
+            placeholder="Department Name"
+          />
 
-            {/* Selected Employee Summary Card */}
-            {selectedEmpId && (() => {
-              const currentEditingEmp = employees.find((e) => e.id === selectedEmpId);
-              const currentSupervisor = employees.find((e) => e.id === currentEditingEmp?.manager_id);
-              if (!currentEditingEmp) return null;
-              return (
-                <View style={{ padding: 12, backgroundColor: '#f8fafc', borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', gap: 6 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <Avatar name={currentEditingEmp.profile?.full_name || 'Staff'} url={currentEditingEmp.profile?.avatar_url} size={34} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontWeight: '700', fontSize: 13, color: colors.text }}>
-                        {currentEditingEmp.profile?.full_name || 'Staff Member'}
-                      </Text>
-                      <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-                        {currentEditingEmp.designation || 'Staff'} · {currentEditingEmp.department?.name || 'Department'}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={{ marginTop: 4, paddingTop: 6, borderTopWidth: 1, borderTopColor: '#e2e8f0', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ fontSize: 11, color: '#64748b' }}>Current Supervisor:</Text>
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: currentSupervisor ? colors.primary : '#d97706' }}>
-                      {currentSupervisor?.profile?.full_name ? `${currentSupervisor.profile.full_name} (${currentSupervisor.designation || 'Lead'})` : 'None (Top Level / Direct to Exec)'}
+          <Input
+            label="Description & Scope"
+            value={deptDesc}
+            onChangeText={setDeptDesc}
+            placeholder="Key responsibilities & mission..."
+            multiline
+          />
+
+          <Select
+            label="Head of Department (HOD) / Lead"
+            placeholder="Select department manager..."
+            options={[{ label: 'Unassigned (No HOD)', value: '' }, ...employeeOptions]}
+            value={deptManagerId || ''}
+            onValueChange={(v) => setDeptManagerId(v || null)}
+          />
+        </View>
+      </Modal>
+
+      {/* ─── MODAL: Set Reporting Hierarchy ───────────────────────────────── */}
+      <Modal
+        visible={assignManagerModalOpen}
+        onClose={() => setAssignManagerModalOpen(false)}
+        title="Set Reporting Hierarchy"
+        subtitle="Establish executive command and operational reporting lines"
+        size="md"
+        icon={<GitFork size={20} color="#7C3AED" />}
+        iconBgColor="#EDE9FE"
+        iconBorderColor="#DDD6FE"
+        badge={{ text: 'Chain of Command', variant: 'primary' }}
+        primaryAction={{
+          label: 'Update Hierarchy',
+          onPress: handleSaveReportingManager,
+          loading: savingReporting,
+          variant: 'primary',
+        }}
+        secondaryAction={{
+          label: 'Cancel',
+          onPress: () => setAssignManagerModalOpen(false),
+        }}
+      >
+        <View style={{ gap: 14 }}>
+          {reportingError ? (
+            <View style={styles.modalAlertBox}>
+              <AlertCircle size={16} color="#DC2626" />
+              <Text style={{ color: "#DC2626", fontSize: 13, flex: 1 }}>{reportingError}</Text>
+            </View>
+          ) : null}
+
+          {/* Selected Employee Summary Card */}
+          {selectedEmpId && (() => {
+            const currentEditingEmp = employees.find((e) => e.id === selectedEmpId);
+            const currentSupervisor = employees.find((e) => e.id === currentEditingEmp?.manager_id);
+            if (!currentEditingEmp) return null;
+            return (
+              <View style={styles.reportingSummaryBox}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Avatar name={currentEditingEmp.profile?.full_name || 'Staff'} url={currentEditingEmp.profile?.avatar_url} size={34} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: '700', fontSize: 13, color: '#0F172A' }}>
+                      {currentEditingEmp.profile?.full_name || 'Staff Member'}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: '#64748B' }}>
+                      {currentEditingEmp.designation || 'Staff'} · {currentEditingEmp.department?.name || 'Department'}
                     </Text>
                   </View>
                 </View>
-              );
-            })()}
+                <View style={styles.reportingSummaryDivider}>
+                  <Text style={{ fontSize: 11, color: '#64748B' }}>Current Direct Supervisor:</Text>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: currentSupervisor ? '#7C3AED' : '#D97706' }}>
+                    {currentSupervisor?.profile?.full_name ? `${currentSupervisor.profile.full_name} (${currentSupervisor.designation || 'Lead'})` : 'None (Top Level Executive)'}
+                  </Text>
+                </View>
+              </View>
+            );
+          })()}
 
-            <Select
-              label="Employee *"
-              placeholder="Select employee..."
-              options={employeeOptions}
-              value={selectedEmpId}
-              onValueChange={(v) => {
-                setSelectedEmpId(v);
-                const currentEmp = employees.find((e) => e.id === v);
-                setSelectedMgrId(currentEmp?.manager_id || '');
-              }}
-            />
+          <Select
+            label="Staff Member / Employee *"
+            placeholder="Select staff member..."
+            options={employeeOptions}
+            value={selectedEmpId}
+            onValueChange={(v) => {
+              setSelectedEmpId(v);
+              const currentEmp = employees.find((e) => e.id === v);
+              setSelectedMgrId(currentEmp?.manager_id || '');
+            }}
+          />
 
-            <Select
-              label="Direct Reporting Supervisor / Manager *"
-              placeholder="Select supervisor..."
-              options={managerOptions}
-              value={selectedMgrId || ''}
-              onValueChange={(v) => setSelectedMgrId(v || null)}
-            />
+          <Select
+            label="Direct Reporting Supervisor / Manager *"
+            placeholder="Select supervisor or department lead..."
+            options={managerOptions}
+            value={selectedMgrId || ''}
+            onValueChange={(v) => setSelectedMgrId(v || null)}
+          />
+        </View>
+      </Modal>
 
-            <View style={styles.modalActions}>
-              <Button
-                title="Cancel"
-                onPress={() => setAssignManagerModalOpen(false)}
-                variant="outline"
-                style={{ flex: 1, borderRadius: 8 }}
-              />
-              <Button
-                title="Update Hierarchy"
-                onPress={handleSaveReportingManager}
-                loading={savingReporting}
-                style={{ flex: 2, backgroundColor: colors.primary, borderRadius: 8 }}
-              />
-            </View>
-          </View>
-        </Modal>
-
-        {/* ── MODAL: Quick Move Mobile Fallback ─────────────────────────────── */}
-        <Modal
-          visible={!!quickMoveModalEmp}
-          onClose={() => setQuickMoveModalEmp(null)}
-          title={`Reassign ${quickMoveModalEmp?.profile?.full_name || 'Employee'}`}
-        >
-          <View style={{ gap: 12 }}>
-            <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-              Select target {activeMode === 'departments' ? 'department' : activeMode === 'workplaces' ? 'office workplace' : 'role'}:
-            </Text>
-
-            {activeMode === 'departments' && (
-              <View style={{ gap: 8 }}>
+      {/* ─── MODAL: Quick Move Mobile Fallback ─────────────────────────────── */}
+      <Modal
+        visible={!!quickMoveModalEmp}
+        onClose={() => setQuickMoveModalEmp(null)}
+        title={`Reassign ${quickMoveModalEmp?.profile?.full_name || 'Employee'}`}
+        subtitle={`Select target ${activeMode === 'departments' ? 'department' : activeMode === 'workplaces' ? 'office workplace' : 'role'}`}
+        size="sm"
+        icon={<MoveRight size={20} color="#7C3AED" />}
+        iconBgColor="#EDE9FE"
+        iconBorderColor="#DDD6FE"
+        primaryAction={{
+          label: 'Close',
+          onPress: () => setQuickMoveModalEmp(null),
+        }}
+      >
+        <View style={{ gap: 8 }}>
+          {(activeMode === 'departments' || activeMode === 'directory') && (
+            <>
+              <TouchableOpacity
+                onPress={() => handleQuickMove('unassigned')}
+                style={styles.quickMoveRow}
+              >
+                <Text style={styles.quickMoveRowText}>Unassigned Department</Text>
+              </TouchableOpacity>
+              {departments.map((d) => (
                 <TouchableOpacity
-                  onPress={() => handleQuickMove('unassigned')}
-                  style={[styles.quickMoveRow, { borderColor: '#e2e8f0' }]}
+                  key={d.id}
+                  onPress={() => handleQuickMove(d.id)}
+                  style={styles.quickMoveRow}
                 >
-                  <Text style={{ fontWeight: '600', color: colors.text }}>Unassigned Department</Text>
+                  <Text style={styles.quickMoveRowText}>{d.name}</Text>
                 </TouchableOpacity>
-                {departments.map((d) => (
-                  <TouchableOpacity
-                    key={d.id}
-                    onPress={() => handleQuickMove(d.id)}
-                    style={[styles.quickMoveRow, { borderColor: '#e2e8f0' }]}
-                  >
-                    <Text style={{ fontWeight: '600', color: colors.text }}>{d.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
+              ))}
+            </>
+          )}
 
-            {activeMode === 'workplaces' && (
-              <View style={{ gap: 8 }}>
+          {activeMode === 'workplaces' && (
+            <>
+              <TouchableOpacity
+                onPress={() => handleQuickMove('unassigned')}
+                style={styles.quickMoveRow}
+              >
+                <Text style={styles.quickMoveRowText}>Remote / Unassigned</Text>
+              </TouchableOpacity>
+              {workplaces.map((w) => (
                 <TouchableOpacity
-                  onPress={() => handleQuickMove('unassigned')}
-                  style={[styles.quickMoveRow, { borderColor: '#e2e8f0' }]}
+                  key={w.id}
+                  onPress={() => handleQuickMove(w.id)}
+                  style={styles.quickMoveRow}
                 >
-                  <Text style={{ fontWeight: '600', color: colors.text }}>Remote / Unassigned</Text>
+                  <Text style={styles.quickMoveRowText}>{w.name}</Text>
                 </TouchableOpacity>
-                {workplaces.map((w) => (
-                  <TouchableOpacity
-                    key={w.id}
-                    onPress={() => handleQuickMove(w.id)}
-                    style={[styles.quickMoveRow, { borderColor: '#e2e8f0' }]}
-                  >
-                    <Text style={{ fontWeight: '600', color: colors.text }}>{w.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
+              ))}
+            </>
+          )}
 
-            {activeMode === 'roles' && (
-              <View style={{ gap: 8 }}>
-                {(['employee', 'hr', 'admin'] as const).map((r) => (
-                  <TouchableOpacity
-                    key={r}
-                    onPress={() => handleQuickMove(r)}
-                    style={[styles.quickMoveRow, { borderColor: '#e2e8f0' }]}
-                  >
-                    <Text style={{ fontWeight: '600', color: colors.text }}>
-                      {r === 'employee' ? 'Standard Employee' : r === 'hr' ? 'HR Manager' : 'Administrator'}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-        </Modal>
+          {activeMode === 'roles' && (
+            <>
+              {(['employee', 'hr', 'admin'] as const).map((r) => (
+                <TouchableOpacity
+                  key={r}
+                  onPress={() => handleQuickMove(r)}
+                  style={styles.quickMoveRow}
+                >
+                  <Text style={styles.quickMoveRowText}>
+                    {r === 'employee' ? 'Standard Staff' : r === 'hr' ? 'HR Manager' : 'Administrator'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </>
+          )}
+        </View>
+      </Modal>
 
-        {/* ── DIALOG: Delete Department Confirm ────────────────────────────── */}
-        <ConfirmDialog
-          visible={!!deleteDept}
-          title="Delete Department?"
-          message={`Are you sure you want to delete ${deleteDept?.name}? Employees in this department will be moved to Unassigned.`}
-          confirmLabel="Yes, Delete"
-          onConfirm={handleDeleteDept}
-          onCancel={() => setDeleteDept(null)}
-          loading={savingDept}
-          variant="danger"
-        />
-      </ScrollView>
+      {/* ─── DIALOG: Delete Department Confirm ────────────────────────────── */}
+      <ConfirmDialog
+        visible={!!deleteDept}
+        title="Delete Department?"
+        message={`Are you sure you want to delete ${deleteDept?.name}? All employees in this department will be moved to Unassigned.`}
+        confirmLabel="Yes, Delete"
+        onConfirm={handleDeleteDept}
+        onCancel={() => setDeleteDept(null)}
+        loading={savingDept}
+        variant="danger"
+      />
     </SidebarLayout>
   );
 }
@@ -1286,7 +1688,6 @@ function KanbanColumn({
     <View
       style={[
         styles.kanbanCol,
-        { backgroundColor: colors.surface, borderColor: '#e2e8f0' },
         isDropTarget && {
           borderColor: color,
           borderWidth: 2,
@@ -1302,15 +1703,15 @@ function KanbanColumn({
         : {})}
     >
       {/* Column Head */}
-      <View style={[styles.colHead, { borderBottomColor: '#f1f5f9' }]}>
+      <View style={styles.colHead}>
         <View style={{ flex: 1, gap: 2 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <View style={[styles.colDot, { backgroundColor: color }]} />
-            <Text style={[styles.colTitle, { color: colors.text }]} numberOfLines={1}>
+            <Text style={styles.colTitle} numberOfLines={1}>
               {title}
             </Text>
           </View>
-          {sub && <Text style={{ fontSize: 11, color: colors.textSecondary }} numberOfLines={1}>{sub}</Text>}
+          {sub && <Text style={{ fontSize: 11, color: '#64748B' }} numberOfLines={1}>{sub}</Text>}
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -1319,7 +1720,7 @@ function KanbanColumn({
           </View>
           {onEditDept && (
             <TouchableOpacity onPress={onEditDept} style={styles.colEditBtn}>
-              <Edit2 size={13} color={colors.textSecondary} />
+              <Edit2 size={13} color="#64748B" />
             </TouchableOpacity>
           )}
         </View>
@@ -1329,7 +1730,7 @@ function KanbanColumn({
       <ScrollView style={styles.colScroll} showsVerticalScrollIndicator={false}>
         {employees.length === 0 ? (
           <View style={styles.emptyColBox}>
-            <Text style={{ fontSize: 12, color: colors.textSecondary }}>Drop employees here</Text>
+            <Text style={{ fontSize: 12, color: '#94A3B8' }}>Drop staff here to reassign</Text>
           </View>
         ) : (
           <View style={{ gap: 10 }}>
@@ -1345,36 +1746,32 @@ function KanbanColumn({
                         onDragStart: (e: any) => onDragStart(e, emp.id),
                         style: [
                           styles.empKanbanCard,
-                          { backgroundColor: colors.surface, borderColor: '#e2e8f0' },
                           isWorking && { opacity: 0.4 },
                         ],
                       } as any)
                     : {
-                        style: [
-                          styles.empKanbanCard,
-                          { backgroundColor: colors.surface, borderColor: '#e2e8f0' },
-                        ],
+                        style: styles.empKanbanCard,
                       })}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                     <Avatar name={name} url={emp.profile?.avatar_url} size={34} />
                     <View style={{ flex: 1, gap: 2 }}>
-                      <Text style={[styles.cardEmpName, { color: colors.text }]} numberOfLines={1}>
+                      <Text style={styles.cardEmpName} numberOfLines={1}>
                         {name}
                       </Text>
-                      <Text style={[styles.cardEmpSub, { color: colors.textSecondary }]} numberOfLines={1}>
+                      <Text style={styles.cardEmpSub} numberOfLines={1}>
                         {emp.designation || 'Staff'} · {emp.employee_code || 'EMP'}
                       </Text>
                     </View>
 
                     {isWorking ? (
-                      <ActivityIndicator size="small" color={colors.primary} />
+                      <ActivityIndicator size="small" color="#7C3AED" />
                     ) : (
                       <TouchableOpacity
-                        style={[styles.movePill, { borderColor: '#e2e8f0' }]}
+                        style={styles.movePill}
                         onPress={() => onQuickMove(emp)}
                       >
-                        <MoveRight size={12} color={colors.primary} />
+                        <MoveRight size={12} color="#7C3AED" />
                       </TouchableOpacity>
                     )}
                   </View>
@@ -1406,7 +1803,6 @@ function TreeNode({
   depth: number;
   visitedIds?: Set<string>;
 }) {
-  // Safeguard against infinite circular reference recursion
   if (visitedIds && visitedIds.has(employee.id)) {
     return null;
   }
@@ -1426,65 +1822,62 @@ function TreeNode({
         style={[
           treeStyles.nodeCard,
           {
-            backgroundColor: colors.surface,
-            borderColor: '#e2e8f0',
             borderLeftWidth: depth === 0 ? 3 : 1,
-            borderLeftColor: depth === 0 ? colors.primary : '#e2e8f0',
+            borderLeftColor: depth === 0 ? '#7C3AED' : '#E2E8F0',
           },
         ]}
       >
         {hasReports && (
           <TouchableOpacity onPress={() => onToggle(employee.id)} style={treeStyles.collapseBtn}>
             {isCollapsed ? (
-              <ChevronRight size={16} color={colors.primary} />
+              <ChevronRight size={16} color="#7C3AED" />
             ) : (
-              <ChevronDown size={16} color={colors.primary} />
+              <ChevronDown size={16} color="#7C3AED" />
             )}
           </TouchableOpacity>
         )}
 
-        <Avatar name={name} url={employee.profile?.avatar_url} size={38} />
+        <Avatar name={name} url={employee.profile?.avatar_url} size={36} />
 
         <View style={{ flex: 1, gap: 2 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Text style={[treeStyles.empName, { color: colors.text }]}>{name}</Text>
+            <Text style={treeStyles.empName}>{name}</Text>
             {depth === 0 ? (
-              <Badge label="LEADERSHIP" variant="accentLight" />
+              <View style={treeStyles.leadershipBadge}>
+                <Text style={treeStyles.leadershipBadgeText}>EXECUTIVE LEAD</Text>
+              </View>
             ) : managerName ? (
-              <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: '#f1f5f9' }}>
-                <Text style={{ fontSize: 10, fontWeight: '600', color: '#475569' }}>
-                  Reports to: {managerName}
-                </Text>
+              <View style={treeStyles.reportsToBadge}>
+                <Text style={treeStyles.reportsToBadgeText}>Reports to: {managerName}</Text>
               </View>
             ) : null}
             {employee.department?.name && (
-              <Badge label={employee.department.name} variant="neutral" />
-            )}
-            {employee.workplace?.name && (
-              <Badge label={employee.workplace.name} variant="primaryLight" />
+              <View style={treeStyles.deptBadge}>
+                <Text style={treeStyles.deptBadgeText}>{employee.department.name}</Text>
+              </View>
             )}
           </View>
-          <Text style={[treeStyles.designation, { color: colors.textSecondary }]}>
+          <Text style={treeStyles.designation}>
             {employee.designation || 'Staff'} · {employee.employee_code || 'EMP'}
           </Text>
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {hasReports && (
-            <View style={[treeStyles.reportsBadge, { backgroundColor: '#edf8f6' }]}>
-              <Users size={12} color="#006a61" />
-              <Text style={{ fontSize: 11, fontWeight: '700', color: '#006a61' }}>
+            <View style={treeStyles.reportsBadge}>
+              <Users size={12} color="#0D9488" />
+              <Text style={treeStyles.reportsBadgeText}>
                 {directReports.length} Direct Report{directReports.length !== 1 ? 's' : ''}
               </Text>
             </View>
           )}
 
           <TouchableOpacity
-            style={[treeStyles.editLineBtn, { borderColor: '#e2e8f0' }]}
+            style={treeStyles.editLineBtn}
             onPress={() => onReassignManager(employee)}
           >
-            <GitFork size={13} color={colors.primary} />
-            <Text style={{ fontSize: 11, fontWeight: '600', color: colors.primary }}>Manage</Text>
+            <GitFork size={13} color="#7C3AED" />
+            <Text style={treeStyles.editLineBtnText}>Manage</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1512,71 +1905,473 @@ function TreeNode({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { gap: 24, paddingBottom: 64 },
-  contentDesktop: { maxWidth: 1380, alignSelf: 'center', width: '100%', paddingHorizontal: 36, paddingTop: 36, gap: 28 },
+  content: { padding: 16, paddingBottom: 64 },
+  contentDesktop: { maxWidth: 1440, alignSelf: 'center', width: '100%', padding: 28, paddingBottom: 72 },
 
-  heroBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 28,
-    paddingTop: 36,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    flexWrap: 'wrap',
-    gap: 16,
-  },
-  heroSubHeader: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
-  heroTitle: { color: '#FFF', fontSize: 24, fontWeight: '800', marginTop: 4, letterSpacing: -0.4 },
-  heroSub: { color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 4 },
-
-  heroActions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
-  actionBtnHero: {
+  /* Breadcrumbs */
+  breadcrumbRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 14,
+    marginBottom: 16,
+  },
+  breadcrumbLink: { paddingVertical: 2 },
+  breadcrumbText: { fontSize: 13, color: '#64748B', fontWeight: '500' },
+
+  /* Header Row */
+  headerRow: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E8E5F3',
+    padding: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 14,
+    elevation: 2,
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  headerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F3EEFE',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E4DCFD',
+  },
+  headerBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#7C3AED',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.5,
+    marginBottom: 6,
+  },
+  headerSubtitle: {
+    fontSize: 13.5,
+    color: '#64748B',
+    lineHeight: 20,
+    maxWidth: 640,
+  },
+  headerPrimaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  actionBtnText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
-
-  modeTabsBar: {
-    padding: 14,
-    borderRadius: 14,
+  headerPrimaryBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  headerSecondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F3EEFE',
     borderWidth: 1,
+    borderColor: '#E4DCFD',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  headerSecondaryBtnText: {
+    color: '#7C3AED',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+
+  /* Metrics Cards Row */
+  metricsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
+    marginBottom: 20,
+  },
+  metricCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    minHeight: 110,
+    justifyContent: 'space-between',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  metricCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  metricValueText: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.5,
+  },
+  metricIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metricLabelText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 4,
+  },
+  waveContainer: {
+    marginTop: 4,
+    alignSelf: 'flex-start',
+  },
+
+  /* Filters & Tabs */
+  filtersContainer: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  searchAndUnitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  searchBox: {
+    flex: 1,
+    minWidth: 260,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 44,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13.5,
+    color: '#0F172A',
+    paddingVertical: 0,
+  },
+  unitScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  unitPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  unitPillActive: {
+    backgroundColor: '#F3EEFE',
+    borderColor: '#C4B5FD',
+  },
+  unitPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  unitPillTextActive: {
+    color: '#7C3AED',
+    fontWeight: '700',
+  },
+
+  modeTabsScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 2,
   },
   modeTab: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 7,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  modeTabText: { fontSize: 13, fontWeight: '700' },
+  modeTabActive: {
+    backgroundColor: '#7C3AED',
+    borderColor: '#7C3AED',
+  },
+  modeTabText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  modeTabTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
 
-  searchBox: {
+  /* Directory Grid */
+  deptGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 14,
+  },
+  deptGridDesktop: {
+    gap: 16,
+  },
+  deptCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#ECECF2',
+    padding: 18,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 1,
+    justifyContent: 'space-between',
+  },
+  deptCardTablet: {
+    width: '48.5%',
+  },
+  deptCardDesktop: {
+    width: '32%',
+    minWidth: 310,
+  },
+
+  deptCardTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
+    justifyContent: 'space-between',
   },
-  searchInput: { flex: 1, fontSize: 13 },
+  deptIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deptCountPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  deptCountPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  cardActionIconBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
 
-  // Board
+  deptCardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  deptCardDesc: {
+    fontSize: 12.5,
+    color: '#64748B',
+    lineHeight: 18,
+    minHeight: 36,
+  },
+
+  hodMiniCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 10,
+    marginTop: 12,
+  },
+  hodNameText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  hodBadgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  hodSubText: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  unassignedHodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  unassignedHodText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#D97706',
+  },
+  unassignedHodAction: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#7C3AED',
+  },
+
+  deptCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  avatarStack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatarStackItem: {
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    borderRadius: 999,
+  },
+  avatarStackMore: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#EDE9FE',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarStackMoreText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#7C3AED',
+  },
+  manageStaffBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F3EEFE',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  manageStaffBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#7C3AED',
+  },
+
+  /* Empty State */
+  emptyContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emptyTitle: {
+    fontSize: 15.5,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    maxWidth: 380,
+    marginBottom: 16,
+  },
+  emptyAddBtn: {
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  emptyAddBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  /* Kanban Board */
   kanbanBoardWrap: { minHeight: 540 },
-  boardColumns: { flexDirection: 'row', gap: 18, alignItems: 'flex-start', paddingBottom: 16 },
+  boardColumns: { flexDirection: 'row', gap: 16, alignItems: 'flex-start', paddingBottom: 16 },
   kanbanCol: {
     width: 310,
     borderRadius: 16,
     borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
     minHeight: 520,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
   colHead: {
     flexDirection: 'row',
@@ -1584,9 +2379,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    backgroundColor: '#FAF9FD',
   },
   colDot: { width: 8, height: 8, borderRadius: 4 },
-  colTitle: { fontSize: 14, fontWeight: '800', flex: 1 },
+  colTitle: { fontSize: 13.5, fontWeight: '800', color: '#0F172A', flex: 1 },
   colPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   colEditBtn: { padding: 4 },
 
@@ -1594,7 +2391,7 @@ const styles = StyleSheet.create({
   emptyColBox: {
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: '#cbd5e1',
+    borderColor: '#CBD5E1',
     borderRadius: 10,
     padding: 24,
     alignItems: 'center',
@@ -1606,35 +2403,167 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    gap: 4,
-    shadowColor: '#0b1c30',
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#0B1C30',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
     elevation: 1,
     cursor: 'grab' as any,
   },
-  cardEmpName: { fontSize: 13, fontWeight: '700' },
-  cardEmpSub: { fontSize: 11 },
-  movePill: { padding: 6, borderRadius: 6, borderWidth: 1 },
+  cardEmpName: { fontSize: 13, fontWeight: '700', color: '#0F172A' },
+  cardEmpSub: { fontSize: 11, color: '#64748B' },
+  movePill: { padding: 6, borderRadius: 6, borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#F8FAFC' },
 
-  // Tree View
-  treeContainer: { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
-  treeHead: { padding: 20, borderBottomWidth: 1 },
+  /* Tree View */
+  treeContainer: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  treeHead: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
   treeIconWrap: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  treeTitle: { fontSize: 16, fontWeight: '700' },
+  treeTitle: { fontSize: 15.5, fontWeight: '700', color: '#0F172A' },
   treeContent: { padding: 20, gap: 12 },
+  treeActionBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  treeActionBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  treeActionPrimaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#7C3AED',
+  },
+  treeActionPrimaryBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
 
-  alertBox: {
+  unassignedTreeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    borderLeftWidth: 3,
+    borderLeftColor: '#D97706',
+    backgroundColor: '#FFFFFF',
+    gap: 12,
+  },
+  unassignedEmpName: { fontSize: 13.5, fontWeight: '700', color: '#0F172A' },
+  unassignedWarningBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  unassignedWarningBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#B45309',
+  },
+  deptNeutralBadge: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  deptNeutralBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  unassignedEmpSub: { fontSize: 11.5, color: '#64748B' },
+  assignSupervisorBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#F3EEFE',
+    borderWidth: 1,
+    borderColor: '#E4DCFD',
+  },
+  assignSupervisorBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#7C3AED',
+  },
+
+  /* Modals Helpers */
+  modalAlertBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
   },
-  modalActions: { flexDirection: 'row', gap: 12, marginTop: 12 },
-  quickMoveRow: { padding: 14, borderRadius: 10, borderWidth: 1 },
+  reportingSummaryBox: {
+    padding: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 6,
+  },
+  reportingSummaryDivider: {
+    marginTop: 4,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  quickMoveRow: {
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  quickMoveRowText: {
+    fontWeight: '600',
+    color: '#0F172A',
+    fontSize: 13,
+  },
 });
 
 const treeStyles = StyleSheet.create({
@@ -1646,11 +2575,53 @@ const treeStyles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 12,
     borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
     gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
+    elevation: 1,
   },
   collapseBtn: { padding: 4 },
-  empName: { fontSize: 14, fontWeight: '700' },
-  designation: { fontSize: 12 },
+  empName: { fontSize: 13.5, fontWeight: '700', color: '#0F172A' },
+  designation: { fontSize: 11.5, color: '#64748B' },
+  leadershipBadge: {
+    backgroundColor: '#F3EEFE',
+    borderWidth: 1,
+    borderColor: '#E4DCFD',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  leadershipBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#7C3AED',
+  },
+  reportsToBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: '#F1F5F9',
+  },
+  reportsToBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  deptBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: '#EFF6FF',
+  },
+  deptBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
   reportsBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1658,6 +2629,12 @@ const treeStyles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+    backgroundColor: '#CCFBF1',
+  },
+  reportsBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0D9488',
   },
   editLineBtn: {
     flexDirection: 'row',
@@ -1667,10 +2644,17 @@ const treeStyles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  editLineBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#7C3AED',
   },
   childrenContainer: {
     borderLeftWidth: 2,
-    borderLeftColor: '#e2e8f0',
+    borderLeftColor: '#E2E8F0',
     marginLeft: 20,
     paddingLeft: 12,
     marginTop: 4,

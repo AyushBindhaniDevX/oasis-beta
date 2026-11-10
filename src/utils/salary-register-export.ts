@@ -425,7 +425,7 @@ export function generateSalaryRegisterHtml(
   <div class="signature-section">
     <div class="sig-line">Prepared By (HR Executive)</div>
     <div class="sig-line">Checked By (Accounts Dept)</div>
-    <div class="sig-line">Approved By (Medical Superintendent / Director)</div>
+    <div class="sig-line">Approved By (Managing Director / Operations Head)</div>
   </div>
 </body>
 </html>

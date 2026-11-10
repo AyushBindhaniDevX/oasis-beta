@@ -15,6 +15,14 @@ import LottieView from 'lottie-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
+import { BorderRadius, NotionColors, Shadows } from '@/constants/theme';
+import {
+  CraftButton,
+  CraftCard,
+  Typography,
+  T,
+  S,
+} from '@/components/ui/CraftKit';
 import { Select } from '@/components/ui/Select';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Button } from '@/components/ui/Button';
@@ -40,7 +48,7 @@ import {
   PartyPopper,
 } from 'lucide-react-native';
 
-const ICON_COLOR = '#006a61';
+const ICON_COLOR = NotionColors.primary;
 const ICON_SIZE = 18;
 
 function getLeaveIcon(name: string) {
@@ -302,27 +310,22 @@ export default function ApplyLeaveScreen() {
                 setStartDate(d);
                 setFieldErrors((prev) => ({ ...prev, startDate: '' }));
               }}
+              error={fieldErrors.startDate}
+              required
             />
-            {fieldErrors.startDate ? (
-              <Text style={[styles.fieldError, { color: colors.danger }]}>
-                {fieldErrors.startDate}
-              </Text>
-            ) : null}
           </View>
           <View style={isDesktop ? { flex: 1 } : {}}>
             <DatePicker
               label="End Date"
               value={endDate}
+              minDate={startDate || undefined}
               onChange={(d) => {
                 setEndDate(d);
                 setFieldErrors((prev) => ({ ...prev, endDate: '' }));
               }}
+              error={fieldErrors.endDate}
+              required
             />
-            {fieldErrors.endDate ? (
-              <Text style={[styles.fieldError, { color: colors.danger }]}>
-                {fieldErrors.endDate}
-              </Text>
-            ) : null}
           </View>
         </View>
 
@@ -424,20 +427,21 @@ export default function ApplyLeaveScreen() {
 
         {/* Actions */}
         <View style={styles.formActions}>
-          <Button
+          <CraftButton
             title="Cancel"
             onPress={() => {
               if (router.canGoBack()) router.back();
               else router.replace('/(employee)/leave' as never);
             }}
-            variant="outline"
-            style={{ flex: 1, borderRadius: 8 }}
+            variant="secondary"
+            style={{ flex: 1 }}
           />
-          <Button
+          <CraftButton
             title="Submit Request"
             onPress={handleSubmit}
             loading={submitting}
-            style={{ flex: 2, backgroundColor: colors.primary, borderRadius: 8 }}
+            variant="primary"
+            style={{ flex: 2 }}
           />
         </View>
       </View>

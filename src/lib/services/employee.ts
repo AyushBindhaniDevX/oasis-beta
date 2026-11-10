@@ -184,6 +184,34 @@ export async function getEmployeeById(id: string): Promise<Employee | null> {
   }
 }
 
+// In-memory cache for static organization metadata (departments, workplaces)
+let cachedAllDepartments: Department[] | null = null;
+let cachedAllDepartmentsTime = 0;
+let cachedAllWorkplaces: Workplace[] | null = null;
+let cachedAllWorkplacesTime = 0;
+const META_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+
+export function invalidateOrgMetaCache() {
+  cachedAllDepartments = null;
+  cachedAllDepartmentsTime = 0;
+  cachedAllWorkplaces = null;
+  cachedAllWorkplacesTime = 0;
+}
+
+// In-flight request deduplication and short-lived caching for getEmployees
+let cachedEmployeesKey: string | null = null;
+let cachedEmployeesData: Employee[] | null = null;
+let cachedEmployeesTime = 0;
+const inFlightEmployeesMap = new Map<string, Promise<Employee[]>>();
+const EMP_CACHE_TTL_MS = 15 * 1000; // 15 seconds
+
+export function invalidateEmployeeCache() {
+  cachedEmployeesKey = null;
+  cachedEmployeesData = null;
+  cachedEmployeesTime = 0;
+  inFlightEmployeesMap.clear();
+}
+
 export async function getEmployees(params?: {
   department_id?: string;
   workplace_id?: string;
@@ -193,114 +221,144 @@ export async function getEmployees(params?: {
   hospital_unit?: string;
   employment_type?: string;
 }): Promise<Employee[]> {
-  const { department_id, workplace_id, employment_status, search, organization_id, hospital_unit, employment_type } = params || {};
-
-  try {
-    const [empSnap, profSnap, deptSnap, wpSnap] = await Promise.all([
-      getDocs(collection(db, 'employees')),
-      getDocs(collection(db, 'profiles')),
-      getDocs(collection(db, 'departments')),
-      getDocs(collection(db, 'workplaces')),
-    ]);
-
-    const profMap = new Map<string, Profile>();
-    profSnap.forEach((d) => profMap.set(d.id, { id: d.id, ...d.data() } as Profile));
-
-    const deptMap = new Map<string, Department>();
-    deptSnap.forEach((d) => deptMap.set(d.id, { id: d.id, ...d.data() } as Department));
-
-    const wpMap = new Map<string, Workplace>();
-    wpSnap.forEach((d) => wpMap.set(d.id, { id: d.id, ...d.data() } as Workplace));
-
-    const employees: Employee[] = [];
-    empSnap.forEach((d) => {
-      const emp = { id: d.id, ...d.data() } as Employee;
-      emp.profile = emp.profile_id ? profMap.get(emp.profile_id) : undefined;
-      emp.department = emp.department_id ? deptMap.get(emp.department_id) : undefined;
-      emp.workplace = emp.workplace_id ? wpMap.get(emp.workplace_id) : undefined;
-      employees.push(emp);
-    });
-
-    // Populate L1, L2, L3, L4 managers and direct reports
-    const empLookup = new Map<string, Employee>();
-    employees.forEach((e) => {
-      empLookup.set(e.id, e);
-      if (e.profile_id) empLookup.set(e.profile_id, e);
-    });
-
-    employees.forEach((emp) => {
-      const l1 = emp.l1_manager_id ? empLookup.get(emp.l1_manager_id) : (emp.manager_id ? empLookup.get(emp.manager_id) : undefined);
-      emp.l1_manager = l1;
-      emp.manager = l1;
-      emp.l2_manager = emp.l2_manager_id ? empLookup.get(emp.l2_manager_id) : undefined;
-      emp.l3_manager = emp.l3_manager_id ? empLookup.get(emp.l3_manager_id) : undefined;
-      emp.l4_manager = emp.l4_manager_id ? empLookup.get(emp.l4_manager_id) : undefined;
-    });
-
-    let results = employees;
-
-    if (department_id) {
-      results = results.filter((e) => e.department_id === department_id);
-    }
-    if (workplace_id) {
-      results = results.filter((e) => e.workplace_id === workplace_id);
-    }
-    if (employment_status) {
-      results = results.filter((e) => e.employment_status === employment_status);
-    }
-    if (organization_id) {
-      results = results.filter(
-        (e) =>
-          e.organization_id === organization_id ||
-          e.profile?.organization_id === organization_id ||
-          e.workplace?.organization_id === organization_id ||
-          e.department?.organization_id === organization_id ||
-          (organization_id === 'shanti-memorial-hospital' &&
-            (e.organization_id === 'smh' || e.profile?.organization_id === 'smh' || e.organization_id === 'gopal-trust' || e.organization_id === 'chikitsa')) ||
-          (organization_id === 'gopal-trust' &&
-            (e.hospital_unit === 'Gopal Trust' || e.workplace_id === 'wp-1793201564704' || e.organization_id === 'gopal-trust')) ||
-          (organization_id === 'chikitsa' &&
-            (e.hospital_unit === 'Chikitsa' || e.workplace_id === 'wp-1793201579968' || e.organization_id === 'chikitsa'))
-      );
-    }
-    if (hospital_unit && hospital_unit !== 'all') {
-      const huLower = hospital_unit.toLowerCase();
-      results = results.filter((e) => {
-        const u = (e.hospital_unit || '').toLowerCase();
-        const wpName = (e.workplace?.name || '').toLowerCase();
-        return (
-          u === huLower ||
-          wpName === huLower ||
-          (u && (u.includes(huLower) || huLower.includes(u))) ||
-          (wpName && (wpName.includes(huLower) || huLower.includes(wpName))) ||
-          e.workplace_id === hospital_unit
-        );
-      });
-    }
-    if (employment_type && employment_type !== 'all') {
-      const etTarget = employment_type.toLowerCase();
-      results = results.filter((e) => {
-        const et = (e.employment_type || (e.is_pf_eligible ? 'Regular' : 'Contractual')).toLowerCase();
-        if (etTarget.includes('contract')) return et.includes('contract');
-        return !et.includes('contract');
-      });
-    }
-    if (search) {
-      const s = search.toLowerCase();
-      results = results.filter(
-        (e) =>
-          e.profile?.full_name?.toLowerCase().includes(s) ||
-          e.designation?.toLowerCase().includes(s) ||
-          e.employee_code?.toLowerCase().includes(s) ||
-          e.profile?.email?.toLowerCase().includes(s)
-      );
-    }
-
-    return results;
-  } catch (err) {
-    console.error('getEmployees error:', err);
-    return [];
+  const cacheKey = JSON.stringify(params || {});
+  const now = Date.now();
+  if (cachedEmployeesKey === cacheKey && cachedEmployeesData && now - cachedEmployeesTime < EMP_CACHE_TTL_MS) {
+    return cachedEmployeesData;
   }
+
+  if (inFlightEmployeesMap.has(cacheKey)) {
+    return inFlightEmployeesMap.get(cacheKey)!;
+  }
+
+  const queryPromise = (async () => {
+    const { department_id, workplace_id, employment_status, search, organization_id, hospital_unit, employment_type } = params || {};
+
+    try {
+      const [empSnap, profSnap, depts, workplaces] = await Promise.all([
+        getDocs(collection(db, 'employees')),
+        getDocs(collection(db, 'profiles')),
+        getDepartments(),
+        getWorkplaces(),
+      ]);
+
+      const profMap = new Map<string, Profile>();
+      profSnap.forEach((d) => profMap.set(d.id, { id: d.id, ...d.data() } as Profile));
+
+      const deptMap = new Map<string, Department>();
+      depts.forEach((d) => deptMap.set(d.id, d));
+
+      const wpMap = new Map<string, Workplace>();
+      workplaces.forEach((w) => wpMap.set(w.id, w));
+
+      const employees: Employee[] = [];
+      empSnap.forEach((d) => {
+        const emp = { id: d.id, ...d.data() } as Employee;
+        emp.profile = emp.profile_id ? profMap.get(emp.profile_id) : undefined;
+        emp.department = emp.department_id ? deptMap.get(emp.department_id) : undefined;
+        emp.workplace = emp.workplace_id ? wpMap.get(emp.workplace_id) : undefined;
+        employees.push(emp);
+      });
+
+      // Populate L1, L2, L3, L4 managers and direct reports
+      const empLookup = new Map<string, Employee>();
+      employees.forEach((e) => {
+        empLookup.set(e.id, e);
+        if (e.profile_id) empLookup.set(e.profile_id, e);
+      });
+
+      employees.forEach((emp) => {
+        const l1 = emp.l1_manager_id ? empLookup.get(emp.l1_manager_id) : (emp.manager_id ? empLookup.get(emp.manager_id) : undefined);
+        emp.l1_manager = l1;
+        emp.manager = l1;
+        emp.l2_manager = emp.l2_manager_id ? empLookup.get(emp.l2_manager_id) : undefined;
+        emp.l3_manager = emp.l3_manager_id ? empLookup.get(emp.l3_manager_id) : undefined;
+        emp.l4_manager = emp.l4_manager_id ? empLookup.get(emp.l4_manager_id) : undefined;
+      });
+
+      let results = employees;
+
+      if (department_id) {
+        results = results.filter((e) => e.department_id === department_id);
+      }
+      if (workplace_id) {
+        results = results.filter((e) => e.workplace_id === workplace_id);
+      }
+      if (employment_status) {
+        results = results.filter((e) => e.employment_status === employment_status);
+      }
+      if (organization_id) {
+        const isSubedge = organization_id === 'subedge' || organization_id === '00000000-0000-0000-0000-000000000001';
+        const isSmh = organization_id === 'shanti-memorial-hospital' || organization_id === 'smh' || organization_id === 'chikitsa' || organization_id === 'gopal-trust';
+
+        results = results.filter((e) => {
+          if (isSubedge) {
+            return (
+              e.organization_id === '00000000-0000-0000-0000-000000000001' ||
+              e.organization_id === 'subedge' ||
+              (!e.organization_id && (e.profile?.organization_id === '00000000-0000-0000-0000-000000000001' || e.profile?.organization_id === 'subedge'))
+            );
+          }
+          if (isSmh) {
+            return (
+              e.organization_id === 'shanti-memorial-hospital' ||
+              e.organization_id === 'smh' ||
+              (!e.organization_id && (e.profile?.organization_id === 'shanti-memorial-hospital' || e.profile?.organization_id === 'smh'))
+            );
+          }
+          return (
+            e.organization_id === organization_id ||
+            (!e.organization_id && e.profile?.organization_id === organization_id)
+          );
+        });
+      }
+      if (hospital_unit && hospital_unit !== 'all') {
+        const huLower = hospital_unit.toLowerCase();
+        results = results.filter((e) => {
+          const u = (e.hospital_unit || '').toLowerCase();
+          const wpName = (e.workplace?.name || '').toLowerCase();
+          return (
+            u === huLower ||
+            wpName === huLower ||
+            (u && (u.includes(huLower) || huLower.includes(u))) ||
+            (wpName && (wpName.includes(huLower) || huLower.includes(wpName))) ||
+            e.workplace_id === hospital_unit
+          );
+        });
+      }
+      if (employment_type && employment_type !== 'all') {
+        const etTarget = employment_type.toLowerCase();
+        results = results.filter((e) => {
+          const et = (e.employment_type || (e.is_pf_eligible ? 'Regular' : 'Contractual')).toLowerCase();
+          if (etTarget.includes('contract')) return et.includes('contract');
+          return !et.includes('contract');
+        });
+      }
+      if (search) {
+        const s = search.toLowerCase();
+        results = results.filter(
+          (e) =>
+            e.profile?.full_name?.toLowerCase().includes(s) ||
+            e.designation?.toLowerCase().includes(s) ||
+            e.employee_code?.toLowerCase().includes(s) ||
+            e.profile?.email?.toLowerCase().includes(s)
+        );
+      }
+
+      cachedEmployeesKey = cacheKey;
+      cachedEmployeesData = results;
+      cachedEmployeesTime = Date.now();
+      return results;
+    } catch (err) {
+      console.error('getEmployees error:', err);
+      return [];
+    } finally {
+      inFlightEmployeesMap.delete(cacheKey);
+    }
+  })();
+
+  inFlightEmployeesMap.set(cacheKey, queryPromise);
+  return queryPromise;
 }
 
 export async function getDirectory(search?: string, departmentId?: string, organizationId?: string): Promise<Employee[]> {
@@ -439,6 +497,7 @@ export async function createEmployee(params: {
   };
 
   await setDoc(doc(db, 'employees', empId), sanitizeFirestoreData(empPayload));
+  invalidateEmployeeCache();
 
   // Link initial shift to employee_shifts roster
   if (params.default_shift_id) {
@@ -538,6 +597,7 @@ export async function updateEmployee(id: string, updates: Record<string, any>): 
   }
 
   const cleanPayload = sanitizeFirestoreData(payload);
+  invalidateEmployeeCache();
   await updateDoc(doc(db, 'employees', id), cleanPayload);
   if (updates.is_hhc_enabled !== undefined || updates.hhc_role !== undefined) {
     try {
@@ -607,20 +667,26 @@ export async function completeOnboarding(
 
 export async function getDepartments(organizationId?: string): Promise<Department[]> {
   try {
-    const snap = await getDocs(collection(db, 'departments'));
-    const depts: Department[] = [];
-    snap.forEach((d) => {
-      const dept = { id: d.id, ...d.data() } as Department;
-      if (
-        !organizationId ||
-        dept.organization_id === organizationId ||
-        (organizationId === 'shanti-memorial-hospital' &&
-          (dept.organization_id === 'smh' || dept.organization_id === 'gopal-trust' || dept.organization_id === 'chikitsa')) ||
-        (organizationId === 'gopal-trust' && (dept.organization_id === 'shanti-memorial-hospital' || dept.organization_id === 'smh')) ||
-        (organizationId === 'chikitsa' && (dept.organization_id === 'shanti-memorial-hospital' || dept.organization_id === 'smh'))
-      ) {
-        depts.push(dept);
+    const now = Date.now();
+    if (!cachedAllDepartments || now - cachedAllDepartmentsTime > META_CACHE_TTL_MS) {
+      const snap = await getDocs(collection(db, 'departments'));
+      const list: Department[] = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() } as Department));
+      cachedAllDepartments = list;
+      cachedAllDepartmentsTime = now;
+    }
+    const snapList = cachedAllDepartments || [];
+    const depts = snapList.filter((dept) => {
+      if (!organizationId) return true;
+      const isSubedge = organizationId === 'subedge' || organizationId === '00000000-0000-0000-0000-000000000001';
+      const isSmh = organizationId === 'shanti-memorial-hospital' || organizationId === 'smh' || organizationId === 'chikitsa' || organizationId === 'gopal-trust';
+      if (isSubedge) {
+        return dept.organization_id === '00000000-0000-0000-0000-000000000001' || dept.organization_id === 'subedge';
       }
+      if (isSmh) {
+        return dept.organization_id === 'shanti-memorial-hospital' || dept.organization_id === 'smh';
+      }
+      return dept.organization_id === organizationId;
     });
 
     depts.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -660,6 +726,8 @@ export async function createDepartment(params: {
   description?: string;
   manager_id?: string | null;
 }): Promise<Department> {
+  invalidateOrgMetaCache();
+  invalidateEmployeeCache();
   const deptId = `dept-${Date.now()}`;
   const now = new Date().toISOString();
   const dept: Department = {
@@ -679,14 +747,19 @@ export async function updateDepartment(
   id: string,
   updates: Partial<Pick<Department, 'name' | 'description' | 'manager_id'>>
 ): Promise<void> {
+  invalidateOrgMetaCache();
+  invalidateEmployeeCache();
   await updateDoc(doc(db, 'departments', id), updates);
 }
 
 export async function deleteDepartment(id: string): Promise<void> {
+  invalidateOrgMetaCache();
+  invalidateEmployeeCache();
   await deleteDoc(doc(db, 'departments', id));
 }
 
 export async function updateReportingManager(employeeId: string, managerId: string | null): Promise<void> {
+  invalidateEmployeeCache();
   const resolvedManagerId = managerId && managerId.trim() !== '' && managerId !== 'none' && managerId !== 'null' ? managerId : null;
   await updateDoc(doc(db, 'employees', employeeId), {
     manager_id: resolvedManagerId,
@@ -738,20 +811,26 @@ export async function getOrgHierarchy(organizationId?: string): Promise<Employee
 
 export async function getWorkplaces(organizationId?: string): Promise<Workplace[]> {
   try {
-    const snap = await getDocs(collection(db, 'workplaces'));
-    const wps: Workplace[] = [];
-    snap.forEach((d) => {
-      const wp = { id: d.id, ...d.data() } as Workplace;
-      if (
-        !organizationId ||
-        wp.organization_id === organizationId ||
-        (organizationId === 'shanti-memorial-hospital' &&
-          (wp.organization_id === 'smh' || wp.organization_id === 'gopal-trust' || wp.organization_id === 'chikitsa')) ||
-        (organizationId === 'gopal-trust' && (wp.organization_id === 'shanti-memorial-hospital' || wp.organization_id === 'smh')) ||
-        (organizationId === 'chikitsa' && (wp.organization_id === 'shanti-memorial-hospital' || wp.organization_id === 'smh'))
-      ) {
-        wps.push(wp);
+    const now = Date.now();
+    if (!cachedAllWorkplaces || now - cachedAllWorkplacesTime > META_CACHE_TTL_MS) {
+      const snap = await getDocs(collection(db, 'workplaces'));
+      const list: Workplace[] = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() } as Workplace));
+      cachedAllWorkplaces = list;
+      cachedAllWorkplacesTime = now;
+    }
+    const snapList = cachedAllWorkplaces || [];
+    const wps = snapList.filter((wp) => {
+      if (!organizationId) return true;
+      const isSubedge = organizationId === 'subedge' || organizationId === '00000000-0000-0000-0000-000000000001';
+      const isSmh = organizationId === 'shanti-memorial-hospital' || organizationId === 'smh' || organizationId === 'chikitsa' || organizationId === 'gopal-trust';
+      if (isSubedge) {
+        return wp.organization_id === '00000000-0000-0000-0000-000000000001' || wp.organization_id === 'subedge';
       }
+      if (isSmh) {
+        return wp.organization_id === 'shanti-memorial-hospital' || wp.organization_id === 'smh';
+      }
+      return wp.organization_id === organizationId;
     });
 
     wps.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -770,6 +849,8 @@ export async function createWorkplace(params: {
   longitude: number;
   radius_meters: number;
 }): Promise<Workplace> {
+  invalidateOrgMetaCache();
+  invalidateEmployeeCache();
   const wpId = `wp-${Date.now()}`;
   const now = new Date().toISOString();
   const wp: Workplace = {
@@ -789,6 +870,8 @@ export async function createWorkplace(params: {
 }
 
 export async function updateWorkplace(id: string, updates: Partial<Workplace>): Promise<void> {
+  invalidateOrgMetaCache();
+  invalidateEmployeeCache();
   await updateDoc(doc(db, 'workplaces', id), updates);
 }
 

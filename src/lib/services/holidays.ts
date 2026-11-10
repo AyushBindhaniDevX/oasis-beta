@@ -61,7 +61,13 @@ export async function getHolidays(organizationId?: string, year?: number): Promi
       const h = { id: d.id, ...d.data() } as Holiday;
       if (h.date >= startOfYear && h.date <= endOfYear) {
         if (organizationId) {
-          if (h.organization_id === organizationId || (organizationId === 'shanti-memorial-hospital' && h.organization_id === 'smh')) {
+          const isSubedge = organizationId === 'subedge' || organizationId === '00000000-0000-0000-0000-000000000001';
+          const isSmh = organizationId === 'shanti-memorial-hospital' || organizationId === 'smh' || organizationId === 'chikitsa' || organizationId === 'gopal-trust';
+          if (isSubedge && (h.organization_id === '00000000-0000-0000-0000-000000000001' || h.organization_id === 'subedge')) {
+            allHolidays.push(h);
+          } else if (isSmh && (h.organization_id === 'shanti-memorial-hospital' || h.organization_id === 'smh')) {
+            allHolidays.push(h);
+          } else if (h.organization_id === organizationId) {
             allHolidays.push(h);
           }
         } else {

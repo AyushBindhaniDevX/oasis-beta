@@ -3,7 +3,7 @@ import { View, PanResponder, Platform } from 'react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { usePathname } from 'expo-router';
 
-const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+const IDLE_TIMEOUT_MS = __DEV__ ? 120 * 60 * 1000 : 30 * 60 * 1000; // 2 hours in development, 30 min in production
 
 export function SessionManager({ children }: { children: React.ReactNode }) {
   const { signOut, user } = useAuth();

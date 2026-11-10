@@ -26,7 +26,7 @@ import { getShifts, assignEmployeeShift } from '@/lib/services/shifts';
 import { updateUserProfileData } from '@/lib/services/organization';
 import { getLeaveBalances, getLeaveTypes, updateLeaveBalance } from '@/lib/services/leave';
 import { formatDate, formatCurrency } from '@/utils/format';
-import { HOSPITAL_UNITS, EMPLOYMENT_TYPES } from '@/constants/config';
+import { HOSPITAL_UNITS, EMPLOYMENT_TYPES, isShantiHospitalOrg, getTenantDefaultUnits } from '@/constants/config';
 import { AppointmentLetterModal } from '@/components/AppointmentLetterModal';
 import { resendAppointmentLetterEmail, downloadAppointmentLetterPdf } from '@/lib/services/appointmentLetters';
 import { HhcRoleSelector } from '@/components/HhcRoleSelector';
@@ -118,6 +118,10 @@ export default function EmployeeDetailScreen() {
       setDownloadingApptPdf(false);
     }
   };
+
+  const isShantiOrg = React.useMemo(() => {
+    return isShantiHospitalOrg(tenantOrg?.id || profile?.organization_id, tenantOrg?.name);
+  }, [tenantOrg, profile]);
 
   // Dropdown lists
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -317,8 +321,8 @@ export default function EmployeeDetailScreen() {
         basic_salary: parseFloat(basicSalary) || 0,
         employment_status: status as any,
         joining_date: joiningDate || null,
-        is_hhc_enabled: isHhcEnabled,
-        hhc_role: isHhcEnabled ? hhcRole : null,
+        is_hhc_enabled: isShantiOrg ? isHhcEnabled : false,
+        hhc_role: (isShantiOrg && isHhcEnabled) ? hhcRole : null,
         hospital_unit: hospitalUnit,
         employment_type: employmentType as any,
         grade: grade.trim() || null,
@@ -429,21 +433,23 @@ export default function EmployeeDetailScreen() {
             <Row label="Assigned Shift" value={currentShift ? `${currentShift.name} (${currentShift.start_time} - ${currentShift.end_time})` : 'Standard'} colors={colors} />
             <Row label="Basic Salary" value={formatCurrency(emp.basic_salary)} colors={colors} />
             <Row label="Joining Date" value={emp.joining_date ? formatDate(emp.joining_date) : 'N/A'} colors={colors} />
-            <Row
-              label="Home Health Care (HHC)"
-              value={
-                (emp.is_hhc_enabled || emp.profile?.is_hhc_enabled)
-                  ? `Enabled (${
-                      (emp.hhc_role || emp.profile?.hhc_role) === 'supervisor'
-                        ? 'Supervisor & Dispatch Lead'
-                        : (emp.hhc_role || emp.profile?.hhc_role) === 'doctor'
-                        ? 'Doctor & Clinical Assessor'
-                        : 'Field Worker & Paramedic'
-                    })`
-                  : 'Disabled'
-              }
-              colors={colors}
-            />
+            {isShantiOrg && (
+              <Row
+                label="Home Health Care (HHC)"
+                value={
+                  (emp.is_hhc_enabled || emp.profile?.is_hhc_enabled)
+                    ? `Enabled (${
+                        (emp.hhc_role || emp.profile?.hhc_role) === 'supervisor'
+                          ? 'Supervisor & Dispatch Lead'
+                          : (emp.hhc_role || emp.profile?.hhc_role) === 'doctor'
+                          ? 'Doctor & Clinical Assessor'
+                          : 'Field Worker & Paramedic'
+                      })`
+                    : 'Disabled'
+                }
+                colors={colors}
+              />
+            )}
           </Card>
 
           {/* Statutory & Tax Settings Card */}
@@ -718,7 +724,7 @@ export default function EmployeeDetailScreen() {
                     value: w.name,
                   }));
                 }
-                return HOSPITAL_UNITS.map((u) => ({ label: u, value: u }));
+                return getTenantDefaultUnits(tenantOrg?.name, tenantOrg?.id || profile?.organization_id).map((u) => ({ label: u, value: u }));
               })()}
             />
             <Select
@@ -789,7 +795,7 @@ export default function EmployeeDetailScreen() {
             />
 
             <Select
-              label="L4 Manager (Director / Medical Superintendent / Admin)"
+              label="L4 Manager (Director / VP / HR Admin)"
               value={l4ManagerId || ''}
               onValueChange={(v) => setL4ManagerId(v || null)}
               options={[
@@ -834,14 +840,16 @@ export default function EmployeeDetailScreen() {
               ]}
             />
 
-            {/* Healthcare & HHC Role Configuration */}
-            <HhcRoleSelector
-              enabled={isHhcEnabled}
-              onEnabledChange={setIsHhcEnabled}
-              role={hhcRole}
-              onRoleChange={setHhcRole}
-              colors={colors}
-            />
+            {/* Healthcare & HHC Role Configuration (Shanti Hospital Only) */}
+            {isShantiOrg && (
+              <HhcRoleSelector
+                enabled={isHhcEnabled}
+                onEnabledChange={setIsHhcEnabled}
+                role={hhcRole}
+                onRoleChange={setHhcRole}
+                colors={colors}
+              />
+            )}
 
             <Input
               label="Joining Date (YYYY-MM-DD)"

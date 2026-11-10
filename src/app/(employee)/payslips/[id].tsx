@@ -9,10 +9,16 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import {
+  CraftButton,
+  CraftCard,
+  Typography,
+  T,
+  S,
+} from '@/components/ui/CraftKit';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
 import { LoadingState } from '@/components/ui/States';
 import { getPayslipDetail } from '@/lib/services/payroll';
 import { getEmployeeByProfileId } from '@/lib/services/employee';
@@ -82,7 +88,7 @@ export default function PayslipDetailScreen() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
         <Text style={{ color: colors.textSecondary }}>Payslip statement not found</Text>
-        <Button title="Go Back" onPress={() => router.back()} style={{ marginTop: 12 }} />
+        <CraftButton title="Go Back" onPress={() => router.back()} style={{ marginTop: 12 }} />
       </View>
     );
   }
@@ -289,12 +295,13 @@ export default function PayslipDetailScreen() {
 
         {/* Action Button */}
         <View style={{ marginTop: 14 }}>
-          <Button
+          <CraftButton
             title="Download / Print PDF Payslip"
             icon={<Download size={16} color="#FFF" />}
             onPress={handleDownloadPdf}
             loading={downloading}
-            style={{ backgroundColor: '#0D7377', borderRadius: 8 }}
+            variant="primary"
+            fullWidth
           />
         </View>
       </ScrollView>

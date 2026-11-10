@@ -1,4 +1,4 @@
-import { db } from '@/lib/firebase';
+import { db, sanitizeFirestoreData } from '@/lib/firebase';
 import {
   doc,
   getDoc,
@@ -69,7 +69,7 @@ export async function trackUserActivity(payload: UserActivityPayload): Promise<v
       created_at: now,
     };
 
-    await setDoc(doc(db, 'audit_logs', logId), logEntry);
+    await setDoc(doc(db, 'audit_logs', logId), sanitizeFirestoreData(logEntry));
 
     // Update profile last_active timestamp
     if (payload.userId) {

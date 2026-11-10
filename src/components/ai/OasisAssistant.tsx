@@ -25,7 +25,7 @@ export function OasisAssistant({ visible, onClose }: { visible: boolean; onClose
   const [error, setError] = useState('');
   
   const chatSessionRef = useRef<any>(null);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<React.ElementRef<typeof ScrollView>>(null);
 
   useEffect(() => {
     if (visible && profile && !chatSessionRef.current) {

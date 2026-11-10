@@ -13,14 +13,14 @@ export default function AdminLayout() {
   // Allow both Admin and HR roles into AdminLayout
   if (role !== 'admin' && role !== 'hr') return <Redirect href="/(employee)/dashboard" />;
 
-  // Restrict HR users strictly to user/employee management routes
+  // Restrict HR users strictly to user/employee, reports, and modules directory routes
   if (role === 'hr') {
-    const isUsersRoute = (segments as string[]).includes('users');
-    if (!isUsersRoute) {
+    const isAllowedRoute = (segments as string[]).includes('users') || (segments as string[]).includes('reports') || (segments as string[]).includes('modules');
+    if (!isAllowedRoute) {
       return <Redirect href="/(hr)/dashboard" />;
     }
   }
 
-  return <Stack screenOptions={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />;
+  return <Stack screenOptions={{ headerShown: false, gestureEnabled: false, fullScreenGestureEnabled: false, animation: 'fade' }} />;
 }
 

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Modal,
   TextInput,
   RefreshControl,
   useWindowDimensions,
@@ -14,6 +13,7 @@ import {
   Animated,
   Easing,
 } from 'react-native';
+import { Modal } from '@/components/ui/Modal';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { isWebCameraAvailable } from '@/utils/mediaDevicesPolyfill';
 import { SidebarLayout } from '@/components/layout/Sidebar';
@@ -631,20 +631,14 @@ export default function HRAssetsScreen() {
         {/* MODAL 1: PHYSICAL CAMERA BARCODE & QR AUDIT SCANNER */}
         {/* ======================================================== */}
         {showScannerModal && (
-          <Modal visible={showScannerModal} animationType="slide" transparent>
-            <View style={styles.modalOverlay}>
-              <View style={[styles.scannerModal, isMobile && styles.scannerModalMobile]}>
-                <View style={styles.modalHeader}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Camera size={20} color="#0D7377" />
-                    <Text style={styles.modalTitle}>Physical Hardware Barcode Scanner</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => setShowScannerModal(false)} style={styles.modalCloseBtn}>
-                    <X size={20} color="#64748B" />
-                  </TouchableOpacity>
-                </View>
-
-                <ScrollView style={{ padding: isMobile ? 14 : 20 }} showsVerticalScrollIndicator={false}>
+          <Modal
+            visible={showScannerModal}
+            onClose={() => setShowScannerModal(false)}
+            title="Physical Hardware Barcode Scanner"
+            subtitle="Point camera at device QR or Barcode tag"
+            icon={<Camera size={20} color="#0D7377" />}
+            size="md"
+          >
                   {/* Camera View / Permission Request */}
                   {!isCameraSupported ? (
                     <View style={[styles.cameraPermissionBox, { borderColor: '#F59E0B' }]}>
@@ -809,9 +803,6 @@ export default function HRAssetsScreen() {
                       <Text style={styles.auditSuccessText}>{auditSuccessMsg}</Text>
                     </View>
                   )}
-                </ScrollView>
-              </View>
-            </View>
           </Modal>
         )}
 
@@ -819,108 +810,99 @@ export default function HRAssetsScreen() {
         {/* MODAL 2: ASSIGN ASSET (REAL EMPLOYEE MULTIPLE CHOICE) */}
         {/* ======================================================== */}
         {assignAsset && (
-          <Modal visible={!!assignAsset} animationType="slide" transparent>
-            <View style={styles.modalOverlay}>
-              <View style={[styles.employeePickerModal, isMobile && styles.employeePickerModalMobile]}>
-                <View style={styles.modalHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.modalTitle}>Assign Hardware to Employee</Text>
-                    <Text style={styles.modalSubtitle}>
-                      {assignAsset.name} ({assignAsset.asset_tag})
-                    </Text>
-                  </View>
-                  <TouchableOpacity onPress={() => setAssignAsset(null)} style={styles.modalCloseBtn}>
-                    <X size={20} color="#64748B" />
+          <Modal
+            visible={!!assignAsset}
+            onClose={() => setAssignAsset(null)}
+            title="Assign Hardware to Employee"
+            subtitle={`${assignAsset.name} (${assignAsset.asset_tag})`}
+            icon={<UserCheck size={20} color="#0D7377" />}
+            size="md"
+          >
+            <View style={{ flex: 1 }}>
+              {/* Search Employees */}
+              <View style={[styles.searchBar, { marginBottom: 12 }]}>
+                <Search size={16} color="#64748B" />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search employee by name, code, designation, or department..."
+                  value={employeeSearch}
+                  onChangeText={setEmployeeSearch}
+                  placeholderTextColor="#94A3B8"
+                />
+                {employeeSearch.length > 0 && (
+                  <TouchableOpacity onPress={() => setEmployeeSearch('')}>
+                    <X size={16} color="#64748B" />
                   </TouchableOpacity>
-                </View>
-
-                <View style={{ padding: isMobile ? 14 : 20, flex: 1 }}>
-                  {/* Search Employees */}
-                  <View style={[styles.searchBar, { marginBottom: 12 }]}>
-                    <Search size={16} color="#64748B" />
-                    <TextInput
-                      style={styles.searchInput}
-                      placeholder="Search employee by name, code, designation, or department..."
-                      value={employeeSearch}
-                      onChangeText={setEmployeeSearch}
-                      placeholderTextColor="#94A3B8"
-                    />
-                    {employeeSearch.length > 0 && (
-                      <TouchableOpacity onPress={() => setEmployeeSearch('')}>
-                        <X size={16} color="#64748B" />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-
-                  <Text style={styles.label}>Select Target Employee ({filteredEmployees.length} Available)</Text>
-
-                  <ScrollView style={{ flex: 1, maxHeight: isMobile ? 320 : 280 }} showsVerticalScrollIndicator={true}>
-                    {filteredEmployees.length === 0 ? (
-                      <View style={{ padding: 24, alignItems: 'center' }}>
-                        <User size={30} color="#94A3B8" />
-                        <Text style={{ marginTop: 8, color: '#64748B', fontSize: 13 }}>No matching employees found.</Text>
-                      </View>
-                    ) : (
-                      <View style={{ gap: 8 }}>
-                        {filteredEmployees.map((emp) => {
-                          const isSelected = selectedEmployee?.id === emp.id;
-                          const empName = emp.profile?.full_name || emp.employee_code;
-                          const initials = (empName || 'U').substring(0, 2).toUpperCase();
-
-                          return (
-                            <TouchableOpacity
-                              key={emp.id}
-                              onPress={() => setSelectedEmployee(emp)}
-                              style={[styles.empSelectCard, isSelected && styles.empSelectCardActive]}
-                              activeOpacity={0.8}
-                            >
-                              <View style={styles.empAvatar}>
-                                <Text style={styles.empAvatarText}>{initials}</Text>
-                              </View>
-
-                              <View style={{ flex: 1 }}>
-                                <Text style={[styles.empName, isSelected && { color: '#0D7377' }]}>{empName}</Text>
-                                <Text style={styles.empSub}>
-                                  {emp.designation || 'Staff'} · {emp.department?.name || 'Subedge'}
-                                </Text>
-                                <Text style={styles.empCode}>Code: {emp.employee_code}</Text>
-                              </View>
-
-                              <View style={[styles.radioCircle, isSelected && styles.radioCircleActive]}>
-                                {isSelected && <View style={styles.radioDot} />}
-                              </View>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    )}
-                  </ScrollView>
-
-                  {/* Confirmation Action */}
-                  <TouchableOpacity
-                    onPress={handleAssignSubmit}
-                    disabled={!selectedEmployee || assigning}
-                    style={[
-                      styles.modalSubmitBtn,
-                      (!selectedEmployee || assigning) && { opacity: 0.5 },
-                      { marginTop: 14 },
-                    ]}
-                  >
-                    {assigning ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <>
-                        <UserCheck size={16} color="#FFFFFF" />
-                        <Text style={styles.modalSubmitText}>
-                          {selectedEmployee
-                            ? `Confirm Deployment to ${selectedEmployee.profile?.full_name || selectedEmployee.employee_code}`
-                            : 'Select an Employee to Proceed'}
-                        </Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                </View>
+                )}
               </View>
+
+              <Text style={styles.label}>Select Target Employee ({filteredEmployees.length} Available)</Text>
+
+              <ScrollView style={{ flex: 1, maxHeight: isMobile ? 320 : 280 }} showsVerticalScrollIndicator={true}>
+                {filteredEmployees.length === 0 ? (
+                  <View style={{ padding: 24, alignItems: 'center' }}>
+                    <User size={30} color="#94A3B8" />
+                    <Text style={{ marginTop: 8, color: '#64748B', fontSize: 13 }}>No matching employees found.</Text>
+                  </View>
+                ) : (
+                  <View style={{ gap: 8 }}>
+                    {filteredEmployees.map((emp) => {
+                      const isSelected = selectedEmployee?.id === emp.id;
+                      const empName = emp.profile?.full_name || emp.employee_code;
+                      const initials = (empName || 'U').substring(0, 2).toUpperCase();
+
+                      return (
+                        <TouchableOpacity
+                          key={emp.id}
+                          onPress={() => setSelectedEmployee(emp)}
+                          style={[styles.empSelectCard, isSelected && styles.empSelectCardActive]}
+                          activeOpacity={0.8}
+                        >
+                          <View style={styles.empAvatar}>
+                            <Text style={styles.empAvatarText}>{initials}</Text>
+                          </View>
+
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.empName, isSelected && { color: '#0D7377' }]}>{empName}</Text>
+                            <Text style={styles.empSub}>
+                              {emp.designation || 'Staff'} · {emp.department?.name || 'Subedge'}
+                            </Text>
+                            <Text style={styles.empCode}>Code: {emp.employee_code}</Text>
+                          </View>
+
+                          <View style={[styles.radioCircle, isSelected && styles.radioCircleActive]}>
+                            {isSelected && <View style={styles.radioDot} />}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+              </ScrollView>
+
+              {/* Confirmation Action */}
+              <TouchableOpacity
+                onPress={handleAssignSubmit}
+                disabled={!selectedEmployee || assigning}
+                style={[
+                  styles.modalSubmitBtn,
+                  (!selectedEmployee || assigning) && { opacity: 0.5 },
+                  { marginTop: 14 },
+                ]}
+              >
+                {assigning ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <UserCheck size={16} color="#FFFFFF" />
+                    <Text style={styles.modalSubmitText}>
+                      {selectedEmployee
+                        ? `Confirm Deployment to ${selectedEmployee.profile?.full_name || selectedEmployee.employee_code}`
+                        : 'Select an Employee to Proceed'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
           </Modal>
         )}
@@ -929,52 +911,48 @@ export default function HRAssetsScreen() {
         {/* MODAL 3: PRINTABLE BARCODE & QR CODE BADGE */}
         {/* ======================================================== */}
         {showBarcodeModal && (
-          <Modal visible={!!showBarcodeModal} animationType="fade" transparent>
-            <View style={styles.modalOverlay}>
-              <View style={[styles.barcodeModal, isMobile && { width: '95%' }]}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Hardware Barcode Sticker</Text>
-                  <TouchableOpacity onPress={() => setShowBarcodeModal(null)}>
-                    <X size={20} color="#64748B" />
-                  </TouchableOpacity>
+          <Modal
+            visible={!!showBarcodeModal}
+            onClose={() => setShowBarcodeModal(null)}
+            title="Hardware Barcode Sticker"
+            subtitle={showBarcodeModal.asset_tag}
+            icon={<Barcode size={20} color="#0D7377" />}
+            size="sm"
+          >
+            <View style={{ alignItems: 'center', paddingVertical: 12 }}>
+              <View style={styles.barcodeCardSim}>
+                <Text style={styles.barcodeLabelOrg}>SUBEDGE TECHNOLOGY PVT LTD</Text>
+                <Text style={styles.barcodeLabelDept}>PROPERTY OF IT ASSET OPERATIONS</Text>
+
+                {/* Barcode Graphic Simulation */}
+                <View style={styles.barcodeBars}>
+                  <View style={{ width: 4, height: 50, backgroundColor: '#000' }} />
+                  <View style={{ width: 2, height: 50, backgroundColor: '#000' }} />
+                  <View style={{ width: 6, height: 50, backgroundColor: '#000' }} />
+                  <View style={{ width: 3, height: 50, backgroundColor: '#000' }} />
+                  <View style={{ width: 5, height: 50, backgroundColor: '#000' }} />
+                  <View style={{ width: 2, height: 50, backgroundColor: '#000' }} />
+                  <View style={{ width: 7, height: 50, backgroundColor: '#000' }} />
+                  <View style={{ width: 4, height: 50, backgroundColor: '#000' }} />
+                  <View style={{ width: 2, height: 50, backgroundColor: '#000' }} />
+                  <View style={{ width: 5, height: 50, backgroundColor: '#000' }} />
                 </View>
 
-                <View style={{ padding: 24, alignItems: 'center' }}>
-                  <View style={styles.barcodeCardSim}>
-                    <Text style={styles.barcodeLabelOrg}>SUBEDGE TECHNOLOGY PVT LTD</Text>
-                    <Text style={styles.barcodeLabelDept}>PROPERTY OF IT ASSET OPERATIONS</Text>
-
-                    {/* Barcode Graphic Simulation */}
-                    <View style={styles.barcodeBars}>
-                      <View style={{ width: 4, height: 50, backgroundColor: '#000' }} />
-                      <View style={{ width: 2, height: 50, backgroundColor: '#000' }} />
-                      <View style={{ width: 6, height: 50, backgroundColor: '#000' }} />
-                      <View style={{ width: 3, height: 50, backgroundColor: '#000' }} />
-                      <View style={{ width: 5, height: 50, backgroundColor: '#000' }} />
-                      <View style={{ width: 2, height: 50, backgroundColor: '#000' }} />
-                      <View style={{ width: 7, height: 50, backgroundColor: '#000' }} />
-                      <View style={{ width: 4, height: 50, backgroundColor: '#000' }} />
-                      <View style={{ width: 2, height: 50, backgroundColor: '#000' }} />
-                      <View style={{ width: 5, height: 50, backgroundColor: '#000' }} />
-                    </View>
-
-                    <Text style={styles.barcodeLabelTag}>{showBarcodeModal.asset_tag}</Text>
-                    <Text style={styles.barcodeLabelSn}>SN: {showBarcodeModal.serial_number}</Text>
-                    <Text style={styles.barcodeLabelName}>{showBarcodeModal.name}</Text>
-                  </View>
-
-                  <TouchableOpacity
-                    onPress={() => {
-                      alert(`Barcode sticker for ${showBarcodeModal.asset_tag} ready for thermal printing.`);
-                      setShowBarcodeModal(null);
-                    }}
-                    style={styles.printBtn}
-                  >
-                    <Barcode size={16} color="#FFFFFF" />
-                    <Text style={styles.printBtnText}>Print Thermal Asset Sticker</Text>
-                  </TouchableOpacity>
-                </View>
+                <Text style={styles.barcodeLabelTag}>{showBarcodeModal.asset_tag}</Text>
+                <Text style={styles.barcodeLabelSn}>SN: {showBarcodeModal.serial_number}</Text>
+                <Text style={styles.barcodeLabelName}>{showBarcodeModal.name}</Text>
               </View>
+
+              <TouchableOpacity
+                onPress={() => {
+                  alert(`Barcode sticker for ${showBarcodeModal.asset_tag} ready for thermal printing.`);
+                  setShowBarcodeModal(null);
+                }}
+                style={[styles.printBtn, { marginTop: 18 }]}
+              >
+                <Barcode size={16} color="#FFFFFF" />
+                <Text style={styles.printBtnText}>Print Thermal Asset Sticker</Text>
+              </TouchableOpacity>
             </View>
           </Modal>
         )}
@@ -983,45 +961,51 @@ export default function HRAssetsScreen() {
         {/* MODAL 4: REGISTER NEW ASSET */}
         {/* ======================================================== */}
         {showAddModal && (
-          <Modal visible={showAddModal} animationType="slide" transparent>
-            <View style={styles.modalOverlay}>
-              <View style={[styles.modalContent, isMobile && { width: '95%', maxHeight: '92%' }]}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Register New Hardware Asset</Text>
-                  <TouchableOpacity onPress={() => setShowAddModal(false)}>
-                    <X size={20} color="#64748B" />
-                  </TouchableOpacity>
-                </View>
-
-                <ScrollView style={{ padding: 20 }}>
-                  <Text style={styles.label}>Device / Asset Name *</Text>
-                  <TextInput style={styles.input} placeholder="e.g. MacBook Pro 16 M3 Max" value={name} onChangeText={setName} />
-
-                  <Text style={styles.label}>Asset Category</Text>
-                  <View style={styles.catGrid}>
-                    {CATEGORIES.map((c) => (
-                      <TouchableOpacity
-                        key={c.key}
-                        onPress={() => setCategory(c.key)}
-                        style={[styles.catBtn, category === c.key && styles.catBtnActive]}
-                      >
-                        <Text style={[styles.catText, category === c.key && styles.catTextActive]}>{c.label}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-
-                  <Text style={styles.label}>Model & Specifications</Text>
-                  <TextInput style={styles.input} placeholder="e.g. 64GB RAM / 1TB SSD" value={model} onChangeText={setModel} />
-
-                  <Text style={styles.label}>Hardware Serial Number (SN) *</Text>
-                  <TextInput style={styles.input} placeholder="e.g. C02G99812A" value={serial} onChangeText={setSerial} />
-
-                  <Text style={styles.label}>Purchase Valuation (INR)</Text>
-                  <TextInput style={styles.input} placeholder="e.g. 240000" value={value} onChangeText={setValue} keyboardType="numeric" />
-
-                  <Button title="Register Asset in Live Firestore" onPress={handleCreateAsset} style={{ backgroundColor: '#0D7377', marginTop: 16 }} />
-                </ScrollView>
+          <Modal
+            visible={showAddModal}
+            onClose={() => setShowAddModal(false)}
+            title="Register New Hardware Asset"
+            subtitle="Add device or equipment to live inventory"
+            icon={<Laptop size={20} color="#0D7377" />}
+            size="md"
+          >
+            <View style={{ gap: 14 }}>
+              <View>
+                <Text style={styles.label}>Device / Asset Name *</Text>
+                <TextInput style={styles.input} placeholder="e.g. MacBook Pro 16 M3 Max" value={name} onChangeText={setName} />
               </View>
+
+              <View>
+                <Text style={styles.label}>Asset Category</Text>
+                <View style={styles.catGrid}>
+                  {CATEGORIES.map((c) => (
+                    <TouchableOpacity
+                      key={c.key}
+                      onPress={() => setCategory(c.key)}
+                      style={[styles.catBtn, category === c.key && styles.catBtnActive]}
+                    >
+                      <Text style={[styles.catText, category === c.key && styles.catTextActive]}>{c.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View>
+                <Text style={styles.label}>Model & Specifications</Text>
+                <TextInput style={styles.input} placeholder="e.g. 64GB RAM / 1TB SSD" value={model} onChangeText={setModel} />
+              </View>
+
+              <View>
+                <Text style={styles.label}>Hardware Serial Number (SN) *</Text>
+                <TextInput style={styles.input} placeholder="e.g. C02G99812A" value={serial} onChangeText={setSerial} />
+              </View>
+
+              <View>
+                <Text style={styles.label}>Purchase Valuation (INR)</Text>
+                <TextInput style={styles.input} placeholder="e.g. 240000" value={value} onChangeText={setValue} keyboardType="numeric" />
+              </View>
+
+              <Button title="Register Asset in Live Firestore" onPress={handleCreateAsset} style={{ backgroundColor: '#0D7377', marginTop: 8 }} />
             </View>
           </Modal>
         )}
@@ -1030,28 +1014,31 @@ export default function HRAssetsScreen() {
         {/* MODAL 5: DISPOSAL / RETIREMENT */}
         {/* ======================================================== */}
         {showDisposalModal && (
-          <Modal visible={!!showDisposalModal} animationType="slide" transparent>
-            <View style={styles.modalOverlay}>
-              <View style={[styles.modalContent, isMobile && { width: '95%' }]}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Retire / Dispose Asset</Text>
-                  <TouchableOpacity onPress={() => setShowDisposalModal(null)}>
-                    <X size={20} color="#64748B" />
-                  </TouchableOpacity>
-                </View>
+          <Modal
+            visible={!!showDisposalModal}
+            onClose={() => setShowDisposalModal(null)}
+            title="Retire / Dispose Asset"
+            subtitle={`Asset: ${showDisposalModal.name} (${showDisposalModal.asset_tag})`}
+            icon={<AlertTriangle size={20} color="#DC2626" />}
+            iconBgColor="#FEF2F2"
+            size="sm"
+          >
+            <View style={{ gap: 14 }}>
+              <Text style={{ fontSize: 13, color: '#475569' }}>
+                Retiring this asset will archive its warranty and remove it from active assignments.
+              </Text>
 
-                <View style={{ padding: 20 }}>
-                  <Text style={styles.label}>Asset: {showDisposalModal.name} ({showDisposalModal.asset_tag})</Text>
-
-                  <Text style={styles.label}>Salvage / Scrap Recovery Value (INR)</Text>
-                  <TextInput style={styles.input} value={salvageVal} onChangeText={setSalvageVal} keyboardType="numeric" />
-
-                  <Text style={styles.label}>Disposal Reason</Text>
-                  <TextInput style={styles.input} value={disposalReason} onChangeText={setDisposalReason} />
-
-                  <Button title="Confirm Asset Retirement" onPress={handleDisposalSubmit} style={{ backgroundColor: '#DC2626', marginTop: 16 }} />
-                </View>
+              <View>
+                <Text style={styles.label}>Salvage / Scrap Recovery Value (INR)</Text>
+                <TextInput style={styles.input} value={salvageVal} onChangeText={setSalvageVal} keyboardType="numeric" />
               </View>
+
+              <View>
+                <Text style={styles.label}>Disposal Reason</Text>
+                <TextInput style={styles.input} value={disposalReason} onChangeText={setDisposalReason} placeholder="e.g. Obsolete hardware, screen damage" />
+              </View>
+
+              <Button title="Confirm Asset Retirement" onPress={handleDisposalSubmit} style={{ backgroundColor: '#DC2626', marginTop: 8 }} />
             </View>
           </Modal>
         )}

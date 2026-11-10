@@ -14,14 +14,22 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
-import { useTheme } from '@/hooks/use-theme';
+import {
+  CraftButton,
+  CraftCard,
+  CraftHeader,
+  Typography,
+  T,
+  S,
+} from '@/components/ui/CraftKit';
 import { LoadingState } from '@/components/ui/States';
-import { Button } from '@/components/ui/Button';
-import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
+import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/hooks/useAuth';
 import { getEmployeeByProfileId } from '@/lib/services/employee';
-import { getTickets, createTicket } from '@/lib/services/helpdesk';
+import { createTicket, getTickets } from '@/lib/services/helpdesk';
 import { SupportTicket, TicketCategory, TicketPriority } from '@/types/database';
+import { formatCurrency } from '@/utils/format';
 import {
   LifeBuoy,
   Plus,
@@ -31,7 +39,6 @@ import {
   AlertCircle,
 } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
-import { formatCurrency } from '@/utils/format';
 
 const CATEGORIES: { key: TicketCategory; label: string }[] = [
   { key: 'it_support', label: 'IT & Hardware Support' },
@@ -106,41 +113,50 @@ export default function EmployeeHelpdeskScreen() {
   // ─────────────────────────────────────────────────────────────────────────────
   if (!isDesktop) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#004D47' }}>
-        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-        <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
-          {/* Top bounce underlay matching hero header */}
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 250, backgroundColor: '#004D47' }} />
+      <View style={{ flex: 1, backgroundColor: T.canvas }}>
+        <StatusBar barStyle="dark-content" />
+        <CraftHeader
+          title="Support & Helpdesk"
+          subtitle="Raise service tickets & track operational resolutions"
+          right={
+            <CraftButton
+              title="New Ticket"
+              variant="primary"
+              size="sm"
+              icon={<Plus size={14} color="#FFF" />}
+              onPress={() => setShowModal(true)}
+            />
+          }
+        />
 
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingBottom: 100 }}
-            contentInsetAdjustmentBehavior="never"
-            automaticallyAdjustContentInsets={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor="#FFFFFF" colors={['#004D47']} />}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* ── Dark Hero Header ── */}
-            <View style={[mStyles.heroGradient, { paddingTop: topPadding + 10 }]}>
-              <Text style={mStyles.heroTag}>SUPPORT CENTER</Text>
-              <Text style={mStyles.heroTitle}>Helpdesk</Text>
-              <View style={mStyles.heroStatsRow}>
-                <View style={mStyles.heroStatCol}>
-                  <Text style={mStyles.heroStatLabel}>Open</Text>
-                  <Text style={mStyles.heroStatVal}>{tickets.filter(t => t.status === 'open').length}</Text>
-                </View>
-                <View style={mStyles.heroStatDivider} />
-                <View style={mStyles.heroStatCol}>
-                  <Text style={mStyles.heroStatLabel}>In Progress</Text>
-                  <Text style={[mStyles.heroStatVal, { color: '#7DD3FC' }]}>{tickets.filter(t => t.status === 'in_progress').length}</Text>
-                </View>
-                <View style={mStyles.heroStatDivider} />
-                <View style={mStyles.heroStatCol}>
-                  <Text style={mStyles.heroStatLabel}>Resolved</Text>
-                  <Text style={[mStyles.heroStatVal, { color: '#6EE7B7' }]}>{tickets.filter(t => t.status === 'resolved').length}</Text>
-                </View>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 100 }}
+          contentInsetAdjustmentBehavior="never"
+          automaticallyAdjustContentInsets={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor={T.mint} />}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Mobile Support Center Stats Card ── */}
+          <CraftCard variant="pastel" pastelTint={T.mintSoft} style={{ marginBottom: 16 }}>
+            <Text style={[Typography.eyebrow, { color: T.forest }]}>SUPPORT CENTER</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ fontSize: 11, color: T.inkMuted }}>Open</Text>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: T.ink, marginTop: 2 }}>{tickets.filter(t => t.status === 'open').length}</Text>
+              </View>
+              <View style={{ width: 1, height: 28, backgroundColor: 'rgba(0,106,97,0.15)' }} />
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ fontSize: 11, color: T.inkMuted }}>In Progress</Text>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: '#0284C7', marginTop: 2 }}>{tickets.filter(t => t.status === 'in_progress').length}</Text>
+              </View>
+              <View style={{ width: 1, height: 28, backgroundColor: 'rgba(0,106,97,0.15)' }} />
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ fontSize: 11, color: T.inkMuted }}>Resolved</Text>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: T.forest, marginTop: 2 }}>{tickets.filter(t => t.status === 'resolved').length}</Text>
               </View>
             </View>
+          </CraftCard>
 
             {/* ── Tickets List ── */}
             <View style={{ paddingHorizontal: 20, marginTop: 16 }}>
@@ -252,28 +268,32 @@ export default function EmployeeHelpdeskScreen() {
                 onChangeText={setDesc}
               />
 
-              <Button title="Submit Support Ticket" onPress={handleSubmit} style={{ backgroundColor: '#0D7377', marginTop: 24 }} />
+              <CraftButton title="Submit Support Ticket" variant="primary" onPress={handleSubmit} fullWidth style={{ marginTop: 24 }} />
               <View style={{ height: 40 }} />
             </ScrollView>
           </View>
         </RNModal>
-        </View>
       </View>
     );
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // DESKTOP LAYOUT (unchanged)
+  // DESKTOP LAYOUT
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <View>
-          <Text style={[styles.title, { color: colors.text }]}>Helpdesk Support</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Raise Service Tickets & Track Resolution Status</Text>
-        </View>
-        <Button title="+ Raise New Ticket" onPress={() => setShowModal(true)} style={{ backgroundColor: '#0D7377' }} />
-      </View>
+    <View style={{ flex: 1, backgroundColor: T.canvas }}>
+      <CraftHeader
+        title="Support & Helpdesk"
+        subtitle="Raise service tickets & track operational resolutions"
+        right={
+          <CraftButton
+            title="+ Raise New Ticket"
+            variant="primary"
+            icon={<Plus size={16} color="#FFF" />}
+            onPress={() => setShowModal(true)}
+          />
+        }
+      />
 
       <ScrollView style={{ flex: 1, padding: 24 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}>
         <Text style={styles.sectionHeader}>My Active Tickets ({tickets.length})</Text>
@@ -337,7 +357,7 @@ export default function EmployeeHelpdeskScreen() {
                 </View>
                 <Text style={styles.label}>Detailed Description *</Text>
                 <TextInput style={[styles.input, { height: 90 }]} multiline placeholder="Provide logs, error codes, or context..." value={desc} onChangeText={setDesc} />
-                <Button title="Submit Support Ticket" onPress={handleSubmit} style={{ backgroundColor: '#0D7377', marginTop: 16 }} />
+                <CraftButton title="Submit Support Ticket" variant="primary" onPress={handleSubmit} fullWidth style={{ marginTop: 16 }} />
               </ScrollView>
             </View>
           </View>

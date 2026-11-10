@@ -12,7 +12,7 @@ import { SidebarLayout } from '@/components/layout/Sidebar';
 import { getDepartments, createEmployee, getEmployees, getWorkplaces } from '@/lib/services/employee';
 import { getShifts } from '@/lib/services/shifts';
 import { CustomPayrollItemsManager } from '@/components/payroll/CustomPayrollItemsManager';
-import { HOSPITAL_UNITS } from '@/constants/config';
+import { HOSPITAL_UNITS, isShantiHospitalOrg, getTenantDefaultUnits } from '@/constants/config';
 import { HhcRoleSelector } from '@/components/HhcRoleSelector';
 import type { Department, Employee, WorkShift, Workplace, CustomPayrollItem, HHCRole } from '@/types';
 import { RefreshCw, ShieldCheck, ChevronDown, ChevronUp, Sliders, Eye, EyeOff, KeyRound, HeartPulse } from 'lucide-react-native';
@@ -34,8 +34,14 @@ export default function CreateEmployeeScreen() {
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
+  const isShantiOrg = React.useMemo(() => {
+    return isShantiHospitalOrg(tenantOrg?.id || profile?.organization_id, tenantOrg?.name);
+  }, [tenantOrg, profile]);
+
   const [empCode, setEmpCode] = useState('');
-  const [hospitalUnit, setHospitalUnit] = useState<string>('Headquarters');
+  const [hospitalUnit, setHospitalUnit] = useState<string>(() => {
+    return getTenantDefaultUnits(tenantOrg?.name, tenantOrg?.id || profile?.organization_id)[0] || 'Headquarters';
+  });
   const [employmentType, setEmploymentType] = useState<string>('Regular');
   const [grade, setGrade] = useState<string>('M1');
   const [password, setPassword] = useState('Welcome@123');
@@ -199,8 +205,8 @@ export default function CreateEmployeeScreen() {
         hospital_unit: hospitalUnit,
         employment_type: employmentType,
         grade: grade.trim() || undefined,
-        is_hhc_enabled: isHhcEnabled,
-        hhc_role: isHhcEnabled ? hhcRole : null,
+        is_hhc_enabled: isShantiOrg ? isHhcEnabled : false,
+        hhc_role: (isShantiOrg && isHhcEnabled) ? hhcRole : null,
         basic_salary: parseFloat(basicSalary) || 0,
         conveyance_allowance: parseFloat(conveyanceAllowance) || 1200,
         washing_allowance: parseFloat(washingAllowance) || 500,
@@ -338,7 +344,7 @@ export default function CreateEmployeeScreen() {
               </View>
             </View>
           </View>
-          <Input label="Designation / Position" placeholder="e.g. Chief Medical Officer" value={designation} onChangeText={setDesignation} />
+          <Input label="Designation / Position" placeholder="e.g. Senior Software Engineer / Operations Manager" value={designation} onChangeText={setDesignation} />
           <Input label="Monthly Base Salary (INR) *" value={basicSalary} onChangeText={setBasicSalary} keyboardType="numeric" placeholder="50000" />
 
           <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -402,7 +408,7 @@ export default function CreateEmployeeScreen() {
                   value: w.name,
                 }));
               }
-              return HOSPITAL_UNITS.map((u) => ({ label: u, value: u }));
+              return getTenantDefaultUnits(tenantOrg?.name, tenantOrg?.id || profile?.organization_id).map((u) => ({ label: u, value: u }));
             })()}
             value={hospitalUnit}
             onValueChange={(val) => {
@@ -492,7 +498,7 @@ export default function CreateEmployeeScreen() {
             />
 
             <Select
-              label="L4 Manager (Director / Medical Superintendent / Admin)"
+              label="L4 Manager (Director / VP / HR Admin)"
               options={[
                 { label: 'None / Not Assigned', value: '' },
                 ...managers.map((m) => ({
@@ -524,18 +530,22 @@ export default function CreateEmployeeScreen() {
             onValueChange={(val) => setRole(val || 'employee')}
           />
 
-          {/* ─── Home Health Care (HHC) Provider Configuration ─── */}
-          <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginTop: 16 }]}>
-            HEALTHCARE & EXTENSION ROLES
-          </Text>
+          {/* ─── Home Health Care (HHC) Provider Configuration (Shanti Hospital Only) ─── */}
+          {isShantiOrg && (
+            <>
+              <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginTop: 16 }]}>
+                HEALTHCARE & EXTENSION ROLES (SHANTI HOSPITAL ONLY)
+              </Text>
 
-          <HhcRoleSelector
-            enabled={isHhcEnabled}
-            onEnabledChange={setIsHhcEnabled}
-            role={hhcRole}
-            onRoleChange={setHhcRole}
-            colors={colors}
-          />
+              <HhcRoleSelector
+                enabled={isHhcEnabled}
+                onEnabledChange={setIsHhcEnabled}
+                role={hhcRole}
+                onRoleChange={setHhcRole}
+                colors={colors}
+              />
+            </>
+          )}
 
 
           {/* ─── Tax & Statutory Configuration ──────────────────────────── */}

@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/hooks/use-theme';
+import { BorderRadius, NotionColors } from '@/constants/theme';
 
 export interface HeroStat {
   label: string;
@@ -21,32 +22,17 @@ export interface HeroStat {
 }
 
 export interface ScreenHeaderProps {
-  /** Main heading. */
   title: string;
-  /** Optional line under the title. */
   subtitle?: string;
-  /** Small uppercase tag above the title. */
   eyebrow?: string;
-  /** When provided, a back chevron is shown and calls this on press. */
   onBack?: () => void;
-  /** Right-aligned content (buttons, avatar, etc.). */
   right?: React.ReactNode;
-  /** Optional glass stat strip rendered below the title. */
   stats?: HeroStat[];
-  /** Arbitrary content rendered below the title / stats. */
   children?: React.ReactNode;
-  /**
-   * gradient — teal hero gradient with light text (the standard header)
-   * light    — plain surface with dark text (dense / utility screens)
-   */
-  variant?: 'gradient' | 'light';
-  /** Override the gradient colors. Defaults to the tenant/brand primary ramp. */
+  variant?: 'gradient' | 'navy' | 'light';
   gradient?: readonly [string, string, ...string[]];
-  /** Rounded bottom corners (gradient variant only). Default true. */
   rounded?: boolean;
-  /** Skip top safe area inset calculation (use when parent layout handles it). */
   skipTopInset?: boolean;
-  /** Extra bottom padding inside the header. */
   paddingBottom?: number;
   style?: ViewStyle;
 }
@@ -59,27 +45,26 @@ export function ScreenHeader({
   right,
   stats,
   children,
-  variant = 'gradient',
+  variant = 'navy',
   gradient,
-  rounded = true,
+  rounded = false,
   paddingBottom = 20,
   skipTopInset = false,
   style,
 }: ScreenHeaderProps) {
   const colors = useTheme();
   const insets = useSafeAreaInsets();
-  const topPadding = skipTopInset ? 8 : Math.max(insets.top, Platform.OS === 'ios' ? 44 : 20) + 8;
+  const topPadding = skipTopInset ? 10 : Math.max(insets.top, Platform.OS === 'ios' ? 44 : 20) + 10;
 
-  const isGradient = variant === 'gradient';
+  const isDark = variant === 'navy' || variant === 'gradient';
 
   const gradientColors: readonly [string, string, ...string[]] =
-    gradient || [colors.primary, colors.primaryDark];
+    gradient || [NotionColors.brandNavy, NotionColors.brandNavyDeep];
 
-  const onLight = isGradient;
-  const titleColor = onLight ? '#FFFFFF' : colors.text;
-  const subColor = onLight ? colors.onPrimaryMuted : colors.textSecondary;
-  const eyebrowColor = onLight ? 'rgba(255,255,255,0.7)' : colors.primary;
-  const iconColor = onLight ? '#FFFFFF' : colors.text;
+  const titleColor = isDark ? NotionColors.onDark : NotionColors.ink;
+  const subColor = isDark ? NotionColors.onDarkMuted : NotionColors.slate;
+  const eyebrowColor = isDark ? NotionColors.brandYellow : NotionColors.primary;
+  const iconColor = isDark ? NotionColors.onDark : NotionColors.ink;
 
   const handleBack = () => {
     if (Platform.OS !== 'web') {
@@ -90,6 +75,17 @@ export function ScreenHeader({
 
   const inner = (
     <>
+      {/* Decorative Notion Sticky-Note Dots in Hero Band */}
+      {isDark && (
+        <View style={styles.decorativeDots} pointerEvents="none">
+          <View style={[styles.stickyDot, { backgroundColor: NotionColors.brandYellow, top: 12, right: 36 }]} />
+          <View style={[styles.stickyDot, { backgroundColor: NotionColors.brandPink, top: 28, right: 78 }]} />
+          <View style={[styles.stickyDot, { backgroundColor: NotionColors.brandGreen, top: 18, left: 24 }]} />
+          <View style={[styles.stickyDot, { backgroundColor: NotionColors.brandOrange, bottom: 20, right: 20 }]} />
+          <View style={[styles.stickyDot, { backgroundColor: NotionColors.primary, bottom: 14, left: 60 }]} />
+        </View>
+      )}
+
       {onBack && (
         <View style={styles.topBar}>
           <TouchableOpacity
@@ -99,11 +95,13 @@ export function ScreenHeader({
             style={[
               styles.backBtn,
               {
-                backgroundColor: onLight ? 'rgba(255,255,255,0.16)' : colors.backgroundElement,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : colors.backgroundElement,
+                borderWidth: isDark ? 1 : 0,
+                borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'transparent',
               },
             ]}
           >
-            <ChevronLeft size={22} color={iconColor} />
+            <ChevronLeft size={20} color={iconColor} />
           </TouchableOpacity>
           {right ? <View style={styles.rightArea}>{right}</View> : null}
         </View>
@@ -112,7 +110,11 @@ export function ScreenHeader({
       <View style={styles.titleBlock}>
         <View style={{ flex: 1 }}>
           {eyebrow ? (
-            <Text style={[styles.eyebrow, { color: eyebrowColor }]}>{eyebrow.toUpperCase()}</Text>
+            <View style={styles.eyebrowRow}>
+              <View style={[styles.eyebrowPill, { backgroundColor: isDark ? 'rgba(245, 215, 94, 0.15)' : colors.primaryLight }]}>
+                <Text style={[styles.eyebrow, { color: eyebrowColor }]}>{eyebrow.toUpperCase()}</Text>
+              </View>
+            </View>
           ) : null}
           <Text style={[styles.title, { color: titleColor }]}>{title}</Text>
           {subtitle ? (
@@ -127,8 +129,8 @@ export function ScreenHeader({
           style={[
             styles.statStrip,
             {
-              backgroundColor: onLight ? 'rgba(255,255,255,0.10)' : colors.surfaceMuted,
-              borderColor: onLight ? 'rgba(255,255,255,0.14)' : colors.border,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : colors.surfaceMuted,
+              borderColor: isDark ? 'rgba(255,255,255,0.12)' : colors.border,
             },
           ]}
         >
@@ -138,12 +140,17 @@ export function ScreenHeader({
                 <View
                   style={[
                     styles.statDivider,
-                    { backgroundColor: onLight ? 'rgba(255,255,255,0.16)' : colors.border },
+                    { backgroundColor: isDark ? 'rgba(255,255,255,0.14)' : colors.border },
                   ]}
                 />
               )}
               <View style={styles.statCol}>
-                <Text style={[styles.statLabel, { color: onLight ? 'rgba(255,255,255,0.6)' : colors.textSecondary }]}>
+                <Text
+                  style={[
+                    styles.statLabel,
+                    { color: isDark ? NotionColors.onDarkMuted : NotionColors.steel },
+                  ]}
+                >
                   {s.label}
                 </Text>
                 <Text style={[styles.statValue, { color: s.valueColor || titleColor }]}>{s.value}</Text>
@@ -157,7 +164,7 @@ export function ScreenHeader({
     </>
   );
 
-  if (!isGradient) {
+  if (!isDark) {
     return (
       <View
         style={[
@@ -172,7 +179,7 @@ export function ScreenHeader({
           style,
         ]}
       >
-        <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+        <StatusBar barStyle="dark-content" {...({ translucent: true, backgroundColor: 'transparent' } as any)} />
         {inner}
       </View>
     );
@@ -182,19 +189,19 @@ export function ScreenHeader({
     <LinearGradient
       colors={gradientColors}
       start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
+      end={{ x: 0.8, y: 1 }}
       style={[
         styles.container,
         {
           paddingTop: topPadding,
           paddingBottom,
-          borderBottomLeftRadius: rounded ? 28 : 0,
-          borderBottomRightRadius: rounded ? 28 : 0,
+          borderBottomLeftRadius: rounded ? BorderRadius.lg : 0,
+          borderBottomRightRadius: rounded ? BorderRadius.lg : 0,
         },
         style,
       ]}
     >
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <StatusBar barStyle="light-content" {...({ translucent: true, backgroundColor: 'transparent' } as any)} />
       {inner}
     </LinearGradient>
   );
@@ -203,18 +210,30 @@ export function ScreenHeader({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  decorativeDots: {
+    ...StyleSheet.absoluteFill,
+  },
+  stickyDot: {
+    position: 'absolute',
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    opacity: 0.6,
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
-    minHeight: 40,
+    marginBottom: 12,
+    minHeight: 36,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.md, // 8px
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -234,30 +253,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  eyebrowRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
+  },
+  eyebrowPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.xs, // 4px
+  },
   eyebrow: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: 0.8,
-    marginBottom: 4,
   },
   title: {
-    fontSize: 26,
-    fontWeight: '800',
+    fontSize: 24,
+    fontWeight: '600', // Notion 600 weight standard
     letterSpacing: -0.4,
   },
   subtitle: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '400',
     marginTop: 4,
+    lineHeight: 18,
   },
   statStrip: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    borderRadius: 16,
+    borderRadius: BorderRadius.md, // 8px
     borderWidth: 1,
-    paddingVertical: 12,
-    marginTop: 18,
+    paddingVertical: 10,
+    marginTop: 14,
   },
   statCol: {
     flex: 1,
@@ -265,17 +293,17 @@ const styles = StyleSheet.create({
   },
   statDivider: {
     width: 1,
-    height: 24,
+    height: 22,
   },
   statLabel: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '500',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 3,
+    marginBottom: 2,
   },
   statValue: {
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

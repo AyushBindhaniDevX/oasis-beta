@@ -26,7 +26,17 @@ export async function getShifts(organizationId?: string): Promise<WorkShift[]> {
     const shifts: WorkShift[] = [];
     snap.forEach((d) => {
       const s = { id: d.id, ...d.data() } as WorkShift;
-      if (!organizationId || s.organization_id === organizationId || (organizationId === 'shanti-memorial-hospital' && s.organization_id === 'smh')) {
+      if (!organizationId) {
+        shifts.push(s);
+        return;
+      }
+      const isSubedge = organizationId === 'subedge' || organizationId === '00000000-0000-0000-0000-000000000001';
+      const isSmh = organizationId === 'shanti-memorial-hospital' || organizationId === 'smh' || organizationId === 'chikitsa' || organizationId === 'gopal-trust';
+      if (isSubedge && (s.organization_id === '00000000-0000-0000-0000-000000000001' || s.organization_id === 'subedge')) {
+        shifts.push(s);
+      } else if (isSmh && (s.organization_id === 'shanti-memorial-hospital' || s.organization_id === 'smh')) {
+        shifts.push(s);
+      } else if (s.organization_id === organizationId) {
         shifts.push(s);
       }
     });

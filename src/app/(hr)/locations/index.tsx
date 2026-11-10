@@ -21,6 +21,8 @@ import { LoadingState } from '@/components/ui/States';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { getWorkplaces, createWorkplace, updateWorkplace } from '@/lib/services/employee';
 import { getCurrentLocation } from '@/lib/services/location';
+import { db } from '@/lib/firebase';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import type { Workplace } from '@/types';
 import {
   MapPin,
@@ -31,6 +33,7 @@ import {
   Plus,
   Compass,
   AlertCircle,
+  Users,
 } from 'lucide-react-native';
 
 export default function LocationsScreen() {
@@ -60,11 +63,29 @@ export default function LocationsScreen() {
   const [gpsDetecting, setGpsDetecting] = useState(false);
   const [formError, setFormError] = useState('');
 
+  const [empCounts, setEmpCounts] = useState<Record<string, number>>({});
+
   const load = useCallback(async () => {
     try {
       const orgId = tenantOrg?.id || profile?.organization_id;
       const data = await getWorkplaces(orgId);
       setWorkplaces(data);
+
+      // Aggregate assigned employee counts per unit/workplace
+      try {
+        const empSnap = await getDocs(query(collection(db, 'employees'), where('organization_id', 'in', [orgId || 'shanti-memorial-hospital', 'shanti-memorial-hospital'])));
+        const counts: Record<string, number> = {};
+        empSnap.forEach((d) => {
+          const emp = d.data();
+          const wpId = emp.workplace_id || (emp.workplace as any)?.id;
+          const unit = emp.hospital_unit;
+          if (wpId) counts[wpId] = (counts[wpId] || 0) + 1;
+          if (unit) counts[unit] = (counts[unit] || 0) + 1;
+        });
+        setEmpCounts(counts);
+      } catch (countErr) {
+        console.warn('Failed to fetch employee counts per location:', countErr);
+      }
     } catch (e) {
       console.error('Failed to load workplaces:', e);
     } finally {
@@ -212,12 +233,20 @@ export default function LocationsScreen() {
                 </View>
 
                 <View style={{ flex: 1, paddingHorizontal: 12 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
                     <Text style={[styles.wpName, { color: colors.text }]}>{item.name}</Text>
                     <Badge
                       label={item.is_active ? 'Active' : 'Inactive'}
                       variant={item.is_active ? 'success' : 'neutral'}
                     />
+                    {Boolean(empCounts[item.id] || empCounts[item.name]) && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F0FDF4', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, borderWidth: 0.5, borderColor: '#BBF7D0' }}>
+                        <Users size={12} color="#15803D" />
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#15803D' }}>
+                          {empCounts[item.id] || empCounts[item.name]} Staff
+                        </Text>
+                      </View>
+                    )}
                   </View>
 
                   {item.address ? (

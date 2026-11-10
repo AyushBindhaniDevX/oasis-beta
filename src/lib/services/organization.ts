@@ -14,6 +14,20 @@ import {
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, updateProfile as fbUpdateProfile, sendPasswordResetEmail } from 'firebase/auth';
 import type { Organization, Profile, Department, Workplace, Employee } from '@/types';
+import { getDepartments, getWorkplaces, invalidateEmployeeCache } from './employee';
+
+let cachedOrgUsersKey: string | null = null;
+let cachedOrgUsersData: Profile[] | null = null;
+let cachedOrgUsersTime = 0;
+const inFlightOrgUsersMap = new Map<string, Promise<Profile[]>>();
+const ORG_USERS_CACHE_TTL_MS = 15 * 1000;
+
+export function invalidateOrgUsersCache() {
+  cachedOrgUsersKey = null;
+  cachedOrgUsersData = null;
+  cachedOrgUsersTime = 0;
+  inFlightOrgUsersMap.clear();
+}
 
 function generateUuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -23,14 +37,31 @@ function generateUuid(): string {
   });
 }
 
+const DEFAULT_SHANTI_ORG: Organization = {
+  id: 'shanti-memorial-hospital',
+  name: 'Shanti Memorial Hospital',
+  slug: 'shanti-memorial-hospital',
+  logo_url: null,
+  primary_color: '#006a61',
+  accent_color: '#0D7377',
+  settings: {},
+  created_at: '2026-01-01T00:00:00.000Z',
+  updated_at: '2026-01-01T00:00:00.000Z',
+};
+
 export async function getOrganization(orgId: string): Promise<Organization | null> {
+  if (!orgId) return null;
+  const targetId = orgId === 'smh' ? 'shanti-memorial-hospital' : orgId;
   try {
-    const targetId = orgId === 'smh' ? 'shanti-memorial-hospital' : orgId;
     const snap = await getDoc(doc(db, 'organizations', targetId));
-    if (!snap.exists()) return null;
+    if (!snap.exists()) {
+      return targetId === 'shanti-memorial-hospital' ? DEFAULT_SHANTI_ORG : null;
+    }
     return { id: snap.id, ...snap.data() } as Organization;
-  } catch (err) {
-    console.error('getOrganization error:', err);
+  } catch (err: any) {
+    if (targetId === 'shanti-memorial-hospital') {
+      return DEFAULT_SHANTI_ORG;
+    }
     return null;
   }
 }
@@ -43,56 +74,96 @@ export async function updateOrganization(orgId: string, updates: Partial<Organiz
 }
 
 export async function getOrgUsers(organizationId?: string): Promise<Profile[]> {
-  try {
-    let q = query(collection(db, 'profiles'));
-    if (organizationId) {
-      q = query(collection(db, 'profiles'), where('organization_id', '==', organizationId));
-    }
-
-    const [profilesSnap, employeesSnap, deptsSnap, workplacesSnap] = await Promise.all([
-      getDocs(q),
-      getDocs(collection(db, 'employees')),
-      getDocs(collection(db, 'departments')),
-      getDocs(collection(db, 'workplaces')),
-    ]);
-
-    const deptsMap = new Map<string, Department>();
-    deptsSnap.forEach((d) => deptsMap.set(d.id, { id: d.id, ...d.data() } as Department));
-
-    const workplacesMap = new Map<string, Workplace>();
-    workplacesSnap.forEach((w) => workplacesMap.set(w.id, { id: w.id, ...w.data() } as Workplace));
-
-    const employeesByProfileId = new Map<string, Employee>();
-    employeesSnap.forEach((e) => {
-      const empData = { id: e.id, ...e.data() } as Employee;
-      if (empData.profile_id) {
-        empData.department = empData.department_id ? deptsMap.get(empData.department_id) : undefined;
-        empData.workplace = empData.workplace_id ? workplacesMap.get(empData.workplace_id) : undefined;
-        employeesByProfileId.set(empData.profile_id, empData);
-      }
-    });
-
-    const profiles: Profile[] = [];
-    profilesSnap.forEach((p) => {
-      const prof = { id: p.id, ...p.data() } as Profile;
-      (prof as any).employee = employeesByProfileId.get(prof.id);
-      profiles.push(prof);
-    });
-
-    // Sort by role then full_name
-    profiles.sort((a, b) => {
-      if (a.role !== b.role) return a.role.localeCompare(b.role);
-      return (a.full_name || '').localeCompare(b.full_name || '');
-    });
-
-    return profiles;
-  } catch (err) {
-    console.error('getOrgUsers error:', err);
-    return [];
+  const cacheKey = organizationId || 'all';
+  const now = Date.now();
+  if (cachedOrgUsersKey === cacheKey && cachedOrgUsersData && now - cachedOrgUsersTime < ORG_USERS_CACHE_TTL_MS) {
+    return cachedOrgUsersData;
   }
+
+  if (inFlightOrgUsersMap.has(cacheKey)) {
+    return inFlightOrgUsersMap.get(cacheKey)!;
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      let q = query(collection(db, 'profiles'));
+      if (organizationId) {
+        const isSubedge = organizationId === 'subedge' || organizationId === '00000000-0000-0000-0000-000000000001';
+        const isSmh = organizationId === 'shanti-memorial-hospital' || organizationId === 'smh' || organizationId === 'chikitsa' || organizationId === 'gopal-trust';
+        if (isSubedge) {
+          q = query(collection(db, 'profiles'), where('organization_id', 'in', ['00000000-0000-0000-0000-000000000001', 'subedge']));
+        } else if (isSmh) {
+          q = query(collection(db, 'profiles'), where('organization_id', 'in', ['shanti-memorial-hospital', 'smh']));
+        } else {
+          q = query(collection(db, 'profiles'), where('organization_id', '==', organizationId));
+        }
+      }
+
+      const [profilesSnap, employeesSnap, depts, workplaces] = await Promise.all([
+        getDocs(q),
+        getDocs(collection(db, 'employees')),
+        getDepartments(organizationId),
+        getWorkplaces(organizationId),
+      ]);
+
+      const deptsMap = new Map<string, Department>();
+      depts.forEach((d) => deptsMap.set(d.id, d));
+
+      const workplacesMap = new Map<string, Workplace>();
+      workplaces.forEach((w) => workplacesMap.set(w.id, w));
+
+      const employeesByProfileId = new Map<string, Employee>();
+      employeesSnap.forEach((e) => {
+        const empData = { id: e.id, ...e.data() } as Employee;
+        if (empData.profile_id) {
+          if (organizationId) {
+            const isSubedge = organizationId === 'subedge' || organizationId === '00000000-0000-0000-0000-000000000001';
+            const isSmh = organizationId === 'shanti-memorial-hospital' || organizationId === 'smh' || organizationId === 'chikitsa' || organizationId === 'gopal-trust';
+            if (isSubedge && (empData.organization_id !== '00000000-0000-0000-0000-000000000001' && empData.organization_id !== 'subedge')) {
+              return;
+            }
+            if (isSmh && (empData.organization_id !== 'shanti-memorial-hospital' && empData.organization_id !== 'smh')) {
+              return;
+            }
+          }
+          empData.department = empData.department_id ? deptsMap.get(empData.department_id) : undefined;
+          empData.workplace = empData.workplace_id ? workplacesMap.get(empData.workplace_id) : undefined;
+          employeesByProfileId.set(empData.profile_id, empData);
+        }
+      });
+
+      const profiles: Profile[] = [];
+      profilesSnap.forEach((p) => {
+        const prof = { id: p.id, ...p.data() } as Profile;
+        (prof as any).employee = employeesByProfileId.get(prof.id);
+        profiles.push(prof);
+      });
+
+      // Sort by role then full_name
+      profiles.sort((a, b) => {
+        if (a.role !== b.role) return a.role.localeCompare(b.role);
+        return (a.full_name || '').localeCompare(b.full_name || '');
+      });
+
+      cachedOrgUsersKey = cacheKey;
+      cachedOrgUsersData = profiles;
+      cachedOrgUsersTime = Date.now();
+      return profiles;
+    } catch (err) {
+      console.error('getOrgUsers error:', err);
+      return [];
+    } finally {
+      inFlightOrgUsersMap.delete(cacheKey);
+    }
+  })();
+
+  inFlightOrgUsersMap.set(cacheKey, fetchPromise);
+  return fetchPromise;
 }
 
 export async function updateUserRole(userId: string, role: string): Promise<void> {
+  invalidateOrgUsersCache();
+  invalidateEmployeeCache();
   await updateDoc(doc(db, 'profiles', userId), {
     role,
     updated_at: new Date().toISOString(),
@@ -114,6 +185,8 @@ export async function updateUserProfileData(
     hhc_role?: string | null;
   }
 ): Promise<void> {
+  invalidateOrgUsersCache();
+  invalidateEmployeeCache();
   await updateDoc(doc(db, 'profiles', userId), sanitizeFirestoreData({
     ...data,
     updated_at: new Date().toISOString(),
@@ -126,6 +199,8 @@ export async function updateUserProfileData(
 }
 
 export async function toggleUserActive(userId: string, isActive: boolean): Promise<void> {
+  invalidateOrgUsersCache();
+  invalidateEmployeeCache();
   await updateDoc(doc(db, 'profiles', userId), {
     is_active: isActive,
     updated_at: new Date().toISOString(),
@@ -143,6 +218,8 @@ export async function toggleUserActive(userId: string, isActive: boolean): Promi
 }
 
 export async function deleteUserRecord(userId: string): Promise<void> {
+  invalidateOrgUsersCache();
+  invalidateEmployeeCache();
   // Delete linked employee records
   const empQ = query(collection(db, 'employees'), where('profile_id', '==', userId));
   const empSnap = await getDocs(empQ);
@@ -405,6 +482,8 @@ export async function createSystemUser(params: {
     }
   }
 
+  invalidateOrgUsersCache();
+  invalidateEmployeeCache();
   return uid;
 }
 

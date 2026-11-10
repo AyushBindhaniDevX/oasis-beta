@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { Modal } from '@/components/ui/Modal';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { LoadingState } from '@/components/ui/States';
 import {
@@ -91,16 +92,22 @@ import {
 } from 'lucide-react-native';
 
 export const PRESET_KPIS: Record<string, AppraisalKpi[]> = {
+  professional: [
+    { id: 'kpi_client_excellence', name: 'Client & Stakeholder Excellence', description: 'Customer satisfaction, responsive communication and professional engagement', weight: 25 },
+    { id: 'kpi_domain_skills', name: 'Domain & Functional Precision', description: 'Accurate execution, thorough documentation and high-quality deliverables', weight: 25 },
+    { id: 'kpi_quality_standards', name: 'Quality, Security & Standards', description: 'Compliance with operating guidelines, data privacy and workplace safety', weight: 25 },
+    { id: 'kpi_punctuality_response', name: 'Punctuality & Operational Response', description: 'Timely shift coverage, agile problem resolution and smooth handovers', weight: 25 },
+  ],
   clinical: [
-    { id: 'kpi_patient_care', name: 'Patient Care & Bedside Manners', description: 'Patient satisfaction, compassionate handling and attendant interaction', weight: 25 },
-    { id: 'kpi_clinical_skills', name: 'Clinical & Procedural Precision', description: 'Accurate protocol execution, medical charting and diagnosis/care delivery', weight: 25 },
-    { id: 'kpi_hygiene_safety', name: 'Hygiene & Infection Control', description: 'NABH compliance, sanitization protocols and patient safety measures', weight: 25 },
-    { id: 'kpi_emergency_response', name: 'Shift Punctuality & Emergency Response', description: 'Timely roster coverage, code blue/red responsiveness and smooth handovers', weight: 25 },
+    { id: 'kpi_client_excellence', name: 'Client & Stakeholder Excellence', description: 'Customer satisfaction, responsive communication and professional engagement', weight: 25 },
+    { id: 'kpi_domain_skills', name: 'Domain & Functional Precision', description: 'Accurate execution, thorough documentation and high-quality deliverables', weight: 25 },
+    { id: 'kpi_quality_standards', name: 'Quality, Security & Standards', description: 'Compliance with operating guidelines, data privacy and workplace safety', weight: 25 },
+    { id: 'kpi_punctuality_response', name: 'Punctuality & Operational Response', description: 'Timely shift coverage, agile problem resolution and smooth handovers', weight: 25 },
   ],
   operations: [
-    { id: 'kpi_turnaround', name: 'Task Turnaround & Accuracy', description: 'Timely turnaround on bills, EMR data entry and departmental workflows', weight: 25 },
+    { id: 'kpi_turnaround', name: 'Task Turnaround & Accuracy', description: 'Timely turnaround on tickets, data management and departmental workflows', weight: 25 },
     { id: 'kpi_compliance', name: 'Statutory & Policy Compliance', description: 'Adherence to internal operating guidelines, attendance and leave rules', weight: 25 },
-    { id: 'kpi_collaboration', name: 'Cross-functional Collaboration', description: 'Cooperation with doctors, nursing staff and administration departments', weight: 25 },
+    { id: 'kpi_collaboration', name: 'Cross-functional Collaboration', description: 'Cooperation with cross-functional teams, leads and management', weight: 25 },
     { id: 'kpi_cost_efficiency', name: 'Resource & Asset Care', description: 'Care of equipment, minimizing waste and proactive support', weight: 25 },
   ],
   standard: [
@@ -162,7 +169,7 @@ export default function HRPerformanceScreen() {
   const [newAppraisalEmpId, setNewAppraisalEmpId] = useState('');
   const [newAppraisalCycle, setNewAppraisalCycle] = useState('Q2 2026 Appraisal');
   const [newAppraisalPeriod, setNewAppraisalPeriod] = useState('Q2 2026');
-  const [appraisalKpis, setAppraisalKpis] = useState<AppraisalKpi[]>(PRESET_KPIS.clinical);
+  const [appraisalKpis, setAppraisalKpis] = useState<AppraisalKpi[]>(PRESET_KPIS.standard);
   const [customKpiName, setCustomKpiName] = useState('');
   const [customKpiDesc, setCustomKpiDesc] = useState('');
   const [customKpiWeight, setCustomKpiWeight] = useState('25');
@@ -818,7 +825,7 @@ export default function HRPerformanceScreen() {
                     ]}
                   >
                     <Text style={{ fontSize: 13, fontWeight: '500', color: selectedCategory === cat ? '#fff' : colors.textSecondary }}>
-                      {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                      {cat ? cat.charAt(0).toUpperCase() + cat.slice(1) : ''}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -842,9 +849,9 @@ export default function HRPerformanceScreen() {
                     <Card key={g.id} style={styles.goalCard}>
                       <View style={styles.goalHeader}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-                          <Badge label={g.category.toUpperCase()} variant="neutral" />
-                          <Badge label={g.priority.toUpperCase()} variant={g.priority === 'high' ? 'danger' : 'warning'} />
-                          <Badge label={g.status.replace('_', ' ').toUpperCase()} variant={statusVariant} />
+                          <Badge label={(g.category ? String(g.category) : 'General').toUpperCase()} variant="neutral" />
+                          <Badge label={(g.priority ? String(g.priority) : 'Medium').toUpperCase()} variant={g.priority === 'high' ? 'danger' : 'warning'} />
+                          <Badge label={(g.status ? String(g.status).replace('_', ' ') : 'In Progress').toUpperCase()} variant={statusVariant} />
                         </View>
                         <TouchableOpacity onPress={() => handleDeleteGoal(g.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                           <Trash2 size={16} color="#ef4444" />
@@ -934,7 +941,7 @@ export default function HRPerformanceScreen() {
                   ]}
                 >
                   <Text style={{ fontSize: 13, fontWeight: '500', color: selectedAppraisalStatus === st ? '#fff' : colors.textSecondary }}>
-                    {st === 'self_review' ? 'Self Review' : st === 'manager_review' ? 'Manager Review' : st.toUpperCase()}
+                    {st === 'self_review' ? 'Self Review' : st === 'manager_review' ? 'Manager Review' : (st ? String(st).toUpperCase() : '')}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -1513,10 +1520,10 @@ export default function HRPerformanceScreen() {
                 {/* Preset Chips */}
                 <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
                   <TouchableOpacity
-                    onPress={() => setAppraisalKpis(PRESET_KPIS.clinical)}
+                    onPress={() => setAppraisalKpis(PRESET_KPIS.professional)}
                     style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE' }}
                   >
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#2563EB' }}>Clinical Preset</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#2563EB' }}>Professional Preset</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => setAppraisalKpis(PRESET_KPIS.operations)}
@@ -1714,7 +1721,7 @@ export default function HRPerformanceScreen() {
                         style={[styles.smallChip, evalRecommendation === rec && { backgroundColor: colors.primary, borderColor: colors.primary }]}
                       >
                         <Text style={{ fontSize: 11, fontWeight: '600', color: evalRecommendation === rec ? '#fff' : colors.textSecondary }}>
-                          {rec.replace('_', ' ').toUpperCase()}
+                          {rec ? String(rec).replace('_', ' ').toUpperCase() : ''}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -1765,7 +1772,7 @@ export default function HRPerformanceScreen() {
                     style={[styles.smallChip, kudosBadge === b && { backgroundColor: colors.primary, borderColor: colors.primary }]}
                   >
                     <Text style={{ fontSize: 11, fontWeight: '600', color: kudosBadge === b ? '#fff' : colors.textSecondary }}>
-                      {b.replace('_', ' ').toUpperCase()}
+                      {b ? String(b).replace('_', ' ').toUpperCase() : ''}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -1859,7 +1866,7 @@ export default function HRPerformanceScreen() {
                       ]}
                     >
                       <Text style={{ fontSize: 11, fontWeight: '700', color: cycleType === t ? '#FFF' : colors.textSecondary }}>
-                        {t.replace('_', ' ').toUpperCase()}
+                        {t ? String(t).replace('_', ' ').toUpperCase() : ''}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -1868,31 +1875,27 @@ export default function HRPerformanceScreen() {
 
               {/* Timeline Dates */}
               <View style={{ flexDirection: 'row', gap: 12 }}>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.formLabel}>Start Date</Text>
-                  <TextInput
-                    placeholder="YYYY-MM-DD"
-                    value={cycleStartDate}
-                    onChangeText={setCycleStartDate}
-                    style={styles.modalInput}
+                <View style={{ flex: 1 }}>
+                  <DatePicker
+                    label="Start Date"
+                    value={cycleStartDate ? new Date(cycleStartDate) : null}
+                    onChange={(d) => setCycleStartDate(d ? d.toISOString().split('T')[0] : '')}
                   />
                 </View>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.formLabel}>Self-Review Deadline</Text>
-                  <TextInput
-                    placeholder="YYYY-MM-DD"
-                    value={cycleSelfDeadline}
-                    onChangeText={setCycleSelfDeadline}
-                    style={styles.modalInput}
+                <View style={{ flex: 1 }}>
+                  <DatePicker
+                    label="Self-Review Deadline"
+                    value={cycleSelfDeadline ? new Date(cycleSelfDeadline) : null}
+                    minDate={cycleStartDate ? new Date(cycleStartDate) : undefined}
+                    onChange={(d) => setCycleSelfDeadline(d ? d.toISOString().split('T')[0] : '')}
                   />
                 </View>
-                <View style={[styles.formGroup, { flex: 1 }]}>
-                  <Text style={styles.formLabel}>Manager Deadline</Text>
-                  <TextInput
-                    placeholder="YYYY-MM-DD"
-                    value={cycleManagerDeadline}
-                    onChangeText={setCycleManagerDeadline}
-                    style={styles.modalInput}
+                <View style={{ flex: 1 }}>
+                  <DatePicker
+                    label="Manager Deadline"
+                    value={cycleManagerDeadline ? new Date(cycleManagerDeadline) : null}
+                    minDate={cycleSelfDeadline ? new Date(cycleSelfDeadline) : undefined}
+                    onChange={(d) => setCycleManagerDeadline(d ? d.toISOString().split('T')[0] : '')}
                   />
                 </View>
               </View>

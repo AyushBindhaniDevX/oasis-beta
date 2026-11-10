@@ -1,5 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions, Alert, TextInput, Modal as RNModal } from 'react-native';
+import Svg, { Path, SvgXml } from 'react-native-svg';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { InteractiveTile } from '@/components/ui/InteractiveTile';
+import {
+  STOCK_1_SVG,
+  STOCK_3_SVG,
+  STOCK_9_SVG,
+  STOCK_10_SVG,
+  BUSINESS_DATA_SVG,
+} from '@/constants/workManagementSvgs';
 import { ADMIN_NAV } from '@/constants/navigation';
 import { SidebarLayout } from '@/components/layout/Sidebar';
 import { useTheme } from '@/hooks/use-theme';
@@ -13,6 +23,20 @@ import { IMPORT_MODULES, downloadTemplate, processImport } from '@/lib/services/
 import { generateReport } from '@/lib/services/reports';
 import { importExcelObjects } from '@/utils/excel';
 import { LateComersOverviewView } from '@/components/attendance/LateComersOverviewView';
+
+function MetricWave({ color, width = 85, height = 28 }: { color: string; width?: number; height?: number }) {
+  return (
+    <Svg width={width} height={height} viewBox="0 0 90 30" fill="none">
+      <Path
+        d="M 2 18 C 16 26, 26 8, 42 16 C 56 24, 66 6, 88 12"
+        stroke={color}
+        strokeWidth={2.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 export default function DataManagementScreen() {
   const colors = useTheme();
@@ -95,31 +119,161 @@ export default function DataManagementScreen() {
     }
   };
 
+  const kpiCardWidth = isDesktop ? undefined : (width - 40 - 12) / 2;
+
   return (
     <SidebarLayout items={ADMIN_NAV}>
       <ScrollView
-        style={[styles.container, { backgroundColor: colors.background }]}
+        style={[styles.container, { backgroundColor: '#FAF9FD' }]}
         contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
       >
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Data Management & Reports</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Import records or export comprehensive HR and Payroll reports.
-          </Text>
-        </View>
+        {/* Header Row with STOCK 3 SVG */}
+        <Animated.View entering={FadeInDown.duration(280)} style={styles.headerRow}>
+          <View style={{ flex: 1, minWidth: 260 }}>
+            <View style={styles.headerBadge}>
+              <FileSpreadsheet size={14} color="#7C3AED" />
+              <Text style={styles.headerBadgeText}>Enterprise Data & Registers</Text>
+            </View>
+            <Text style={[styles.title, { color: '#0F172A' }]}>Data Management & Reports</Text>
+            <Text style={[styles.subtitle, { color: '#64748B' }]}>
+              Generate statutory 26-column pay registers, EPFO ECR archives, and bulk spreadsheet imports.
+            </Text>
+          </View>
+
+          <View style={{ opacity: 0.95 }}>
+            <SvgXml xml={BUSINESS_DATA_SVG} width={isDesktop ? 130 : 90} height={isDesktop ? 90 : 65} />
+          </View>
+        </Animated.View>
+
+        {/* 4 Pastel KPI Metric Cards with InteractiveTile */}
+        <Animated.View entering={FadeInDown.delay(50).duration(280)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 4 }}>
+          {/* Card 1: Report Modules */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#F3EEFE',
+                borderColor: '#E4DCFD',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+            onPress={() => setActiveTab('export')}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                <SvgXml xml={BUSINESS_DATA_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>13</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>Registers</Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Report Catalog</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#8B5CF6" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+
+          {/* Card 2: Statutory Compliance */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#EDFAF2',
+                borderColor: '#CEF2DE',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                <SvgXml xml={STOCK_10_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#064E3B' }]}>EPFO</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>+ ESIC Return</Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Statutory ECR</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#10B981" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+
+          {/* Card 3: Bulk Importer */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#FFF4EB',
+                borderColor: '#FFE2CD',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+            onPress={() => setActiveTab('import')}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                <SvgXml xml={STOCK_1_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>Bulk</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Excel Ready</Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Batch Import</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#F97316" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+
+          {/* Card 4: Salary Architecture */}
+          <InteractiveTile
+            style={[
+              styles.pastelMetricCard,
+              {
+                backgroundColor: '#EFF6FF',
+                borderColor: '#DBEAFE',
+                flex: isDesktop ? 1 : undefined,
+                minWidth: isDesktop ? 160 : undefined,
+                width: kpiCardWidth,
+              },
+            ]}
+          >
+            <View style={styles.cardTopRow}>
+              <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
+                <SvgXml xml={STOCK_9_SVG} width={34} height={25} />
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={[styles.metricValueText, { color: '#1E3A8A' }]}>26-Col</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>Standard Sheet</Text>
+              </View>
+            </View>
+            <Text style={styles.metricLabelText}>Salary Register</Text>
+            <View style={styles.waveContainer}>
+              <MetricWave color="#3B82F6" width={isDesktop ? 150 : 80} height={24} />
+            </View>
+          </InteractiveTile>
+        </Animated.View>
 
         <View style={styles.tabContainer}>
           <TouchableOpacity 
-            style={[styles.tab, activeTab === 'export' && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]} 
+            style={[styles.tab, activeTab === 'export' && { borderBottomColor: '#7C3AED', borderBottomWidth: 2 }]} 
             onPress={() => setActiveTab('export')}
           >
-            <Text style={[styles.tabText, activeTab === 'export' && { color: colors.primary, fontWeight: '700' }]}>Export Reports</Text>
+            <Text style={[styles.tabText, activeTab === 'export' && { color: '#7C3AED', fontWeight: '700' }]}>Export Reports</Text>
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.tab, activeTab === 'import' && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]} 
+            style={[styles.tab, activeTab === 'import' && { borderBottomColor: '#7C3AED', borderBottomWidth: 2 }]} 
             onPress={() => setActiveTab('import')}
           >
-            <Text style={[styles.tabText, activeTab === 'import' && { color: colors.primary, fontWeight: '700' }]}>Import Data</Text>
+            <Text style={[styles.tabText, activeTab === 'import' && { color: '#7C3AED', fontWeight: '700' }]}>Import Data</Text>
           </TouchableOpacity>
         </View>
 
@@ -319,10 +473,81 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 20, gap: 24, paddingBottom: 60 },
   contentDesktop: { maxWidth: 1000, alignSelf: 'center', width: '100%', padding: 36, gap: 28 },
-  header: { gap: 4 },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 16,
+    flexWrap: 'wrap',
+  },
+  headerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F3EEFE',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E4DCFD',
+  },
+  headerBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#7C3AED',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   title: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
-  subtitle: { fontSize: 14, lineHeight: 20 },
-  tabContainer: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  subtitle: { fontSize: 13, lineHeight: 19, marginTop: 4 },
+
+  pastelMetricCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    overflow: 'hidden',
+    position: 'relative',
+    minHeight: 104,
+    shadowColor: '#0f0f0f',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  iconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metricValueText: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  metricLabelText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 8,
+  },
+  waveContainer: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    opacity: 0.65,
+    pointerEvents: 'none',
+  },
+
+  tabContainer: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', marginVertical: 8 },
   tab: { paddingVertical: 12, paddingHorizontal: 20 },
   tabText: { fontSize: 15, color: '#64748b' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 20 },
