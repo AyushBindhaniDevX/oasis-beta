@@ -99,15 +99,44 @@ export function Modal({
 }: ModalProps) {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
+  const previousActiveElementRef = React.useRef<HTMLElement | null>(null);
 
-  React.useEffect(() => {
+  // Synchronously blur active element before RNModal portal applies aria-hidden on Web
+  React.useLayoutEffect(() => {
     if (visible && Platform.OS === 'web' && typeof document !== 'undefined') {
       const activeEl = document.activeElement as HTMLElement | null;
+      previousActiveElementRef.current = activeEl;
       if (activeEl && typeof activeEl.blur === 'function') {
         activeEl.blur();
       }
+
+      // Lock body scroll on web while modal is open
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape' && dismissible) {
+          if (document.activeElement && typeof (document.activeElement as HTMLElement).blur === 'function') {
+            (document.activeElement as HTMLElement).blur();
+          }
+          onClose();
+        }
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        document.body.style.overflow = prevOverflow;
+        // Safely restore focus without throwing if element is unmounted
+        try {
+          if (previousActiveElementRef.current && typeof previousActiveElementRef.current.focus === 'function') {
+            previousActiveElementRef.current.focus();
+          }
+        } catch {}
+      };
     }
-  }, [visible]);
+  }, [visible, dismissible, onClose]);
 
   if (!visible) return null;
 
@@ -115,6 +144,12 @@ export function Modal({
 
   const handleBackdropPress = () => {
     if (dismissible) {
+      if (Platform.OS === 'web' && typeof document !== 'undefined') {
+        const activeEl = document.activeElement as HTMLElement | null;
+        if (activeEl && typeof activeEl.blur === 'function') {
+          activeEl.blur();
+        }
+      }
       onClose();
     }
   };
@@ -176,6 +211,8 @@ export function Modal({
               contentStyle,
             ]}
             onPress={(e) => e.stopPropagation()}
+            accessibilityRole="dialog"
+            aria-modal={true}
           >
             {/* Mobile Sheet Pull Indicator */}
             {isMobile && (

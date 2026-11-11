@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
@@ -38,8 +39,10 @@ import {
 
 export default function LocationsScreen() {
   const colors = useTheme();
+  const { width } = useWindowDimensions();
+  const isMobile = width < 680;
   const { profile } = useAuth();
-  const { organization: tenantOrg } = useTenant();
+  const { organization: tenantOrg, updateOrganizationUnits } = useTenant();
   const [workplaces, setWorkplaces] = useState<Workplace[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -133,6 +136,19 @@ export default function LocationsScreen() {
         longitude: parseFloat(lng),
         radius_meters: parseInt(radius) || 200,
       });
+
+      // Synchronize with parent organization's units list
+      if (updateOrganizationUnits && orgId) {
+        try {
+          const updated = await getWorkplaces(orgId);
+          const unitNames = updated.map((w) => w.name).filter(Boolean);
+          if (!unitNames.includes(name.trim())) unitNames.push(name.trim());
+          await updateOrganizationUnits(orgId, unitNames);
+        } catch (syncErr) {
+          console.warn('Could not sync units to organization doc:', syncErr);
+        }
+      }
+
       setShowCreate(false);
       setName('');
       setAddress('');
@@ -174,6 +190,19 @@ export default function LocationsScreen() {
         longitude: parseFloat(editLng),
         radius_meters: parseInt(editRadius) || 200,
       });
+
+      // Synchronize with parent organization's units list
+      const orgId = tenantOrg?.id || profile?.organization_id || '';
+      if (updateOrganizationUnits && orgId) {
+        try {
+          const updated = await getWorkplaces(orgId);
+          const unitNames = updated.map((w) => (w.id === editingWp.id ? editName.trim() : w.name)).filter(Boolean);
+          await updateOrganizationUnits(orgId, unitNames);
+        } catch (syncErr) {
+          console.warn('Could not sync units to organization doc:', syncErr);
+        }
+      }
+
       setEditingWp(null);
       await load();
     } catch (err: any) {
@@ -194,10 +223,16 @@ export default function LocationsScreen() {
     <SidebarLayout>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Top Header */}
-        <View style={[styles.topBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-          <View>
+        <View
+          style={[
+            styles.topBar,
+            { backgroundColor: colors.surface, borderBottomColor: colors.border },
+            isMobile && { flexDirection: 'column', alignItems: 'stretch', gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
+          ]}
+        >
+          <View style={{ flexShrink: 1, minWidth: 0 }}>
             <Text style={[styles.title, { color: colors.text }]}>Units / Sub-Brands</Text>
-            <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
+            <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2 }}>
               Configure physical workplace units, sub-brands, and attendance geofencing boundaries.
             </Text>
           </View>
@@ -208,14 +243,14 @@ export default function LocationsScreen() {
               setShowCreate(true);
             }}
             size="sm"
-            style={{ backgroundColor: colors.primary, borderRadius: 8 }}
+            style={{ backgroundColor: colors.primary, borderRadius: 8, alignSelf: isMobile ? 'stretch' : 'auto' }}
           />
         </View>
 
         <FlatList
           data={workplaces}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: 20, gap: 12 }}
+          contentContainerStyle={{ padding: isMobile ? 14 : 20, gap: 12 }}
           ListEmptyComponent={
             <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 48, gap: 12 }}>
               <Building2 size={48} color={colors.textSecondary} />
@@ -227,56 +262,107 @@ export default function LocationsScreen() {
           }
           renderItem={({ item }) => (
             <Card>
-              <View style={styles.cardRow}>
-                <View style={[styles.locationIconBox, { backgroundColor: colors.primary + '15' }]}>
-                  <Building2 size={24} color={colors.primary} />
-                </View>
-
-                <View style={{ flex: 1, paddingHorizontal: 12 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                    <Text style={[styles.wpName, { color: colors.text }]}>{item.name}</Text>
-                    <Badge
-                      label={item.is_active ? 'Active' : 'Inactive'}
-                      variant={item.is_active ? 'success' : 'neutral'}
-                    />
-                    {Boolean(empCounts[item.id] || empCounts[item.name]) && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F0FDF4', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, borderWidth: 0.5, borderColor: '#BBF7D0' }}>
-                        <Users size={12} color="#15803D" />
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#15803D' }}>
-                          {empCounts[item.id] || empCounts[item.name]} Staff
-                        </Text>
+              {isMobile ? (
+                <View style={{ gap: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+                    <View style={[styles.locationIconBox, { backgroundColor: colors.primary + '15' }]}>
+                      <Building2 size={24} color={colors.primary} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                        <Text style={[styles.wpName, { color: colors.text }]}>{item.name}</Text>
+                        <Badge
+                          label={item.is_active ? 'Active' : 'Inactive'}
+                          variant={item.is_active ? 'success' : 'neutral'}
+                        />
+                        {Boolean(empCounts[item.id] || empCounts[item.name]) && (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F0FDF4', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, borderWidth: 0.5, borderColor: '#BBF7D0' }}>
+                            <Users size={12} color="#15803D" />
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#15803D' }}>
+                              {empCounts[item.id] || empCounts[item.name]} Staff
+                            </Text>
+                          </View>
+                        )}
                       </View>
-                    )}
+                      {item.address ? (
+                        <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 4 }}>
+                          {item.address}
+                        </Text>
+                      ) : null}
+                      <Text style={{ color: colors.textSecondary, fontSize: 12, fontWeight: '500' }}>
+                        Coordinates: {item.latitude.toFixed(5)}, {item.longitude.toFixed(5)} • Geofence:{' '}
+                        <Text style={{ fontWeight: '700', color: colors.text }}>{item.radius_meters}m</Text>
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }}>
+                    <Button
+                      title="Edit"
+                      onPress={() => openEditModal(item)}
+                      variant="outline"
+                      size="sm"
+                      style={{ borderRadius: 8 }}
+                    />
+                    <Button
+                      title={item.is_active ? 'Deactivate' : 'Activate'}
+                      onPress={() => toggleActive(item)}
+                      variant="ghost"
+                      size="sm"
+                    />
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.cardRow}>
+                  <View style={[styles.locationIconBox, { backgroundColor: colors.primary + '15' }]}>
+                    <Building2 size={24} color={colors.primary} />
                   </View>
 
-                  {item.address ? (
-                    <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 4 }}>
-                      {item.address}
+                  <View style={{ flex: 1, paddingHorizontal: 12 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                      <Text style={[styles.wpName, { color: colors.text }]}>{item.name}</Text>
+                      <Badge
+                        label={item.is_active ? 'Active' : 'Inactive'}
+                        variant={item.is_active ? 'success' : 'neutral'}
+                      />
+                      {Boolean(empCounts[item.id] || empCounts[item.name]) && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F0FDF4', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, borderWidth: 0.5, borderColor: '#BBF7D0' }}>
+                          <Users size={12} color="#15803D" />
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#15803D' }}>
+                            {empCounts[item.id] || empCounts[item.name]} Staff
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {item.address ? (
+                      <Text style={{ color: colors.textSecondary, fontSize: 13, marginBottom: 4 }}>
+                        {item.address}
+                      </Text>
+                    ) : null}
+
+                    <Text style={{ color: colors.textSecondary, fontSize: 12, fontWeight: '500' }}>
+                      Coordinates: {item.latitude.toFixed(5)}, {item.longitude.toFixed(5)} • Geofence:{' '}
+                      <Text style={{ fontWeight: '700', color: colors.text }}>{item.radius_meters}m</Text>
                     </Text>
-                  ) : null}
+                  </View>
 
-                  <Text style={{ color: colors.textSecondary, fontSize: 12, fontWeight: '500' }}>
-                    Coordinates: {item.latitude.toFixed(5)}, {item.longitude.toFixed(5)} • Geofence:{' '}
-                    <Text style={{ fontWeight: '700', color: colors.text }}>{item.radius_meters}m</Text>
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Button
+                      title="Edit"
+                      onPress={() => openEditModal(item)}
+                      variant="outline"
+                      size="sm"
+                      style={{ borderRadius: 8 }}
+                    />
+                    <Button
+                      title={item.is_active ? 'Deactivate' : 'Activate'}
+                      onPress={() => toggleActive(item)}
+                      variant="ghost"
+                      size="sm"
+                    />
+                  </View>
                 </View>
-
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Button
-                    title="Edit"
-                    onPress={() => openEditModal(item)}
-                    variant="outline"
-                    size="sm"
-                    style={{ borderRadius: 8 }}
-                  />
-                  <Button
-                    title={item.is_active ? 'Deactivate' : 'Activate'}
-                    onPress={() => toggleActive(item)}
-                    variant="ghost"
-                    size="sm"
-                  />
-                </View>
-              </View>
+              )}
             </Card>
           )}
         />

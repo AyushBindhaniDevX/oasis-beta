@@ -394,11 +394,6 @@ export default function EmployeeDashboard() {
   const orgName = organization?.name || 'WorkGrid Workspace';
   const designation = employee?.designation || 'Staff';
   const workplaceName = employee?.hospital_unit || employee?.workplace?.name || tenantWp?.name || 'Shanti Memorial Hospital - Cuttack';
-  const kpiCardWidth = isDesktop
-    ? undefined
-    : Platform.OS === 'web'
-    ? 'calc(50% - 6px)'
-    : Math.floor((width - 40 - 18) / 2);
 
   return (
     <ScrollView

@@ -735,11 +735,6 @@ export default function AdminDashboard() {
   };
 
   /* ── Responsive widths ────────────────────────────────────────────── */
-  const kpiCardWidth = isDesktop
-    ? undefined
-    : Platform.OS === 'web'
-    ? 'calc(50% - 6px)'
-    : Math.floor((width - 40 - 18) / 2);
   const splineChartWidth = isDesktop
     ? 340
     : isTablet

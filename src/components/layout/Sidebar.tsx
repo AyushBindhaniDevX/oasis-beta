@@ -223,6 +223,33 @@ export function SidebarLayout({ items, children }: SidebarProps) {
   /* ── Collapse state (simple boolean, no animation) ───────────────── */
   const [collapsed, setCollapsed] = useState(false);
 
+  // Synchronously blur active element & prevent body scrolling when mobile sheets/modals open
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const anySheetOpen = showMoreSheet || showOrgSwitcherModal;
+      if (anySheetOpen) {
+        const activeEl = document.activeElement as HTMLElement | null;
+        if (activeEl && typeof activeEl.blur === 'function') {
+          activeEl.blur();
+        }
+        const originalOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+          if (e.key === 'Escape') {
+            setShowMoreSheet(false);
+            setShowOrgSwitcherModal(false);
+          }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+          window.removeEventListener('keydown', handleKeyDown);
+          document.body.style.overflow = originalOverflow;
+        };
+      }
+    }
+  }, [showMoreSheet, showOrgSwitcherModal]);
+
   useEffect(() => {
     AsyncStorage.getItem(SIDEBAR_COLLAPSED_KEY)
       .then((v) => { if (v === '1') setCollapsed(true); })
@@ -1997,6 +2024,7 @@ const styles = StyleSheet.create({
   },
   mobileOrgTextCol: {
     flexShrink: 1,
+    minWidth: 0,
     gap: 2,
   },
   mobileOrgTitle: {

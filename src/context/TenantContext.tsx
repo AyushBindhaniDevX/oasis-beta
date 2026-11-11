@@ -30,6 +30,7 @@ import {
   type IndustryType,
   type IndustryTerminology,
 } from '@/constants/config';
+import { invalidateOrgMetaCache, invalidateEmployeeCache } from '@/lib/services/employee';
 
 // Default modular feature allocations per subscription tier
 export const PLAN_FEATURE_DEFAULTS: Record<SubscriptionPlan, OrganizationFeatures> = {
@@ -195,15 +196,19 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         if (data.parent_organization_id || data.is_unit || d.id === 'chikitsa' || d.id === 'gopal-trust') continue;
 
         if (!orgMap.has(normalizedName)) {
-          const childUnits = subUnitsMap.get(d.id) || [];
-          const defaultUnits = getTenantDefaultUnits(data.name, d.id);
-          const existingUnits = Array.isArray(data.units) ? data.units : defaultUnits;
-          const mergedUnits = Array.from(new Set([...existingUnits, ...childUnits]));
+          let finalUnits: string[];
+          if (Array.isArray(data.units)) {
+            finalUnits = data.units.filter((u: any) => typeof u === 'string' && u.trim().length > 0);
+          } else {
+            const childUnits = subUnitsMap.get(d.id) || [];
+            const defaultUnits = getTenantDefaultUnits(data.name, d.id);
+            finalUnits = Array.from(new Set([...defaultUnits, ...childUnits]));
+          }
 
           orgMap.set(normalizedName, {
             ...data,
             id: d.id,
-            units: mergedUnits,
+            units: finalUnits,
           });
         }
       }
@@ -533,13 +538,75 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
   // Update units / sub-brands array for an organization
   const updateOrganizationUnits = useCallback(async (orgId: string, units: string[]) => {
+    const cleanedUnits = Array.from(new Set(units.map((u) => u.trim()).filter((u) => u.length > 0)));
+    
+    // 1. Save to Firestore organization document
     await setDoc(doc(db, 'organizations', orgId), {
-      units,
+      units: cleanedUnits,
       updated_at: new Date().toISOString(),
     }, { merge: true });
+
+    // 2. If SMH alias exists, keep it in sync
+    if (orgId === 'shanti-memorial-hospital') {
+      try {
+        await setDoc(doc(db, 'organizations', 'smh'), {
+          units: cleanedUnits,
+          updated_at: new Date().toISOString(),
+        }, { merge: true });
+      } catch {}
+    }
+
+    // 3. Sync workplaces collection so geofences and unit locations match
+    try {
+      const isSMH = orgId === 'shanti-memorial-hospital' || orgId === 'smh';
+      const wpQuery = query(
+        collection(db, 'workplaces'),
+        where('organization_id', '==', isSMH ? 'shanti-memorial-hospital' : orgId)
+      );
+      const wpSnap = await getDocs(wpQuery);
+      const existingWpNames = new Set<string>();
+      wpSnap.docs.forEach((d) => {
+        const wpData = d.data();
+        if (wpData.name) existingWpNames.add(wpData.name.trim().toLowerCase());
+      });
+
+      // Add missing units as active workplaces
+      for (const unitName of cleanedUnits) {
+        if (!existingWpNames.has(unitName.toLowerCase())) {
+          const wpId = `wp-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+          await setDoc(doc(db, 'workplaces', wpId), {
+            id: wpId,
+            organization_id: isSMH ? 'shanti-memorial-hospital' : orgId,
+            name: unitName,
+            address: isSMH ? 'Manglabag, Thoria Sahi, Cuttack, Odisha 753001' : 'Main Workplace Campus',
+            latitude: isSMH ? 20.46933 : 13.0403,
+            longitude: isSMH ? 85.88301 : 80.22957,
+            radius_meters: 500,
+            is_active: true,
+            created_at: new Date().toISOString(),
+          });
+        }
+      }
+    } catch (wpErr) {
+      console.warn('Could not auto-sync workplaces:', wpErr);
+    }
+
+    // 4. Invalidate caches
+    invalidateOrgMetaCache();
+    invalidateEmployeeCache();
+
+    // 5. Optimistic local state update
+    setAllOrganizations((prev) =>
+      prev.map((o) => (o.id === orgId ? { ...o, units: cleanedUnits } : o))
+    );
+    if (organization?.id === orgId) {
+      setOrganization((prev) => (prev ? { ...prev, units: cleanedUnits } : null));
+    }
+
+    // 6. Full refresh
     await fetchAllOrganizations();
     await fetchTenantData();
-  }, [fetchAllOrganizations, fetchTenantData]);
+  }, [fetchAllOrganizations, fetchTenantData, organization?.id]);
 
   useEffect(() => {
     if (isAuthenticated) {

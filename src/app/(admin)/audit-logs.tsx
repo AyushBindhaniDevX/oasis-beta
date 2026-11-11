@@ -154,12 +154,6 @@ export default function AuditLogsScreen() {
 
   if (loading) return <LoadingState />;
 
-  const kpiCardWidth = isDesktop
-    ? undefined
-    : Platform.OS === 'web'
-    ? 'calc(50% - 6px)'
-    : Math.floor((width - 40 - 18) / 2);
-
   return (
     <SidebarLayout items={ADMIN_NAV}>
       <ScrollView
@@ -197,121 +191,238 @@ export default function AuditLogsScreen() {
         </Animated.View>
 
         {/* 4 Pastel KPI Metric Cards with InteractiveTile */}
-        <Animated.View entering={FadeInDown.delay(50).duration(280)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 4 }}>
-          {/* Tile 1: Total Events */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#F3EEFE',
-                borderColor: '#E4DCFD',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-            onPress={() => setActionFilter('all')}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
-                <SvgXml xml={STOCK_12_SVG} width={34} height={25} />
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>{logs.length}</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>↑ Immutable</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Total Audit Events</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#8B5CF6" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+        <Animated.View entering={FadeInDown.delay(50).duration(280)} style={{ marginBottom: 12 }}>
+          {isDesktop ? (
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              {/* Tile 1: Total Events */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#F3EEFE',
+                    borderColor: '#E4DCFD',
+                    flex: 1,
+                    minWidth: 0,
+                  },
+                ]}
+                onPress={() => setActionFilter('all')}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                    <SvgXml xml={STOCK_12_SVG} width={34} height={25} />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>{logs.length}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>↑ Immutable</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Total Audit Events</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#8B5CF6" width={isDesktop ? 150 : 80} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Tile 2: User Account Events */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#EDFAF2',
-                borderColor: '#CEF2DE',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-            onPress={() => setActionFilter('user')}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
-                <SvgXml xml={STOCK_4_SVG} width={34} height={25} />
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#064E3B' }]}>{userLogsCount}</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>User Logs</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>User Accounts</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#10B981" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+              {/* Tile 2: User Account Events */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#EDFAF2',
+                    borderColor: '#CEF2DE',
+                    flex: 1,
+                    minWidth: 0,
+                  },
+                ]}
+                onPress={() => setActionFilter('user')}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                    <SvgXml xml={STOCK_4_SVG} width={34} height={25} />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#064E3B' }]}>{userLogsCount}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>User Logs</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>User Accounts</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#10B981" width={isDesktop ? 150 : 80} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Tile 3: Role Changes */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#FFF4EB',
-                borderColor: '#FFE2CD',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-            onPress={() => setActionFilter('role')}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
-                <SvgXml xml={STOCK_1_SVG} width={34} height={25} />
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>{roleLogsCount}</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Privileges</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Role Changes</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#F97316" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+              {/* Tile 3: Role Changes */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#FFF4EB',
+                    borderColor: '#FFE2CD',
+                    flex: 1,
+                    minWidth: 0,
+                  },
+                ]}
+                onPress={() => setActionFilter('role')}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                    <SvgXml xml={STOCK_1_SVG} width={34} height={25} />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>{roleLogsCount}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Privileges</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Role Changes</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#F97316" width={isDesktop ? 150 : 80} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Tile 4: Compliance Status */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#EFF6FF',
-                borderColor: '#DBEAFE',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
-                <SvgXml xml={STOCK_10_SVG} width={34} height={25} />
+              {/* Tile 4: Compliance Status */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#EFF6FF',
+                    borderColor: '#DBEAFE',
+                    flex: 1,
+                    minWidth: 0,
+                  },
+                ]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
+                    <SvgXml xml={STOCK_10_SVG} width={34} height={25} />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#1E3A8A' }]}>100%</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>Verified</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Audit Integrity</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#3B82F6" width={isDesktop ? 150 : 80} height={24} />
+                </View>
+              </InteractiveTile>
+            </View>
+          ) : (
+            <View style={{ gap: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {/* Tile 1: Total Events */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#F3EEFE',
+                      borderColor: '#E4DCFD',
+                      flex: 1,
+                      minWidth: 0,
+                    },
+                  ]}
+                  onPress={() => setActionFilter('all')}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                      <SvgXml xml={STOCK_12_SVG} width={34} height={25} />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>{logs.length}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>↑ Immutable</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Total Audit Events</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#8B5CF6" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
+
+                {/* Tile 2: User Account Events */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#EDFAF2',
+                      borderColor: '#CEF2DE',
+                      flex: 1,
+                      minWidth: 0,
+                    },
+                  ]}
+                  onPress={() => setActionFilter('user')}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                      <SvgXml xml={STOCK_4_SVG} width={34} height={25} />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#064E3B' }]}>{userLogsCount}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>User Logs</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>User Accounts</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#10B981" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
               </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#1E3A8A' }]}>100%</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>Verified</Text>
+
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {/* Tile 3: Role Changes */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#FFF4EB',
+                      borderColor: '#FFE2CD',
+                      flex: 1,
+                      minWidth: 0,
+                    },
+                  ]}
+                  onPress={() => setActionFilter('role')}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                      <SvgXml xml={STOCK_1_SVG} width={34} height={25} />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>{roleLogsCount}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Privileges</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Role Changes</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#F97316" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
+
+                {/* Tile 4: Compliance Status */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#EFF6FF',
+                      borderColor: '#DBEAFE',
+                      flex: 1,
+                      minWidth: 0,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
+                      <SvgXml xml={STOCK_10_SVG} width={34} height={25} />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#1E3A8A' }]}>100%</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>Verified</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Audit Integrity</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#3B82F6" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
               </View>
             </View>
-            <Text style={styles.metricLabelText}>Audit Integrity</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#3B82F6" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+          )}
         </Animated.View>
 
         {exportNotice && (

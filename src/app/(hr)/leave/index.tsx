@@ -482,12 +482,6 @@ export default function HRLeaveWorkflowScreen() {
 
   if (loading) return <LoadingState />;
 
-  const kpiCardWidth = isDesktop
-    ? undefined
-    : Platform.OS === 'web'
-    ? 'calc(50% - 6px)'
-    : Math.floor((width - 40 - 18) / 2);
-
   return (
     <SidebarLayout items={getNavForRole(profile?.role || 'hr', profile?.email)}>
       <ScrollView
@@ -544,118 +538,224 @@ export default function HRLeaveWorkflowScreen() {
         </Animated.View>
 
         {/* 4 Pastel Metric KPI Cards */}
-        <Animated.View entering={FadeInDown.delay(40).duration(280)} style={styles.kpiRow}>
-          {/* Tile 1: Pending Requests */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#FFF7ED',
-                borderColor: '#FFEDD5',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
-                <Flame size={18} color="#EA580C" />
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#9A3412' }]}>{pendingList.length}</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Pending</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Pending Approvals</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#EA580C" width={isDesktop ? 140 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+        <Animated.View entering={FadeInDown.delay(40).duration(280)} style={{ marginBottom: 16 }}>
+          {isDesktop ? (
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              {/* Tile 1: Pending Requests */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#FFF7ED',
+                    borderColor: '#FFEDD5',
+                    flex: 1,
+                  },
+                ]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                    <Flame size={18} color="#EA580C" />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#9A3412' }]}>{pendingList.length}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Pending</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Pending Approvals</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#EA580C" width={140} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Tile 2: Approved Requests */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#ECFDF5',
-                borderColor: '#D1FAE5',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
-                <CheckCircle2 size={18} color="#059669" />
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#065F46' }]}>{approvedList.length}</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#059669', marginTop: 1 }}>Approved</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Completed & Granted</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#10B981" width={isDesktop ? 140 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+              {/* Tile 2: Approved Requests */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#ECFDF5',
+                    borderColor: '#D1FAE5',
+                    flex: 1,
+                  },
+                ]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                    <CheckCircle2 size={18} color="#059669" />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#065F46' }]}>{approvedList.length}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#059669', marginTop: 1 }}>Approved</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Completed & Granted</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#10B981" width={140} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Tile 3: Rejected / Closed */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#FEF2F2',
-                borderColor: '#FEE2E2',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#FEE2E2' }]}>
-                <XCircle size={18} color="#DC2626" />
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#991B1B' }]}>{rejectedList.length}</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#DC2626', marginTop: 1 }}>Declined</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Rejected Applications</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#EF4444" width={isDesktop ? 140 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+              {/* Tile 3: Rejected / Closed */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#FEF2F2',
+                    borderColor: '#FEE2E2',
+                    flex: 1,
+                  },
+                ]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#FEE2E2' }]}>
+                    <XCircle size={18} color="#DC2626" />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#991B1B' }]}>{rejectedList.length}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#DC2626', marginTop: 1 }}>Declined</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Rejected Applications</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#EF4444" width={140} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Tile 4: Active Policies */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#F3EEFE',
-                borderColor: '#E4DCFD',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
-                <Sliders size={18} color="#7C3AED" />
+              {/* Tile 4: Active Policies */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#F3EEFE',
+                    borderColor: '#E4DCFD',
+                    flex: 1,
+                  },
+                ]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                    <Sliders size={18} color="#7C3AED" />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#5B21B6' }]}>{leaveTypes.length}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#7C3AED', marginTop: 1 }}>Policies</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Configured Leave Policies</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#8B5CF6" width={140} height={24} />
+                </View>
+              </InteractiveTile>
+            </View>
+          ) : (
+            <View style={{ gap: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {/* Tile 1: Pending Requests */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#FFF7ED',
+                      borderColor: '#FFEDD5',
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                      <Flame size={18} color="#EA580C" />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#9A3412' }]}>{pendingList.length}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Pending</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Pending</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#EA580C" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
+
+                {/* Tile 2: Approved Requests */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#ECFDF5',
+                      borderColor: '#D1FAE5',
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                      <CheckCircle2 size={18} color="#059669" />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#065F46' }]}>{approvedList.length}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#059669', marginTop: 1 }}>Approved</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Approved</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#10B981" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
               </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#5B21B6' }]}>{leaveTypes.length}</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#7C3AED', marginTop: 1 }}>Policies</Text>
+
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {/* Tile 3: Rejected / Closed */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#FEF2F2',
+                      borderColor: '#FEE2E2',
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#FEE2E2' }]}>
+                      <XCircle size={18} color="#DC2626" />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#991B1B' }]}>{rejectedList.length}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#DC2626', marginTop: 1 }}>Declined</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Rejected</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#EF4444" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
+
+                {/* Tile 4: Active Policies */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#F3EEFE',
+                      borderColor: '#E4DCFD',
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                      <Sliders size={18} color="#7C3AED" />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#5B21B6' }]}>{leaveTypes.length}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#7C3AED', marginTop: 1 }}>Policies</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Policies</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#8B5CF6" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
               </View>
             </View>
-            <Text style={styles.metricLabelText}>Configured Leave Policies</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#8B5CF6" width={isDesktop ? 140 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+          )}
         </Animated.View>
 
         {/* Dual Scope Pill Toggle & Main View Switcher (Image 2 + 1) */}

@@ -119,12 +119,6 @@ export default function DataManagementScreen() {
     }
   };
 
-  const kpiCardWidth = isDesktop
-    ? undefined
-    : Platform.OS === 'web'
-    ? 'calc(50% - 6px)'
-    : Math.floor((width - 40 - 18) / 2);
-
   return (
     <SidebarLayout items={ADMIN_NAV}>
       <ScrollView
@@ -150,120 +144,236 @@ export default function DataManagementScreen() {
         </Animated.View>
 
         {/* 4 Pastel KPI Metric Cards with InteractiveTile */}
-        <Animated.View entering={FadeInDown.delay(50).duration(280)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 4 }}>
-          {/* Card 1: Report Modules */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#F3EEFE',
-                borderColor: '#E4DCFD',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-            onPress={() => setActiveTab('export')}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
-                <SvgXml xml={BUSINESS_DATA_SVG} width={34} height={25} />
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>13</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>Registers</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Report Catalog</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#8B5CF6" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+        <Animated.View entering={FadeInDown.delay(50).duration(280)} style={{ marginBottom: 12 }}>
+          {isDesktop ? (
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              {/* Card 1: Report Modules */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#F3EEFE',
+                    borderColor: '#E4DCFD',
+                    flex: 1,
+                    minWidth: 0,
+                  },
+                ]}
+                onPress={() => setActiveTab('export')}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                    <SvgXml xml={BUSINESS_DATA_SVG} width={34} height={25} />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>13</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>Registers</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Report Catalog</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#8B5CF6" width={isDesktop ? 150 : 80} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Card 2: Statutory Compliance */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#EDFAF2',
-                borderColor: '#CEF2DE',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
-                <SvgXml xml={STOCK_10_SVG} width={34} height={25} />
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#064E3B' }]}>EPFO</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>+ ESIC Return</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Statutory ECR</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#10B981" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+              {/* Card 2: Statutory Compliance */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#EDFAF2',
+                    borderColor: '#CEF2DE',
+                    flex: 1,
+                    minWidth: 0,
+                  },
+                ]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                    <SvgXml xml={STOCK_10_SVG} width={34} height={25} />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#064E3B' }]}>EPFO</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>+ ESIC Return</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Statutory ECR</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#10B981" width={isDesktop ? 150 : 80} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Card 3: Bulk Importer */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#FFF4EB',
-                borderColor: '#FFE2CD',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-            onPress={() => setActiveTab('import')}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
-                <SvgXml xml={STOCK_1_SVG} width={34} height={25} />
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>Bulk</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Excel Ready</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Batch Import</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#F97316" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+              {/* Card 3: Bulk Importer */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#FFF4EB',
+                    borderColor: '#FFE2CD',
+                    flex: 1,
+                    minWidth: 0,
+                  },
+                ]}
+                onPress={() => setActiveTab('import')}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                    <SvgXml xml={STOCK_1_SVG} width={34} height={25} />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>Bulk</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Excel Ready</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Batch Import</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#F97316" width={isDesktop ? 150 : 80} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Card 4: Salary Architecture */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#EFF6FF',
-                borderColor: '#DBEAFE',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
-                <SvgXml xml={STOCK_9_SVG} width={34} height={25} />
+              {/* Card 4: Salary Architecture */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#EFF6FF',
+                    borderColor: '#DBEAFE',
+                    flex: 1,
+                    minWidth: 0,
+                  },
+                ]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
+                    <SvgXml xml={STOCK_9_SVG} width={34} height={25} />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#1E3A8A' }]}>26-Col</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>Standard Sheet</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Salary Register</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#3B82F6" width={isDesktop ? 150 : 80} height={24} />
+                </View>
+              </InteractiveTile>
+            </View>
+          ) : (
+            <View style={{ gap: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {/* Card 1: Report Modules */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#F3EEFE',
+                      borderColor: '#E4DCFD',
+                      flex: 1,
+                      minWidth: 0,
+                    },
+                  ]}
+                  onPress={() => setActiveTab('export')}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                      <SvgXml xml={BUSINESS_DATA_SVG} width={34} height={25} />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>13</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>Registers</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Report Catalog</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#8B5CF6" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
+
+                {/* Card 2: Statutory Compliance */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#EDFAF2',
+                      borderColor: '#CEF2DE',
+                      flex: 1,
+                      minWidth: 0,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                      <SvgXml xml={STOCK_10_SVG} width={34} height={25} />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#064E3B' }]}>EPFO</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>+ ESIC Return</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Statutory ECR</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#10B981" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
               </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#1E3A8A' }]}>26-Col</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>Standard Sheet</Text>
+
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {/* Card 3: Bulk Importer */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#FFF4EB',
+                      borderColor: '#FFE2CD',
+                      flex: 1,
+                      minWidth: 0,
+                    },
+                  ]}
+                  onPress={() => setActiveTab('import')}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                      <SvgXml xml={STOCK_1_SVG} width={34} height={25} />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>Bulk</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Excel Ready</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Batch Import</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#F97316" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
+
+                {/* Card 4: Salary Architecture */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#EFF6FF',
+                      borderColor: '#DBEAFE',
+                      flex: 1,
+                      minWidth: 0,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
+                      <SvgXml xml={STOCK_9_SVG} width={34} height={25} />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#1E3A8A' }]}>26-Col</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>Standard Sheet</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Salary Register</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#3B82F6" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
               </View>
             </View>
-            <Text style={styles.metricLabelText}>Salary Register</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#3B82F6" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+          )}
         </Animated.View>
 
         <View style={styles.tabContainer}>

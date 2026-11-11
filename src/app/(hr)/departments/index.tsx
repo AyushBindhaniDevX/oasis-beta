@@ -121,11 +121,6 @@ export default function DepartmentsAndHierarchyScreen() {
 
   const isDesktop = width >= 1024;
   const isTablet = width >= 640 && width < 1024;
-  const kpiCardWidth = isDesktop
-    ? undefined
-    : Platform.OS === 'web'
-    ? 'calc(50% - 6px)'
-    : Math.floor((width - 40 - 18) / 2);
 
   const navItems = getNavForRole(role, profile?.email);
 
@@ -682,110 +677,209 @@ export default function DepartmentsAndHierarchyScreen() {
         </Animated.View>
 
         {/* ─── Metric Stat Cards Row with Wave Lines ────────────────────────── */}
-        <Animated.View entering={FadeInDown.delay(70).duration(280)} style={styles.metricsRow}>
-          {/* Card 1: Total Departments */}
-          <InteractiveTile
-            style={[
-              styles.metricCard,
-              {
-                backgroundColor: '#F3EEFE',
-                borderColor: '#E4DCFD',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 180 : undefined,
-                width: isDesktop ? undefined : kpiCardWidth,
-              },
-            ]}
-            onPress={() => setActiveMode('directory')}
-          >
-            <View style={styles.metricCardHeader}>
-              <Text style={styles.metricValueText}>{departments.length}</Text>
-              <View style={[styles.metricIconBox, { backgroundColor: '#EDE9FE' }]}>
-                <Building2 size={16} color="#7C3AED" />
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Total Departments</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#8B5CF6" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+        {/* Pastel KPI Metric Cards */}
+        <Animated.View entering={FadeInDown.delay(70).duration(280)} style={{ marginBottom: 16 }}>
+          {isDesktop ? (
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              {/* Card 1: Total Departments */}
+              <InteractiveTile
+                style={[
+                  styles.metricCard,
+                  {
+                    backgroundColor: '#F3EEFE',
+                    borderColor: '#E4DCFD',
+                    flex: 1,
+                  },
+                ]}
+                onPress={() => setActiveMode('directory')}
+              >
+                <View style={styles.metricCardHeader}>
+                  <Text style={styles.metricValueText}>{departments.length}</Text>
+                  <View style={[styles.metricIconBox, { backgroundColor: '#EDE9FE' }]}>
+                    <Building2 size={16} color="#7C3AED" />
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Total Departments</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#8B5CF6" width={150} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Card 2: Assigned Staff */}
-          <InteractiveTile
-            style={[
-              styles.metricCard,
-              {
-                backgroundColor: '#EDFAF2',
-                borderColor: '#CEF2DE',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 180 : undefined,
-                width: isDesktop ? undefined : kpiCardWidth,
-              },
-            ]}
-            onPress={() => setActiveMode('departments')}
-          >
-            <View style={styles.metricCardHeader}>
-              <Text style={styles.metricValueText}>{assignedStaffCount}</Text>
-              <View style={[styles.metricIconBox, { backgroundColor: '#DCFCE7' }]}>
-                <Users size={16} color="#10B981" />
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Assigned Staff</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#10B981" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+              {/* Card 2: Assigned Staff */}
+              <InteractiveTile
+                style={[
+                  styles.metricCard,
+                  {
+                    backgroundColor: '#EDFAF2',
+                    borderColor: '#CEF2DE',
+                    flex: 1,
+                  },
+                ]}
+                onPress={() => setActiveMode('departments')}
+              >
+                <View style={styles.metricCardHeader}>
+                  <Text style={styles.metricValueText}>{assignedStaffCount}</Text>
+                  <View style={[styles.metricIconBox, { backgroundColor: '#DCFCE7' }]}>
+                    <Users size={16} color="#10B981" />
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Assigned Staff</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#10B981" width={150} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Card 3: Appointed HODs */}
-          <InteractiveTile
-            style={[
-              styles.metricCard,
-              {
-                backgroundColor: '#FFF4EB',
-                borderColor: '#FFE2CD',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 180 : undefined,
-                width: isDesktop ? undefined : kpiCardWidth,
-              },
-            ]}
-            onPress={() => setActiveMode('org-chart')}
-          >
-            <View style={styles.metricCardHeader}>
-              <Text style={styles.metricValueText}>{hodCount}</Text>
-              <View style={[styles.metricIconBox, { backgroundColor: '#FFEDD5' }]}>
-                <Award size={16} color="#F97316" />
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Appointed HODs</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#F97316" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+              {/* Card 3: Appointed HODs */}
+              <InteractiveTile
+                style={[
+                  styles.metricCard,
+                  {
+                    backgroundColor: '#FFF4EB',
+                    borderColor: '#FFE2CD',
+                    flex: 1,
+                  },
+                ]}
+                onPress={() => setActiveMode('org-chart')}
+              >
+                <View style={styles.metricCardHeader}>
+                  <Text style={styles.metricValueText}>{hodCount}</Text>
+                  <View style={[styles.metricIconBox, { backgroundColor: '#FFEDD5' }]}>
+                    <Award size={16} color="#F97316" />
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Appointed HODs</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#F97316" width={150} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Card 4: Unassigned Staff */}
-          <InteractiveTile
-            style={[
-              styles.metricCard,
-              {
-                backgroundColor: '#EFF6FF',
-                borderColor: '#DBEAFE',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 180 : undefined,
-                width: isDesktop ? undefined : kpiCardWidth,
-              },
-            ]}
-            onPress={() => setActiveMode('departments')}
-          >
-            <View style={styles.metricCardHeader}>
-              <Text style={styles.metricValueText}>{unassignedStaffCount}</Text>
-              <View style={[styles.metricIconBox, { backgroundColor: '#DBEAFE' }]}>
-                <AlertCircle size={16} color="#3B82F6" />
+              {/* Card 4: Unassigned Staff */}
+              <InteractiveTile
+                style={[
+                  styles.metricCard,
+                  {
+                    backgroundColor: '#EFF6FF',
+                    borderColor: '#DBEAFE',
+                    flex: 1,
+                  },
+                ]}
+                onPress={() => setActiveMode('departments')}
+              >
+                <View style={styles.metricCardHeader}>
+                  <Text style={styles.metricValueText}>{unassignedStaffCount}</Text>
+                  <View style={[styles.metricIconBox, { backgroundColor: '#DBEAFE' }]}>
+                    <AlertCircle size={16} color="#3B82F6" />
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Unassigned Staff</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#3B82F6" width={150} height={24} />
+                </View>
+              </InteractiveTile>
+            </View>
+          ) : (
+            <View style={{ gap: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {/* Card 1: Total Departments */}
+                <InteractiveTile
+                  style={[
+                    styles.metricCard,
+                    {
+                      backgroundColor: '#F3EEFE',
+                      borderColor: '#E4DCFD',
+                      flex: 1,
+                    },
+                  ]}
+                  onPress={() => setActiveMode('directory')}
+                >
+                  <View style={styles.metricCardHeader}>
+                    <Text style={styles.metricValueText}>{departments.length}</Text>
+                    <View style={[styles.metricIconBox, { backgroundColor: '#EDE9FE' }]}>
+                      <Building2 size={16} color="#7C3AED" />
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Departments</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#8B5CF6" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
+
+                {/* Card 2: Assigned Staff */}
+                <InteractiveTile
+                  style={[
+                    styles.metricCard,
+                    {
+                      backgroundColor: '#EDFAF2',
+                      borderColor: '#CEF2DE',
+                      flex: 1,
+                    },
+                  ]}
+                  onPress={() => setActiveMode('departments')}
+                >
+                  <View style={styles.metricCardHeader}>
+                    <Text style={styles.metricValueText}>{assignedStaffCount}</Text>
+                    <View style={[styles.metricIconBox, { backgroundColor: '#DCFCE7' }]}>
+                      <Users size={16} color="#10B981" />
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Assigned</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#10B981" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {/* Card 3: Appointed HODs */}
+                <InteractiveTile
+                  style={[
+                    styles.metricCard,
+                    {
+                      backgroundColor: '#FFF4EB',
+                      borderColor: '#FFE2CD',
+                      flex: 1,
+                    },
+                  ]}
+                  onPress={() => setActiveMode('org-chart')}
+                >
+                  <View style={styles.metricCardHeader}>
+                    <Text style={styles.metricValueText}>{hodCount}</Text>
+                    <View style={[styles.metricIconBox, { backgroundColor: '#FFEDD5' }]}>
+                      <Award size={16} color="#F97316" />
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>HODs</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#F97316" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
+
+                {/* Card 4: Unassigned Staff */}
+                <InteractiveTile
+                  style={[
+                    styles.metricCard,
+                    {
+                      backgroundColor: '#EFF6FF',
+                      borderColor: '#DBEAFE',
+                      flex: 1,
+                    },
+                  ]}
+                  onPress={() => setActiveMode('departments')}
+                >
+                  <View style={styles.metricCardHeader}>
+                    <Text style={styles.metricValueText}>{unassignedStaffCount}</Text>
+                    <View style={[styles.metricIconBox, { backgroundColor: '#DBEAFE' }]}>
+                      <AlertCircle size={16} color="#3B82F6" />
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Unassigned</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#3B82F6" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
               </View>
             </View>
-            <Text style={styles.metricLabelText}>Unassigned Staff</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#3B82F6" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+          )}
         </Animated.View>
 
         {/* ─── Search & Studio Mode Filters Bar ─────────────────────────────── */}

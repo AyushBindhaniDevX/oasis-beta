@@ -11,6 +11,7 @@ import {
   Platform,
   ActivityIndicator,
   useWindowDimensions,
+  Alert,
 } from 'react-native';
 import Svg, { Path, SvgXml } from 'react-native-svg';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -288,7 +289,11 @@ export default function CentralPortalScreen() {
 
   // Units Management State
   const [unitsList, setUnitsList] = useState<string[]>([]);
+  const [originalUnits, setOriginalUnits] = useState<string[]>([]);
   const [newUnitInput, setNewUnitInput] = useState('');
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingUnitName, setEditingUnitName] = useState('');
+  const [unitError, setUnitError] = useState<string | null>(null);
   const [savingUnits, setSavingUnits] = useState(false);
 
   const [savingConfig, setSavingConfig] = useState(false);
@@ -443,38 +448,136 @@ export default function CentralPortalScreen() {
     const defaults = org.units && org.units.length > 0
       ? org.units
       : getTenantDefaultUnits(org.name, org.id);
-    setUnitsList([...defaults]);
+    const list = [...defaults];
+    setUnitsList(list);
+    setOriginalUnits(list);
     setNewUnitInput('');
+    setEditingIndex(null);
+    setEditingUnitName('');
+    setUnitError(null);
   };
+
+  const hasUnsavedUnits = useMemo(() => {
+    if (unitsList.length !== originalUnits.length) return true;
+    return unitsList.some((u, i) => u !== originalUnits[i]);
+  }, [unitsList, originalUnits]);
 
   const handleAddUnit = () => {
     const trimmed = newUnitInput.trim();
-    if (!trimmed) return;
-    if (unitsList.includes(trimmed)) return;
+    if (!trimmed) {
+      setUnitError('Unit name cannot be empty');
+      return;
+    }
+    if (unitsList.some((u) => u.toLowerCase() === trimmed.toLowerCase())) {
+      setUnitError(`A unit named "${trimmed}" already exists`);
+      return;
+    }
     setUnitsList([...unitsList, trimmed]);
     setNewUnitInput('');
+    setUnitError(null);
   };
 
-  const handleRemoveUnit = (unitToRemove: string) => {
-    setUnitsList(unitsList.filter((u) => u !== unitToRemove));
+  const handleStartEdit = (idx: number, currentName: string) => {
+    setEditingIndex(idx);
+    setEditingUnitName(currentName);
+    setUnitError(null);
+  };
+
+  const handleSaveInlineEdit = () => {
+    if (editingIndex === null) return;
+    const trimmed = editingUnitName.trim();
+    if (!trimmed) {
+      setUnitError('Unit name cannot be empty');
+      return;
+    }
+    const duplicate = unitsList.some(
+      (u, i) => i !== editingIndex && u.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (duplicate) {
+      setUnitError(`A unit named "${trimmed}" already exists`);
+      return;
+    }
+    const updated = [...unitsList];
+    updated[editingIndex] = trimmed;
+    setUnitsList(updated);
+    setEditingIndex(null);
+    setEditingUnitName('');
+    setUnitError(null);
+  };
+
+  const handleCancelInlineEdit = () => {
+    setEditingIndex(null);
+    setEditingUnitName('');
+    setUnitError(null);
+  };
+
+  const handleRemoveUnit = (idxToRemove: number) => {
+    setUnitsList(unitsList.filter((_, idx) => idx !== idxToRemove));
+    if (editingIndex === idxToRemove) {
+      setEditingIndex(null);
+      setEditingUnitName('');
+    }
+    setUnitError(null);
   };
 
   const handleResetUnitsToDefault = () => {
     if (!managingUnitsOrg) return;
     const defaults = getTenantDefaultUnits(managingUnitsOrg.name, managingUnitsOrg.id);
     setUnitsList([...defaults]);
+    setEditingIndex(null);
+    setEditingUnitName('');
+    setUnitError(null);
+  };
+
+  const handleCloseUnitsModal = () => {
+    if (hasUnsavedUnits) {
+      Alert.alert(
+        'Unsaved Changes',
+        'You have unsaved changes to your organizational units. Do you want to discard them?',
+        [
+          { text: 'Keep Editing', style: 'cancel' },
+          {
+            text: 'Discard & Close',
+            style: 'destructive',
+            onPress: () => {
+              setManagingUnitsOrg(null);
+              setEditingIndex(null);
+              setUnitError(null);
+            },
+          },
+        ]
+      );
+    } else {
+      setManagingUnitsOrg(null);
+      setEditingIndex(null);
+      setUnitError(null);
+    }
   };
 
   const handleSaveUnits = async () => {
     if (!managingUnitsOrg) return;
+    let toSave = [...unitsList];
+    if (editingIndex !== null && editingUnitName.trim()) {
+      const trimmed = editingUnitName.trim();
+      toSave[editingIndex] = trimmed;
+      setUnitsList(toSave);
+      setEditingIndex(null);
+    }
+    if (toSave.length === 0) {
+      setUnitError('Organization must have at least one unit / campus location.');
+      return;
+    }
     setSavingUnits(true);
+    setUnitError(null);
     try {
-      await updateOrganizationUnits(managingUnitsOrg.id, unitsList);
+      await updateOrganizationUnits(managingUnitsOrg.id, toSave);
+      const savedOrgName = managingUnitsOrg.name;
       setManagingUnitsOrg(null);
-      setSwitchFeedback(`Saved units for "${managingUnitsOrg.name}"`);
+      setSwitchFeedback(`Saved ${toSave.length} units for "${savedOrgName}"`);
       setTimeout(() => setSwitchFeedback(null), 3500);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save units:', err);
+      setUnitError(err?.message || 'Failed to save units to database.');
     } finally {
       setSavingUnits(false);
     }
@@ -536,11 +639,6 @@ export default function CentralPortalScreen() {
 
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
-  const kpiCardWidth = isDesktop
-    ? undefined
-    : Platform.OS === 'web'
-    ? 'calc(50% - 6px)'
-    : Math.floor((width - 40 - 18) / 2);
 
   return (
     <SidebarLayout>
@@ -588,123 +686,233 @@ export default function CentralPortalScreen() {
           </View>
         </Animated.View>
 
-        {/* 4 Pastel KPI Metric Cards with InteractiveTile */}
-        <Animated.View entering={FadeInDown.delay(50).duration(280)} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-          {/* Tile 1: Organizations */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#F3EEFE',
-                borderColor: '#E4DCFD',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
-                <SvgXml xml={STOCK_6_SVG} width={34} height={25} />
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>{allOrganizations.length}</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>Tenants</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Client Organizations</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#8B5CF6" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+        {/* 4 Pastel KPI Metric Cards */}
+        <Animated.View entering={FadeInDown.delay(50).duration(280)} style={{ marginBottom: 16 }}>
+          {isDesktop ? (
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              {/* Tile 1: Organizations */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#F3EEFE',
+                    borderColor: '#E4DCFD',
+                    flex: 1,
+                  },
+                ]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                    <SvgXml xml={STOCK_6_SVG} width={34} height={25} />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>{allOrganizations.length}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>Tenants</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Client Organizations</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#8B5CF6" width={150} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Tile 2: Enterprise Tiers */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#EDFAF2',
-                borderColor: '#CEF2DE',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
-                <SvgXml xml={STOCK_10_SVG} width={34} height={25} />
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#064E3B' }]}>
-                  {tierCounts.enterprise}
-                </Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>Top Tier</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Enterprise Tiers</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#10B981" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+              {/* Tile 2: Enterprise Tiers */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#EDFAF2',
+                    borderColor: '#CEF2DE',
+                    flex: 1,
+                  },
+                ]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                    <SvgXml xml={STOCK_10_SVG} width={34} height={25} />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#064E3B' }]}>
+                      {tierCounts.enterprise}
+                    </Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>Top Tier</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Enterprise Tiers</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#10B981" width={150} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Tile 3: Modular Features */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#FFF4EB',
-                borderColor: '#FFE2CD',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
-                <SvgXml xml={STOCK_4_SVG} width={34} height={25} />
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>{FEATURE_CATALOG.length}</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Modular</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>System Modules</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#F97316" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+              {/* Tile 3: Modular Features */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#FFF4EB',
+                    borderColor: '#FFE2CD',
+                    flex: 1,
+                  },
+                ]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                    <SvgXml xml={STOCK_4_SVG} width={34} height={25} />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>{FEATURE_CATALOG.length}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Modular</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>System Modules</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#F97316" width={150} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Tile 4: Active Context */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#EFF6FF',
-                borderColor: '#DBEAFE',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
-                <SvgXml xml={STOCK_12_SVG} width={34} height={25} />
+              {/* Tile 4: Active Context */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#EFF6FF',
+                    borderColor: '#DBEAFE',
+                    flex: 1,
+                  },
+                ]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
+                    <SvgXml xml={STOCK_12_SVG} width={34} height={25} />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#1E3A8A' }]} numberOfLines={1}>
+                      Active
+                    </Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>Workspace</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText} numberOfLines={1}>{organization?.name || 'All Organizations'}</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#3B82F6" width={150} height={24} />
+                </View>
+              </InteractiveTile>
+            </View>
+          ) : (
+            <View style={{ gap: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {/* Tile 1: Organizations */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#F3EEFE',
+                      borderColor: '#E4DCFD',
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                      <SvgXml xml={STOCK_6_SVG} width={34} height={25} />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>{allOrganizations.length}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>Tenants</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Client Orgs</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#8B5CF6" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
+
+                {/* Tile 2: Enterprise Tiers */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#EDFAF2',
+                      borderColor: '#CEF2DE',
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                      <SvgXml xml={STOCK_10_SVG} width={34} height={25} />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#064E3B' }]}>
+                        {tierCounts.enterprise}
+                      </Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>Top Tier</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Enterprise</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#10B981" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
               </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#1E3A8A' }]} numberOfLines={1}>
-                  Active
-                </Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>Workspace</Text>
+
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {/* Tile 3: Modular Features */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#FFF4EB',
+                      borderColor: '#FFE2CD',
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                      <SvgXml xml={STOCK_4_SVG} width={34} height={25} />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>{FEATURE_CATALOG.length}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Modular</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Modules</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#F97316" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
+
+                {/* Tile 4: Active Context */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#EFF6FF',
+                      borderColor: '#DBEAFE',
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
+                      <SvgXml xml={STOCK_12_SVG} width={34} height={25} />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#1E3A8A' }]} numberOfLines={1}>
+                        Active
+                      </Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>Workspace</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText} numberOfLines={1}>{organization?.name || 'Context'}</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#3B82F6" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
               </View>
             </View>
-            <Text style={styles.metricLabelText}>{organization?.name || 'All Organizations'}</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#3B82F6" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+          )}
         </Animated.View>
 
         {/* Organizations Filter & Search Bar with Tier Filter Pills */}
@@ -1091,8 +1299,19 @@ export default function CentralPortalScreen() {
         {managingUnitsOrg && (
           <Modal
             visible={Boolean(managingUnitsOrg)}
-            onClose={() => setManagingUnitsOrg(null)}
-            title="Manage Hospital Units & Sub-Brands"
+            onClose={handleCloseUnitsModal}
+            title={
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <Text style={[styles.modalTitle, { fontSize: 16, fontWeight: '700', color: '#0F172A' }]}>
+                  Manage Hospital Units & Sub-Brands
+                </Text>
+                {hasUnsavedUnits && (
+                  <View style={styles.unsavedPill}>
+                    <Text style={styles.unsavedPillText}>Unsaved Changes</Text>
+                  </View>
+                )}
+              </View>
+            }
             subtitle={`Organize ${managingUnitsOrg.name} across satellite clinics, wings, and home health care units.`}
             icon={<Layers size={20} color="#4F46E5" />}
             iconBgColor="#EEF2FF"
@@ -1106,10 +1325,21 @@ export default function CentralPortalScreen() {
             }}
             secondaryAction={{
               label: 'Cancel',
-              onPress: () => setManagingUnitsOrg(null),
+              onPress: handleCloseUnitsModal,
               disabled: savingUnits,
             }}
           >
+            {/* Inline Error Message */}
+            {unitError && (
+              <View style={styles.unitErrorBanner}>
+                <AlertTriangle size={15} color="#DC2626" />
+                <Text style={styles.unitErrorText}>{unitError}</Text>
+                <TouchableOpacity onPress={() => setUnitError(null)} style={{ padding: 4 }}>
+                  <X size={14} color="#DC2626" />
+                </TouchableOpacity>
+              </View>
+            )}
+
             {/* Add Unit Row */}
             <View style={styles.formGroup}>
               <Text style={styles.formLabel}>Add New Unit / Campus / Wing</Text>
@@ -1118,7 +1348,10 @@ export default function CentralPortalScreen() {
                   style={[styles.formInput, { flex: 1 }]}
                   placeholder="e.g. Home Health Care (HHC) Unit, ICU Wing, Satellite Clinic"
                   value={newUnitInput}
-                  onChangeText={setNewUnitInput}
+                  onChangeText={(val) => {
+                    setNewUnitInput(val);
+                    if (unitError) setUnitError(null);
+                  }}
                   placeholderTextColor="#94A3B8"
                   onSubmitEditing={handleAddUnit}
                 />
@@ -1135,7 +1368,7 @@ export default function CentralPortalScreen() {
 
             {/* Configured Units List */}
             <View style={styles.sectionWrap}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
                 <Text style={styles.sectionHeader}>Configured Units ({unitsList.length})</Text>
                 <TouchableOpacity onPress={handleResetUnitsToDefault} activeOpacity={0.7}>
                   <Text style={{ fontSize: 12, fontWeight: '700', color: '#4F46E5' }}>Reset to Defaults</Text>
@@ -1151,25 +1384,82 @@ export default function CentralPortalScreen() {
                 </View>
               ) : (
                 <View style={styles.unitsGridList}>
-                  {unitsList.map((unitName, idx) => (
-                    <View key={unitName} style={styles.unitItemCard}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-                        <View style={styles.unitItemBadge}>
-                          <Text style={styles.unitItemBadgeText}>{idx + 1}</Text>
+                  {unitsList.map((unitName, idx) => {
+                    const isEditingThis = editingIndex === idx;
+
+                    if (isEditingThis) {
+                      return (
+                        <View key={`edit-${idx}`} style={[styles.unitItemCard, { borderColor: '#7C3AED', backgroundColor: '#FDFCFF' }]}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                            <View style={[styles.unitItemBadge, { backgroundColor: '#EDE9FE' }]}>
+                              <Text style={[styles.unitItemBadgeText, { color: '#7C3AED' }]}>{idx + 1}</Text>
+                            </View>
+                            <TextInput
+                              style={styles.unitInlineInput}
+                              value={editingUnitName}
+                              onChangeText={(val) => {
+                                setEditingUnitName(val);
+                                if (unitError) setUnitError(null);
+                              }}
+                              autoFocus
+                              placeholder="Unit name"
+                              placeholderTextColor="#94A3B8"
+                              onSubmitEditing={handleSaveInlineEdit}
+                            />
+                          </View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+                            <TouchableOpacity
+                              style={[styles.unitIconBtn, { backgroundColor: '#EDE9FE' }]}
+                              onPress={handleSaveInlineEdit}
+                              activeOpacity={0.75}
+                              accessibilityLabel="Save unit name"
+                            >
+                              <Check size={14} color="#7C3AED" strokeWidth={2.5} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.unitIconBtn, { backgroundColor: '#F1F5F9' }]}
+                              onPress={handleCancelInlineEdit}
+                              activeOpacity={0.75}
+                              accessibilityLabel="Cancel edit"
+                            >
+                              <X size={14} color="#64748B" />
+                            </TouchableOpacity>
+                          </View>
                         </View>
-                        <Text style={styles.unitItemName} numberOfLines={1}>
-                          {unitName}
-                        </Text>
+                      );
+                    }
+
+                    return (
+                      <View key={`${unitName}-${idx}`} style={styles.unitItemCard}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                          <View style={styles.unitItemBadge}>
+                            <Text style={styles.unitItemBadgeText}>{idx + 1}</Text>
+                          </View>
+                          <Text style={styles.unitItemName} numberOfLines={1}>
+                            {unitName}
+                          </Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+                          <TouchableOpacity
+                            style={[styles.unitIconBtn, { backgroundColor: '#F1F5F9' }]}
+                            onPress={() => handleStartEdit(idx, unitName)}
+                            activeOpacity={0.75}
+                            accessibilityLabel={`Edit ${unitName}`}
+                          >
+                            <Edit2 size={13} color="#4F46E5" />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.unitIconBtn, { backgroundColor: '#FEF2F2' }]}
+                            onPress={() => handleRemoveUnit(idx)}
+                            activeOpacity={0.75}
+                            accessibilityLabel={`Delete ${unitName}`}
+                          >
+                            <Trash2 size={13} color="#EF4444" />
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                      <TouchableOpacity
-                        style={styles.unitDeleteBtn}
-                        onPress={() => handleRemoveUnit(unitName)}
-                        activeOpacity={0.75}
-                      >
-                        <Trash2 size={14} color="#EF4444" />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               )}
             </View>
@@ -1899,9 +2189,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginBottom: 10,
+    flexWrap: 'wrap',
   },
   switchBtn: {
     flex: 1,
+    minWidth: 120,
     height: 38,
     borderRadius: 10,
     borderWidth: 1,
@@ -1909,6 +2201,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
+    paddingHorizontal: 8,
   },
   switchBtnActive: {
     backgroundColor: '#F0F7F7',
@@ -1925,6 +2218,7 @@ const styles = StyleSheet.create({
   },
   configBtn: {
     flex: 1.2,
+    minWidth: 140,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1934,6 +2228,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0F7F7',
     borderWidth: 1,
     borderColor: 'rgba(13, 115, 119, 0.2)',
+    paddingHorizontal: 8,
   },
   configBtnText: {
     fontSize: 12,
@@ -2186,10 +2481,62 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#1E293B',
+    flex: 1,
+    minWidth: 0,
+  },
+  unitInlineInput: {
+    flex: 1,
+    minWidth: 0,
+    height: 32,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#7C3AED',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  unitIconBtn: {
+    padding: 6,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   unitDeleteBtn: {
     padding: 6,
     borderRadius: 6,
+  },
+  unitErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 14,
+  },
+  unitErrorText: {
+    fontSize: 12,
+    color: '#DC2626',
+    fontWeight: '600',
+    flex: 1,
+  },
+  unsavedPill: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  unsavedPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#B45309',
+    letterSpacing: 0.2,
   },
 
   // Config Modal Sections

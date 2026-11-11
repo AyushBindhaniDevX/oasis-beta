@@ -624,12 +624,6 @@ export default function ShiftsScreen() {
 
   if (loading) return <LoadingState />;
 
-  const kpiCardWidth = isDesktop
-    ? undefined
-    : Platform.OS === 'web'
-    ? 'calc(50% - 6px)'
-    : Math.floor((width - 40 - 18) / 2);
-
   return (
     <SidebarLayout items={getNavForRole(profile?.role || 'hr', profile?.email)}>
       <ScrollView
@@ -697,120 +691,228 @@ export default function ShiftsScreen() {
         </Animated.View>
 
         {/* 4 Pastel KPI Metric Cards with InteractiveTile */}
-        <Animated.View entering={FadeInDown.delay(50).duration(280)} style={styles.kpiRow}>
-          {/* Tile 1: Active Shift Patterns */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#F3EEFE',
-                borderColor: '#E4DCFD',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
-                <Clock size={18} color="#7C3AED" />
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>{shifts.length}</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#8B5CF6', marginTop: 1 }}>Patterns</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Active Shift Patterns</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#8B5CF6" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+        <Animated.View entering={FadeInDown.delay(50).duration(280)} style={{ marginBottom: 16 }}>
+          {isDesktop ? (
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              {/* Tile 1: Active Shift Patterns */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#F3EEFE',
+                    borderColor: '#E4DCFD',
+                    flex: 1,
+                  },
+                ]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                    <Clock size={18} color="#7C3AED" />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>{shifts.length}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#8B5CF6', marginTop: 1 }}>Patterns</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Active Shift Patterns</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#8B5CF6" width={150} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Tile 2: Scheduled Staff */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#EDFAF2',
-                borderColor: '#CEF2DE',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
-                <Users size={18} color="#10B981" />
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#064E3B' }]}>{displayedEmployees.length}</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>Staff</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Scheduled Staff</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#10B981" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+              {/* Tile 2: Scheduled Staff */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#EDFAF2',
+                    borderColor: '#CEF2DE',
+                    flex: 1,
+                  },
+                ]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                    <Users size={18} color="#10B981" />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#064E3B' }]}>{displayedEmployees.length}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>Staff</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Scheduled Staff</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#10B981" width={150} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Tile 3: Night Duty Rosters */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#FFF4EB',
-                borderColor: '#FFE2CD',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
-                <Moon size={18} color="#EA580C" />
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>
-                  {shifts.filter((s) => s.is_night_shift).length}
-                </Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Night Shifts</Text>
-              </View>
-            </View>
-            <Text style={styles.metricLabelText}>Night Duty Protocols</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#F97316" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+              {/* Tile 3: Night Duty Rosters */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#FFF4EB',
+                    borderColor: '#FFE2CD',
+                    flex: 1,
+                  },
+                ]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                    <Moon size={18} color="#EA580C" />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>
+                      {shifts.filter((s) => s.is_night_shift).length}
+                    </Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Night Shifts</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Night Duty Protocols</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#F97316" width={150} height={24} />
+                </View>
+              </InteractiveTile>
 
-          {/* Tile 4: Departments */}
-          <InteractiveTile
-            style={[
-              styles.pastelMetricCard,
-              {
-                backgroundColor: '#EFF6FF',
-                borderColor: '#DBEAFE',
-                flex: isDesktop ? 1 : undefined,
-                minWidth: isDesktop ? 160 : undefined,
-                width: kpiCardWidth,
-              },
-            ]}
-          >
-            <View style={styles.cardTopRow}>
-              <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
-                <Building2 size={18} color="#2563EB" />
+              {/* Tile 4: Departments */}
+              <InteractiveTile
+                style={[
+                  styles.pastelMetricCard,
+                  {
+                    backgroundColor: '#EFF6FF',
+                    borderColor: '#DBEAFE',
+                    flex: 1,
+                  },
+                ]}
+              >
+                <View style={styles.cardTopRow}>
+                  <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
+                    <Building2 size={18} color="#2563EB" />
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.metricValueText, { color: '#1E3A8A' }]}>{departments.length}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>Depts</Text>
+                  </View>
+                </View>
+                <Text style={styles.metricLabelText}>Roster Departments</Text>
+                <View style={styles.waveContainer}>
+                  <MetricWave color="#3B82F6" width={150} height={24} />
+                </View>
+              </InteractiveTile>
+            </View>
+          ) : (
+            <View style={{ gap: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {/* Tile 1: Active Shift Patterns */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#F3EEFE',
+                      borderColor: '#E4DCFD',
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                      <Clock size={18} color="#7C3AED" />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#1E1B4B' }]}>{shifts.length}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#8B5CF6', marginTop: 1 }}>Patterns</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Patterns</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#8B5CF6" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
+
+                {/* Tile 2: Scheduled Staff */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#EDFAF2',
+                      borderColor: '#CEF2DE',
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#D1FAE5' }]}>
+                      <Users size={18} color="#10B981" />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#064E3B' }]}>{displayedEmployees.length}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#10B981', marginTop: 1 }}>Staff</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Staff</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#10B981" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
               </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.metricValueText, { color: '#1E3A8A' }]}>{departments.length}</Text>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>Depts</Text>
+
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {/* Tile 3: Night Duty Rosters */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#FFF4EB',
+                      borderColor: '#FFE2CD',
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#FFEDD5' }]}>
+                      <Moon size={18} color="#EA580C" />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#7C2D12' }]}>
+                        {shifts.filter((s) => s.is_night_shift).length}
+                      </Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#EA580C', marginTop: 1 }}>Night Shifts</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Night Duty</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#F97316" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
+
+                {/* Tile 4: Departments */}
+                <InteractiveTile
+                  style={[
+                    styles.pastelMetricCard,
+                    {
+                      backgroundColor: '#EFF6FF',
+                      borderColor: '#DBEAFE',
+                      flex: 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.iconBox, { backgroundColor: '#DBEAFE' }]}>
+                      <Building2 size={18} color="#2563EB" />
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.metricValueText, { color: '#1E3A8A' }]}>{departments.length}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>Depts</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.metricLabelText}>Depts</Text>
+                  <View style={styles.waveContainer}>
+                    <MetricWave color="#3B82F6" width={80} height={24} />
+                  </View>
+                </InteractiveTile>
               </View>
             </View>
-            <Text style={styles.metricLabelText}>Roster Departments</Text>
-            <View style={styles.waveContainer}>
-              <MetricWave color="#3B82F6" width={isDesktop ? 150 : 80} height={24} />
-            </View>
-          </InteractiveTile>
+          )}
         </Animated.View>
 
         {/* View Switcher Tabs */}
