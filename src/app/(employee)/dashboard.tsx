@@ -839,7 +839,18 @@ export default function EmployeeDashboard() {
             <Text style={s.quickActionLabel}>Apply{'\n'}Leave</Text>
           </InteractiveTile>
 
-          {/* 2: My Payslips with STOCK 3 SVG */}
+          {/* 2: Clock In / Attendance with STOCK 1 SVG */}
+          <InteractiveTile
+            style={s.quickActionBtn}
+            onPress={() => router.push('/(employee)/attendance' as never)}
+          >
+            <View style={[s.quickActionIconCircle, { backgroundColor: '#EEF2FF' }]}>
+              <SvgXml xml={STOCK_1_SVG} width={42} height={30} />
+            </View>
+            <Text style={s.quickActionLabel}>My{'\n'}Attendance</Text>
+          </InteractiveTile>
+
+          {/* 3: My Payslips with STOCK 3 SVG */}
           <InteractiveTile
             style={s.quickActionBtn}
             onPress={() => router.push('/(employee)/payslips' as never)}
@@ -848,17 +859,6 @@ export default function EmployeeDashboard() {
               <SvgXml xml={STOCK_3_SVG} width={42} height={30} />
             </View>
             <Text style={s.quickActionLabel}>My{'\n'}Payslips</Text>
-          </InteractiveTile>
-
-          {/* 3: File Expense with STOCK 1 SVG */}
-          <InteractiveTile
-            style={s.quickActionBtn}
-            onPress={() => router.push('/(employee)/expenses' as never)}
-          >
-            <View style={[s.quickActionIconCircle, { backgroundColor: '#EEF2FF' }]}>
-              <SvgXml xml={STOCK_1_SVG} width={42} height={30} />
-            </View>
-            <Text style={s.quickActionLabel}>File{'\n'}Expense</Text>
           </InteractiveTile>
 
           {/* 4: Learning & LMS with STOCK 10 SVG */}
@@ -872,18 +872,7 @@ export default function EmployeeDashboard() {
             <Text style={s.quickActionLabel}>Learning{'\n'}& LMS</Text>
           </InteractiveTile>
 
-          {/* 5: My Assets with STOCK 4 SVG */}
-          <InteractiveTile
-            style={s.quickActionBtn}
-            onPress={() => router.push('/(employee)/assets' as never)}
-          >
-            <View style={[s.quickActionIconCircle, { backgroundColor: '#EDFAF2' }]}>
-              <SvgXml xml={STOCK_4_SVG} width={42} height={30} />
-            </View>
-            <Text style={s.quickActionLabel}>My{'\n'}Assets</Text>
-          </InteractiveTile>
-
-          {/* 6: Helpdesk with STOCK 12 SVG */}
+          {/* 5: Helpdesk with STOCK 12 SVG */}
           <InteractiveTile
             style={s.quickActionBtn}
             onPress={() => router.push('/(employee)/helpdesk' as never)}

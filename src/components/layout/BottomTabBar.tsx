@@ -104,13 +104,10 @@ export interface MoreItem {
 export const getMoreItemsForRole = (role?: string | null): MoreItem[] => {
   if (role === 'admin' || role === 'hr') {
     return [
-      { label: 'Expenses & Claims', icon: Receipt, href: '/(hr)/expenses', feature: 'expenses', description: 'Review & approve employee claims' },
-      { label: 'Asset Management', icon: Laptop, href: '/(hr)/assets', feature: 'assets', description: 'Hardware inventory & barcode auditing' },
       { label: 'Learning & LMS', icon: GraduationCap, href: '/(hr)/learning', feature: 'learning', description: 'Course creation & training metrics' },
       { label: 'Shifts & Rosters', icon: Clock, href: '/(hr)/shifts', feature: 'shifts', description: 'Staff shift assignments & rotas' },
       { label: 'Payroll', icon: CreditCard, href: '/(hr)/payroll', feature: 'payroll', description: 'Salary registers & payslips' },
       { label: 'Performance', icon: Award, href: '/(hr)/performance', feature: 'performance', description: 'KPIs, appraisal cycles & reviews' },
-      { label: 'Recruitment & ATS', icon: Briefcase, href: '/(hr)/recruitment', feature: 'recruitment', description: 'Job openings, candidates & pipelines' },
       { label: 'Helpdesk Tickets', icon: HelpCircle, href: '/(hr)/helpdesk', feature: 'helpdesk', description: 'Employee requests & ticket triage' },
       { label: 'Templates & Letters', icon: FileText, href: '/(hr)/templates', feature: 'templates', description: 'Appointment & experience letters' },
       { label: 'Reports & Analytics', icon: BarChart3, href: role === 'admin' ? '/(admin)/reports' : '/(hr)/reports', description: 'Forensic audits & workforce analytics' },
@@ -120,8 +117,6 @@ export const getMoreItemsForRole = (role?: string | null): MoreItem[] => {
   return [
     { label: 'Directory', icon: Users, href: '/(employee)/directory', feature: 'users', description: 'Staff directory & departments' },
     { label: 'Holidays', icon: CalendarDays, href: '/(employee)/holidays', feature: 'holidays', description: 'Official company calendar' },
-    { label: 'Expenses', icon: Receipt, href: '/(employee)/expenses', feature: 'expenses', description: 'Mileage & expense claims' },
-    { label: 'My Assets', icon: Laptop, href: '/(employee)/assets', feature: 'assets', description: 'Custody & equipment requisitions' },
     { label: 'Learning & LMS', icon: GraduationCap, href: '/(employee)/learning', feature: 'learning', description: 'Training courses & certificates' },
     { label: 'Performance', icon: Award, href: '/(employee)/performance', feature: 'performance', description: 'Reviews, goals & kudos' },
     { label: 'Helpdesk', icon: HelpCircle, href: '/(employee)/helpdesk', feature: 'helpdesk', description: 'IT, HR & facilities support' },

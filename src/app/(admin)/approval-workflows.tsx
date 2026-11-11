@@ -48,11 +48,11 @@ export default function ApprovalWorkflowsScreen() {
   const [saved, setSaved] = useState(false);
   const [selectedOrgId, setSelectedOrgId] = useState<string>(tenantOrg?.id || 'shanti-memorial-hospital');
   
-  const modules = ['Leave', 'Attendance', 'Payroll', 'Expense', 'Asset Requisitions', 'Training & LMS', 'Other Requests'];
+  const modules = ['Leave', 'Attendance', 'Payroll', 'Training & LMS', 'Other Requests'];
   
   const defaultWorkflows = modules.reduce((acc, mod) => {
     acc[mod] = {
-      enabled: mod === 'Leave' || mod === 'Attendance' || mod === 'Expense' || mod === 'Asset Requisitions',
+      enabled: mod === 'Leave' || mod === 'Attendance' || mod === 'Payroll',
       levels: 2,
       l1: 'Reporting Manager / Supervisor',
       l2: 'Department Manager / HOD',
@@ -501,14 +501,14 @@ export default function ApprovalWorkflowsScreen() {
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={[styles.metricValueText, { color: '#1E3A8A' }]}>
-                  {workflows['Expense']?.levels || 2}-Tier
+                  {workflows['Payroll']?.levels || 2}-Tier
                 </Text>
                 <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563EB', marginTop: 1 }}>
-                  Expense Audit
+                  Payroll Audit
                 </Text>
               </View>
             </View>
-            <Text style={styles.metricLabelText}>Payroll & Expenses</Text>
+            <Text style={styles.metricLabelText}>Payroll Approvals</Text>
             <View style={styles.waveContainer}>
               <MetricWave color="#3B82F6" width={isDesktop ? 150 : 80} height={24} />
             </View>

@@ -167,24 +167,10 @@ const FEATURE_CATALOG = [
     tier: 'starter',
   },
   {
-    key: 'expenses',
-    name: 'Expense Claims & Reimbursements',
-    desc: 'Multi-currency receipts, OCR auto-extraction, and manager approval chains.',
-    icon: Receipt,
-    tier: 'growth',
-  },
-  {
     key: 'helpdesk',
     name: 'IT & Medical Equipment Helpdesk',
     desc: 'Internal support tickets, equipment repairs, priority SLAs, and agent routing.',
     icon: LifeBuoy,
-    tier: 'growth',
-  },
-  {
-    key: 'assets',
-    name: 'Asset & Hardware Allocation',
-    desc: 'Inventory tracking, medical diagnostic equipment checkouts, and warranty alerts.',
-    icon: Laptop,
     tier: 'growth',
   },
   {
@@ -199,13 +185,6 @@ const FEATURE_CATALOG = [
     name: 'LMS & Training Academy',
     desc: 'Medical compliance certifications, onboarding training courses, and quiz tracking.',
     icon: GraduationCap,
-    tier: 'enterprise',
-  },
-  {
-    key: 'recruitment',
-    name: 'Recruitment & ATS Pipeline',
-    desc: 'Job board publishing, candidate resume indexing, and multi-stage interview scheduling.',
-    icon: Briefcase,
     tier: 'enterprise',
   },
 ];

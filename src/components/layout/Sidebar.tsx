@@ -248,36 +248,36 @@ export function SidebarLayout({ items, children }: SidebarProps) {
     if (effectiveRole === 'admin') {
       const g1 = list.filter((i) => ['Dashboard', 'Central Portal'].includes(i.label));
       const g2 = list.filter((i) =>
-        ['My Attendance', 'Users & Employees', 'Departments', 'Team Attendance', 'Shifts & Rosters', 'Leave', 'Holiday Calendar', 'Recruitment & Hiring'].includes(i.label)
+        ['My Attendance', 'Users & Employees', 'Departments', 'Team Attendance', 'Shifts & Rosters', 'Leave', 'Holiday Calendar'].includes(i.label)
       );
-      const g3 = list.filter((i) => ['Payroll', 'Expenses & Claims', 'Performance', 'Reports & Analytics'].includes(i.label));
+      const g3 = list.filter((i) => ['Payroll', 'Performance', 'Reports & Analytics'].includes(i.label));
       const g4 = list.filter((i) =>
-        ['Asset Management', 'Learning & LMS', 'Helpdesk & Support', 'Units / Sub-Brands', 'Templates & Letters'].includes(i.label)
+        ['Learning & LMS', 'Helpdesk & Support', 'Units / Sub-Brands', 'Templates & Letters'].includes(i.label)
       );
       const g5 = list.filter((i) => !g1.includes(i) && !g2.includes(i) && !g3.includes(i) && !g4.includes(i));
       return [
         { key: 'overview', title: 'OVERVIEW', items: g1 },
         { key: 'workforce', title: 'WORKFORCE & ROSTER', items: g2 },
-        { key: 'finance', title: 'PAYROLL & EXPENSES', items: g3 },
-        { key: 'operations', title: 'OPERATIONS & ASSETS', items: g4 },
+        { key: 'finance', title: 'PAYROLL & PERFORMANCE', items: g3 },
+        { key: 'operations', title: 'OPERATIONS', items: g4 },
         { key: 'admin', title: 'ADMINISTRATION & POLICIES', items: g5 },
       ].filter((g) => g.items.length > 0);
     }
     if (effectiveRole === 'hr') {
       const g1 = list.filter((i) => ['Dashboard', 'My Attendance'].includes(i.label));
       const g2 = list.filter((i) =>
-        ['Users & Employees', 'Departments', 'Team Attendance', 'Shifts & Rosters', 'Leave', 'Holiday Calendar', 'Recruitment & Hiring'].includes(i.label)
+        ['Users & Employees', 'Departments', 'Team Attendance', 'Shifts & Rosters', 'Leave', 'Holiday Calendar'].includes(i.label)
       );
-      const g3 = list.filter((i) => ['Payroll', 'Expenses & Claims', 'Performance', 'Reports & Analytics'].includes(i.label));
+      const g3 = list.filter((i) => ['Payroll', 'Performance', 'Reports & Analytics'].includes(i.label));
       const g4 = list.filter((i) =>
-        ['Asset Management', 'Learning & LMS', 'Helpdesk & Support', 'Units / Sub-Brands', 'Templates & Letters'].includes(i.label)
+        ['Learning & LMS', 'Helpdesk & Support', 'Units / Sub-Brands', 'Templates & Letters'].includes(i.label)
       );
       const g5 = list.filter((i) => !g1.includes(i) && !g2.includes(i) && !g3.includes(i) && !g4.includes(i));
       return [
         { key: 'overview', title: 'OVERVIEW', items: g1 },
         { key: 'workforce', title: 'WORKFORCE', items: g2 },
-        { key: 'finance', title: 'PAYROLL & EXPENSES', items: g3 },
-        { key: 'operations', title: 'OPERATIONS & ASSETS', items: g4 },
+        { key: 'finance', title: 'PAYROLL & PERFORMANCE', items: g3 },
+        { key: 'operations', title: 'OPERATIONS', items: g4 },
         { key: 'org', title: 'ORGANIZATION', items: g5 },
       ].filter((g) => g.items.length > 0);
     }

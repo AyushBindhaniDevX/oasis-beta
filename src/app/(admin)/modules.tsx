@@ -210,19 +210,6 @@ const ALL_MODULES: ModuleItem[] = [
     badge: 'Financial',
   },
   {
-    id: 'expenses',
-    name: 'Expense Claims & Reimbursements',
-    category: 'payroll',
-    categoryLabel: 'Payroll & Finance',
-    description: 'Employee travel claims, medical equipment allowances, receipt uploads, and audit verification.',
-    route: '/(hr)/expenses',
-    featureKey: 'expenses',
-    icon: Receipt,
-    iconBg: '#FFEDD5',
-    iconColor: '#EA580C',
-    badge: 'Expenses',
-  },
-  {
     id: 'templates',
     name: 'Document Templates & Letters',
     category: 'payroll',
@@ -237,19 +224,6 @@ const ALL_MODULES: ModuleItem[] = [
   },
 
   // ─── Talent & Performance ────────────────────────────────────────────
-  {
-    id: 'recruitment',
-    name: 'Recruitment & Applicant Pipeline',
-    category: 'talent',
-    categoryLabel: 'Talent & HR',
-    description: 'Job postings, applicant stages, interview scheduling, scoring cards, and offer letter generation.',
-    route: '/(hr)/recruitment',
-    featureKey: 'recruitment',
-    icon: Briefcase,
-    iconBg: '#E0E7FF',
-    iconColor: '#6366F1',
-    badge: 'Hiring',
-  },
   {
     id: 'performance',
     name: 'Performance Reviews & OKRs',
@@ -291,19 +265,6 @@ const ALL_MODULES: ModuleItem[] = [
   },
 
   // ─── Governance & IT ─────────────────────────────────────────────────
-  {
-    id: 'assets',
-    name: 'Hardware & Asset Inventory',
-    category: 'governance',
-    categoryLabel: 'IT & Assets',
-    description: 'Medical equipment inventory, IT laptop tracking, barcode scanner, custodian assignment, and lifecycle.',
-    route: '/(hr)/assets',
-    featureKey: 'assets',
-    icon: Laptop,
-    iconBg: '#E0F2FE',
-    iconColor: '#0284C7',
-    badge: 'IT Assets',
-  },
   {
     id: 'helpdesk',
     name: 'Internal IT & HR Helpdesk',
