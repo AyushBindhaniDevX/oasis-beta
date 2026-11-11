@@ -107,6 +107,8 @@ export interface TenantContextState {
   workplace: Workplace | null;
   employee: Employee | null;
   allOrganizations: Organization[];
+  authorizedOrganizations: Organization[];
+  canSwitchOrganization: boolean;
   companyName: string;
   companyLogoUrl: string | null;
   officeName: string;
@@ -340,6 +342,37 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     }
   }, [profile, manualOrgId]);
 
+  const isSuperAdmin = Boolean(
+    profile?.email === 'ayushbindhani001@gmail.com' ||
+    profile?.email === 'ab3682@srmist.edu.in' ||
+    (profile?.role as any) === 'superadmin'
+  );
+
+  // Authorized organizations for the signed in user
+  const authorizedOrganizations = useMemo(() => {
+    if (isSuperAdmin) {
+      return allOrganizations;
+    }
+    // Check if user has multiple authorized organizations assigned
+    const explicitIds = (profile as any)?.authorized_organization_ids;
+    if (Array.isArray(explicitIds) && explicitIds.length > 0) {
+      const allowed = allOrganizations.filter((o) => explicitIds.includes(o.id));
+      if (allowed.length > 0) return allowed;
+    }
+
+    // Standard user: strictly scoped to single assigned organization
+    const targetOrgId = organization?.id || profile?.organization_id;
+    if (!targetOrgId) {
+      return allOrganizations.slice(0, 1);
+    }
+    const matched = allOrganizations.filter(
+      (o) => o.id === targetOrgId || (organization?.slug && o.slug === organization.slug)
+    );
+    return matched.length > 0 ? matched : (organization ? [organization] : []);
+  }, [isSuperAdmin, allOrganizations, profile, organization]);
+
+  const canSwitchOrganization = authorizedOrganizations.length > 1;
+
   // Switch active organization context
   const switchOrganization = useCallback(async (orgId: string) => {
     let targetId = orgId;
@@ -348,12 +381,29 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     } else if (targetId === 'subedge') {
       targetId = '00000000-0000-0000-0000-000000000001';
     }
+
+    // Validate access: Ensure user is authorized to switch to this organization
+    if (!isSuperAdmin) {
+      const isAllowed = authorizedOrganizations.some(
+        (o) => o.id === targetId || (o.slug && o.slug === targetId)
+      );
+      if (!isAllowed) {
+        console.warn('Unauthorized organization switch attempt blocked:', targetId);
+        return;
+      }
+    }
+
     try {
       const snap = await getDoc(doc(db, 'organizations', targetId));
       if (snap.exists() && (snap.data() as any)?.parent_organization_id) {
         targetId = (snap.data() as any).parent_organization_id;
       }
     } catch {}
+
+    // Invalidate service caches before updating state to prevent stale data bleed
+    invalidateOrgMetaCache();
+    invalidateEmployeeCache();
+
     setManualOrgId(targetId);
     try {
       await AsyncStorage.setItem('@oasis_active_org_id', targetId);
@@ -368,7 +418,8 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
         console.warn('Profile organization update note:', err);
       }
     }
-  }, [profile?.id]);
+    await fetchTenantData();
+  }, [profile?.id, isSuperAdmin, authorizedOrganizations, fetchTenantData]);
 
   // Compute active plan
   const activePlan: SubscriptionPlan = useMemo(() => {
@@ -675,6 +726,8 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     workplace,
     employee,
     allOrganizations,
+    authorizedOrganizations,
+    canSwitchOrganization,
     companyName,
     companyLogoUrl,
     officeName,

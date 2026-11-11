@@ -20,60 +20,61 @@ import {
     ViewStyle
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { NotionColors } from '@/constants/theme';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. CORE TOKENS & PRIMITIVES
+// 1. CORE TOKENS & PRIMITIVES (UNIFIED WITH NOTION/OASIS DESIGN SYSTEM)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const CRAFT_TOKENS = {
     colors: {
-        // Core Surfaces (Paper + Ink)
-        canvas: '#fcf9f7',
+        // Core Surfaces (Paper + Ink) -> Aligned with canonical NotionColors
+        canvas: NotionColors.canvas,
         card: '#ffffff',
-        surface: '#ffffff',
-        ink: '#030302',
-        inkSoft: '#1f2225',
-        inkFaint: '#363634',
-        inkMuted: '#8c8c8c',
+        surface: NotionColors.surface,
+        ink: NotionColors.ink,
+        inkSoft: NotionColors.charcoal,
+        inkFaint: NotionColors.slate,
+        inkMuted: NotionColors.steel,
 
         // Structural
-        hairline: '#e1e1e1',
-        hairlineSoft: '#ede9e4',
+        hairline: NotionColors.hairline,
+        hairlineSoft: NotionColors.hairlineSoft,
 
         // Semantic
-        error: '#bb433a',
-        errorBg: '#fde8e8',
-        warning: '#dfb720',
-        warningBg: '#fef7d6',
-        success: '#2f7a43',
-        successBg: '#d9f3e1',
-        linkBlue: '#0087ff',
+        error: NotionColors.semanticError,
+        errorBg: NotionColors.cardTintRose,
+        warning: NotionColors.semanticWarning,
+        warningBg: NotionColors.cardTintYellow,
+        success: NotionColors.semanticSuccess,
+        successBg: NotionColors.cardTintMint,
+        linkBlue: NotionColors.linkBlue,
 
-        // Pastel Block Tints (Craft's signature)
-        mint: '#9bd8a9',
-        mintDeep: '#2f7a43',
-        amber: '#fde99b',
-        amberDeep: '#987e1b',
-        periwinkle: '#b8caf5',
-        periwinkleDeep: '#391c57',
-        sky: '#9ed4ef',
-        skyDeep: '#0a4f6e',
-        peach: '#ffdbc5',
-        peachDeep: '#793400',
+        // Pastel Block Tints -> Aligned with canonical NotionColors
+        mint: NotionColors.cardTintMint,
+        mintDeep: NotionColors.semanticSuccess,
+        amber: NotionColors.cardTintYellow,
+        amberDeep: NotionColors.brandOrangeDeep,
+        periwinkle: NotionColors.cardTintLavender,
+        periwinkleDeep: NotionColors.brandPurple800,
+        sky: NotionColors.cardTintSky,
+        skyDeep: NotionColors.linkBluePressed,
+        peach: NotionColors.cardTintPeach,
+        peachDeep: NotionColors.brandOrangeDeep,
 
         // Compatibility Aliases
-        primary: '#030302',
-        onPrimary: '#ffffff',
-        surfaceSoft: '#fcf9f7',
-        steel: '#8c8c8c',
-        muted: '#8c8c8c',
-        charcoal: '#363634',
-        tintMint: '#d9f3e1',
-        mintSoft: '#d9f3e1',
-        forest: '#2f7a43',
-        periwinkleSoft: '#e8eeff',
-        tintRose: '#fde8e8',
-        semanticError: '#bb433a',
+        primary: NotionColors.primary,
+        onPrimary: NotionColors.onPrimary,
+        surfaceSoft: NotionColors.surfaceSoft,
+        steel: NotionColors.steel,
+        muted: NotionColors.muted,
+        charcoal: NotionColors.charcoal,
+        tintMint: NotionColors.cardTintMint,
+        mintSoft: NotionColors.cardTintMint,
+        forest: NotionColors.semanticSuccess,
+        periwinkleSoft: NotionColors.cardTintLavender,
+        tintRose: NotionColors.cardTintRose,
+        semanticError: NotionColors.semanticError,
     },
 
     fonts: {
@@ -171,14 +172,12 @@ export const getPastelTextColor = (bgColor: string) => {
 };
 
 export const getPastelTintFromHex = (hex: string) => {
-    const map: Record<string, string> = {
-        [T.mintDeep]: T.mint,
-        [T.amberDeep]: T.amber,
-        [T.periwinkleDeep]: T.periwinkle,
-        [T.skyDeep]: T.sky,
-        [T.peachDeep]: T.peach,
-    };
-    return map[hex] || T.canvas;
+    if (hex === T.mintDeep) return T.mint;
+    if (hex === T.amberDeep) return T.amber;
+    if (hex === T.periwinkleDeep) return T.periwinkle;
+    if (hex === T.skyDeep) return T.sky;
+    if (hex === T.peachDeep) return T.peach;
+    return T.canvas;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

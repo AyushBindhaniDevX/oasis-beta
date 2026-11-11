@@ -1,12 +1,8 @@
 import { FaceVerificationModal } from '@/components/attendance/FaceVerificationModal';
-import {
-  CraftButton,
-  CraftCard,
-  Typography,
-  T,
-  S,
-} from '@/components/ui/CraftKit';
-import { PageHeader, SectionLabel } from '@/components/ui/kit';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
+import { NotionColors } from '@/constants/theme';
 import { FONT, R } from '@/constants/ui';
 import { useAuth } from '@/hooks/useAuth';
 import { useBiometrics } from '@/hooks/useBiometrics';
@@ -116,33 +112,33 @@ export default function SettingsScreen() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: T.surfaceSoft }}>
+    <View style={{ flex: 1, backgroundColor: NotionColors.surfaceSoft }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
-        <PageHeader
+        <ScreenHeader
           title="Account Settings"
           subtitle="Security, biometrics & account preferences"
-          topInset={insets.top}
+          variant="light"
         />
 
         <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
-          <SectionLabel>Authentication</SectionLabel>
-          <CraftCard variant="base" style={styles.card}>
+          <Text style={styles.sectionHeading}>Authentication</Text>
+          <Card variant="outlined" style={styles.card}>
             <SettingRow
               icon={
                 biometricType === 'Face ID'
-                  ? <ScanFace size={14} color={T.inkFaint} />
-                  : <Fingerprint size={14} color={T.inkFaint} />
+                  ? <ScanFace size={14} color={NotionColors.steel} />
+                  : <Fingerprint size={14} color={NotionColors.steel} />
               }
               title={`${biometricType || 'Biometric'} login`}
               subtitle={hasHardware ? '1-tap quick authentication' : 'Hardware not available'}
               action={
                 isBiometricsLoading ? (
-                  <ActivityIndicator size="small" color={T.ink} />
+                  <ActivityIndicator size="small" color={NotionColors.ink} />
                 ) : hasHardware ? (
                   <Switch
                     value={isBiometricEnabled}
                     onValueChange={(v) => (v ? setBioModalOpen(true) : disableBiometrics())}
-                    trackColor={{ false: T.hairline, true: T.ink }}
+                    trackColor={{ false: NotionColors.hairline, true: NotionColors.primary }}
                     thumbColor="#fff"
                   />
                 ) : (
@@ -152,7 +148,7 @@ export default function SettingsScreen() {
             />
             <View style={styles.sep} />
             <SettingRow
-              icon={<UserCheck size={14} color={T.inkFaint} />}
+              icon={<UserCheck size={14} color={NotionColors.steel} />}
               title="Attendance Face ID"
               subtitle={profile?.biometric_enrolled || profile?.avatar_url ? 'Template registered' : 'Not enrolled'}
               action={
@@ -165,7 +161,7 @@ export default function SettingsScreen() {
             />
             <View style={styles.sep} />
             <SettingRow
-              icon={<Lock size={14} color={T.inkFaint} />}
+              icon={<Lock size={14} color={NotionColors.steel} />}
               title="Password"
               subtitle="Change login credentials"
               action={
@@ -174,27 +170,27 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               }
             />
-          </CraftCard>
+          </Card>
 
-          <SectionLabel>Security</SectionLabel>
-          <CraftCard variant="base" style={styles.card}>
+          <Text style={styles.sectionHeading}>Security</Text>
+          <Card variant="outlined" style={styles.card}>
             <SettingRow
-              icon={<ShieldCheck size={14} color={T.inkFaint} />}
+              icon={<ShieldCheck size={14} color={NotionColors.steel} />}
               title="Session security"
               subtitle={`AES-256 · IP ${profile?.last_login_ip || '—'}`}
               action={
-                <View style={[styles.statusChip, { backgroundColor: T.mint }]}>
-                  <Text style={[styles.statusChipText, { color: T.mintDeep }]}>Protected</Text>
+                <View style={[styles.statusChip, { backgroundColor: NotionColors.cardTintMint }]}>
+                  <Text style={[styles.statusChipText, { color: NotionColors.semanticSuccess }]}>Protected</Text>
                 </View>
               }
             />
-          </CraftCard>
+          </Card>
 
-          <CraftButton
+          <Button
             title="Sign out of account"
             variant="danger"
             onPress={signOut}
-            style={{ marginTop: S.base }}
+            style={{ marginTop: 16 }}
             fullWidth
           />
         </View>
@@ -207,8 +203,8 @@ export default function SettingsScreen() {
           <View style={styles.modalSheet}>
             {pwSuccess ? (
               <View style={{ alignItems: 'center', padding: 20 }}>
-                <CheckCircle2 size={32} color={T.success} />
-                <Text style={{ fontFamily: FONT, fontSize: 15, fontWeight: '600', color: T.ink, marginTop: 8 }}>
+                <CheckCircle2 size={32} color={NotionColors.semanticSuccess} />
+                <Text style={{ fontFamily: FONT, fontSize: 15, fontWeight: '600', color: NotionColors.ink, marginTop: 8 }}>
                   Password updated
                 </Text>
               </View>
@@ -217,21 +213,21 @@ export default function SettingsScreen() {
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <Text style={styles.modalTitle}>Change password</Text>
                   <TouchableOpacity onPress={() => setPwModalOpen(false)}>
-                    <X size={16} color={T.inkFaint} />
+                    <X size={16} color={NotionColors.steel} />
                   </TouchableOpacity>
                 </View>
                 {pwError ? (
-                  <View style={[styles.banner, { backgroundColor: T.errorBg, marginTop: 10 }]}>
-                    <AlertCircle size={11} color={T.error} />
-                    <Text style={[styles.bannerText, { color: T.error }]}>{pwError}</Text>
+                  <View style={[styles.banner, { backgroundColor: NotionColors.cardTintRose, marginTop: 10 }]}>
+                    <AlertCircle size={11} color={NotionColors.semanticError} />
+                    <Text style={[styles.bannerText, { color: NotionColors.semanticError }]}>{pwError}</Text>
                   </View>
                 ) : null}
                 <View style={{ gap: 10, marginTop: 14 }}>
-                  <TextInput secureTextEntry value={newPw} onChangeText={setNewPw} placeholder="New password" placeholderTextColor={T.inkMuted} style={styles.input} />
-                  <TextInput secureTextEntry value={confirmPw} onChangeText={setConfirmPw} placeholder="Confirm new password" placeholderTextColor={T.inkMuted} style={styles.input} />
+                  <TextInput secureTextEntry value={newPw} onChangeText={setNewPw} placeholder="New password" placeholderTextColor={NotionColors.muted} style={styles.input} />
+                  <TextInput secureTextEntry value={confirmPw} onChangeText={setConfirmPw} placeholder="Confirm new password" placeholderTextColor={NotionColors.muted} style={styles.input} />
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
-                    <CraftButton title="Cancel" onPress={() => setPwModalOpen(false)} variant="secondary" style={{ flex: 1 }} />
-                    <CraftButton title="Update" onPress={handleChangePassword} loading={savingPw} style={{ flex: 1 }} />
+                    <Button title="Cancel" onPress={() => setPwModalOpen(false)} variant="secondary" style={{ flex: 1 }} />
+                    <Button title="Update" onPress={handleChangePassword} loading={savingPw} style={{ flex: 1 }} />
                   </View>
                 </View>
               </>
@@ -248,26 +244,26 @@ export default function SettingsScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               <Text style={styles.modalTitle}>Enable {biometricType || 'biometric'} login</Text>
               <TouchableOpacity onPress={() => setBioModalOpen(false)}>
-                <X size={16} color={T.inkFaint} />
+                <X size={16} color={NotionColors.steel} />
               </TouchableOpacity>
             </View>
-            <Text style={{ fontFamily: FONT, fontSize: 12, color: T.inkFaint, marginTop: 6 }}>
+            <Text style={{ fontFamily: FONT, fontSize: 12, color: NotionColors.steel, marginTop: 6 }}>
               Verify your password to authorize 1-tap login on this device.
             </Text>
             {bioError ? (
-              <View style={[styles.banner, { backgroundColor: T.errorBg, marginTop: 10 }]}>
-                <AlertCircle size={11} color={T.error} />
-                <Text style={[styles.bannerText, { color: T.error }]}>{bioError}</Text>
+              <View style={[styles.banner, { backgroundColor: NotionColors.cardTintRose, marginTop: 10 }]}>
+                <AlertCircle size={11} color={NotionColors.semanticError} />
+                <Text style={[styles.bannerText, { color: NotionColors.semanticError }]}>{bioError}</Text>
               </View>
             ) : null}
             <View style={{ gap: 10, marginTop: 12 }}>
               <TextInput
                 secureTextEntry value={bioPassword} onChangeText={setBioPassword}
-                placeholder="Account password" placeholderTextColor={T.inkMuted} style={styles.input}
+                placeholder="Account password" placeholderTextColor={NotionColors.muted} style={styles.input}
               />
               <View style={{ flexDirection: 'row', gap: 8 }}>
-                <CraftButton title="Cancel" onPress={() => setBioModalOpen(false)} variant="secondary" style={{ flex: 1 }} />
-                <CraftButton title="Verify" onPress={handleConfirmEnableBiometrics} loading={bioLoading} style={{ flex: 1 }} />
+                <Button title="Cancel" onPress={() => setBioModalOpen(false)} variant="secondary" style={{ flex: 1 }} />
+                <Button title="Verify" onPress={handleConfirmEnableBiometrics} loading={bioLoading} style={{ flex: 1 }} />
               </View>
             </View>
           </View>
@@ -298,9 +294,19 @@ const styles = StyleSheet.create({
   body: { padding: 16, gap: 16 },
   bodyDesktop: { maxWidth: 800, alignSelf: 'center', width: '100%', padding: 32 },
 
+  sectionHeading: {
+    fontFamily: FONT,
+    fontSize: 12,
+    fontWeight: '700',
+    color: NotionColors.steel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 8,
+  },
+
   card: {
-    backgroundColor: T.canvas, borderRadius: R.lg,
-    borderWidth: 1, borderColor: T.hairline,
+    backgroundColor: NotionColors.canvas, borderRadius: R.lg,
+    borderWidth: 1, borderColor: NotionColors.hairline,
     overflow: 'hidden',
   },
   row: {
@@ -309,29 +315,29 @@ const styles = StyleSheet.create({
   },
   iconWrap: {
     width: 32, height: 32, borderRadius: R.md,
-    backgroundColor: T.surface, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: NotionColors.surface, alignItems: 'center', justifyContent: 'center',
   },
-  rowTitle: { fontFamily: FONT, fontSize: 13, fontWeight: '500', color: T.ink },
-  rowSub: { fontFamily: FONT, fontSize: 11, color: T.steel, marginTop: 1 },
-  sep: { height: 1, backgroundColor: T.hairlineSoft, marginLeft: 14 },
+  rowTitle: { fontFamily: FONT, fontSize: 13, fontWeight: '500', color: NotionColors.ink },
+  rowSub: { fontFamily: FONT, fontSize: 11, color: NotionColors.steel, marginTop: 1 },
+  sep: { height: 1, backgroundColor: NotionColors.hairlineSoft, marginLeft: 14 },
 
   smallBtn: {
     paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: R.sm, backgroundColor: T.surface,
-    borderWidth: 1, borderColor: T.hairline,
+    borderRadius: R.sm, backgroundColor: NotionColors.surface,
+    borderWidth: 1, borderColor: NotionColors.hairline,
   },
-  smallBtnText: { fontFamily: FONT, fontSize: 11, fontWeight: '500', color: T.ink },
-  muted: { fontFamily: FONT, fontSize: 11, color: T.muted },
+  smallBtnText: { fontFamily: FONT, fontSize: 11, fontWeight: '500', color: NotionColors.ink },
+  muted: { fontFamily: FONT, fontSize: 11, color: NotionColors.muted },
 
   statusChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: R.sm },
   statusChipText: { fontFamily: FONT, fontSize: 10, fontWeight: '600' },
 
   signOutBtn: {
     paddingVertical: 14, borderRadius: R.md,
-    backgroundColor: T.tintRose, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: NotionColors.cardTintRose, alignItems: 'center', justifyContent: 'center',
     marginTop: 16,
   },
-  signOutText: { fontFamily: FONT, fontSize: 13, fontWeight: '600', color: T.semanticError },
+  signOutText: { fontFamily: FONT, fontSize: 13, fontWeight: '600', color: NotionColors.semanticError },
 
   modalOverlay: {
     ...StyleSheet.absoluteFill, justifyContent: 'center', alignItems: 'center', zIndex: 1000,
@@ -340,14 +346,14 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill, backgroundColor: 'rgba(10,21,48,0.55)',
   },
   modalSheet: {
-    width: '92%', maxWidth: 400, backgroundColor: T.canvas,
-    borderRadius: R.lg, padding: 20, borderWidth: 1, borderColor: T.hairline,
+    width: '92%', maxWidth: 400, backgroundColor: NotionColors.canvas,
+    borderRadius: R.lg, padding: 20, borderWidth: 1, borderColor: NotionColors.hairline,
   },
-  modalTitle: { fontFamily: FONT, fontSize: 15, fontWeight: '600', color: T.ink },
+  modalTitle: { fontFamily: FONT, fontSize: 15, fontWeight: '600', color: NotionColors.ink },
   input: {
-    fontFamily: FONT, fontSize: 13, color: T.ink,
-    backgroundColor: T.surface, borderRadius: R.md,
-    borderWidth: 1, borderColor: T.hairline,
+    fontFamily: FONT, fontSize: 13, color: NotionColors.ink,
+    backgroundColor: NotionColors.surface, borderRadius: R.md,
+    borderWidth: 1, borderColor: NotionColors.hairline,
     paddingHorizontal: 12, height: 40,
   },
   banner: {

@@ -1,17 +1,11 @@
 import React from 'react';
-import {
-  CraftButton,
-  CraftCard,
-  Typography,
-  T,
-  S,
-} from '@/components/ui/CraftKit';
-import { HelpCenter } from '@/components/help/HelpCenter';
 import { View } from 'react-native';
+import { HelpCenter } from '@/components/help/HelpCenter';
+import { NotionColors } from '@/constants/theme';
 
 export default function EmployeeHelpScreen() {
   return (
-    <View style={{ flex: 1, backgroundColor: T.canvas }}>
+    <View style={{ flex: 1, backgroundColor: NotionColors.canvas }}>
       <HelpCenter />
     </View>
   );

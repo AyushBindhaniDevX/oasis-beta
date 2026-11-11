@@ -7,6 +7,7 @@ import { useNotifications } from '@/context/NotificationContext';
 import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/useAuth';
+import type { Organization } from '@/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePathname, useRouter } from 'expo-router';
 import {
@@ -203,6 +204,149 @@ function DesktopNavItem({
   );
 }
 
+function OrgSwitcherModal({
+  visible,
+  onClose,
+  insets,
+  organizations,
+  activeOrg,
+  onSwitch,
+  onManageUnits,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  insets: { bottom: number };
+  organizations: Organization[];
+  activeOrg: Organization | null;
+  onSwitch: (orgId: string) => Promise<void>;
+  onManageUnits: () => void;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
+      <View style={styles.sheetOverlay}>
+        <TouchableOpacity
+          style={styles.sheetBackdrop}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+
+        <View style={[styles.sheetContainer, { maxHeight: '85%', paddingBottom: Math.max(insets.bottom, 16) + 16 }]}>
+          <View style={styles.sheetHandle} />
+
+          <View style={styles.sheetHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sheetTitle}>Workplace & Organization</Text>
+              <Text style={styles.sheetSubtitle}>Switch active organization tenant or select hospital unit</Text>
+            </View>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.sheetCloseBtn}
+            >
+              <X size={16} color={NotionColors.steel} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            style={{ maxHeight: 420 }}
+            contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: 24, gap: 12 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Authorized Organizations (Multi-Tenant Access) */}
+            {organizations.map((org) => {
+              const isActive = org.id === activeOrg?.id || (activeOrg?.slug && org.slug === activeOrg.slug);
+              const units = Array.isArray(org.units) && org.units.length > 0
+                ? org.units
+                : ['Main Unit'];
+
+              return (
+                <TouchableOpacity
+                  key={org.id}
+                  style={[
+                    styles.orgCardItem,
+                    isActive && styles.orgCardItemActive,
+                  ]}
+                  activeOpacity={0.8}
+                  onPress={async () => {
+                    await onSwitch(org.id);
+                    onClose();
+                  }}
+                >
+                  <View style={styles.orgCardTopRow}>
+                    <View style={[styles.orgCardIconBox, isActive && { backgroundColor: '#EDE9FE' }]}>
+                      {org.logo_url && /^(https?:|data:image\/|\/)/.test(org.logo_url) ? (
+                        <Image source={{ uri: org.logo_url }} style={{ width: 28, height: 28, borderRadius: 8 }} resizeMode="contain" />
+                      ) : (
+                        <Building2 size={18} color={isActive ? '#7C3AED' : '#64748B'} />
+                      )}
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={[styles.orgCardTitle, isActive && { color: '#7C3AED' }]} numberOfLines={1}>
+                          {org.name}
+                        </Text>
+                        {isActive && (
+                          <View style={styles.orgActiveBadge}>
+                            <Text style={styles.orgActiveBadgeText}>Active</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.orgCardPlanText}>
+                        {String(org.plan || 'ENTERPRISE').toUpperCase()} · {units.length} Units
+                      </Text>
+                    </View>
+                    <View style={[styles.radioCircle, isActive && styles.radioCircleActive]}>
+                      {isActive && <View style={styles.radioInnerDot} />}
+                    </View>
+                  </View>
+
+                  {/* Unit Chips within this organization */}
+                  <View style={styles.orgUnitsChipRow}>
+                    {units.map((unitName: string) => (
+                      <TouchableOpacity
+                        key={unitName}
+                        style={[styles.orgUnitChip, isActive && styles.orgUnitChipActive]}
+                        activeOpacity={0.7}
+                        onPress={async () => {
+                          await onSwitch(org.id);
+                          onClose();
+                        }}
+                      >
+                        <MapPin size={10} color={isActive ? '#7C3AED' : '#64748B'} />
+                        <Text style={[styles.orgUnitChipText, isActive && { color: '#6D28D9' }]} numberOfLines={1}>
+                          {unitName}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+
+            {/* Manage Units / Sub-Brands Link */}
+            <TouchableOpacity
+              style={styles.manageUnitsBtn}
+              activeOpacity={0.75}
+              onPress={() => {
+                onClose();
+                onManageUnits();
+              }}
+            >
+              <Building2 size={16} color="#7C3AED" />
+              <Text style={styles.manageUnitsBtnText}>Configure Workplace Units & Geofences</Text>
+              <ChevronRight size={14} color="#7C3AED" />
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 interface SidebarProps { items?: NavItem[]; children: React.ReactNode; }
 
 export function SidebarLayout({ items, children }: SidebarProps) {
@@ -212,7 +356,16 @@ export function SidebarLayout({ items, children }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { profile, role, signOut } = useAuth();
-  const { companyName, companyLogoUrl, organization, isFeatureEnabled, allOrganizations, switchOrganization } = useTenant();
+  const {
+    companyName,
+    companyLogoUrl,
+    organization,
+    isFeatureEnabled,
+    allOrganizations,
+    authorizedOrganizations,
+    canSwitchOrganization,
+    switchOrganization,
+  } = useTenant();
   const { unreadCount } = useNotifications();
 
   const [showMoreSheet, setShowMoreSheet] = useState(false);
@@ -275,11 +428,11 @@ export function SidebarLayout({ items, children }: SidebarProps) {
     if (effectiveRole === 'admin') {
       const g1 = list.filter((i) => ['Dashboard', 'Central Portal'].includes(i.label));
       const g2 = list.filter((i) =>
-        ['My Attendance', 'Users & Employees', 'Departments', 'Team Attendance', 'Shifts & Rosters', 'Leave', 'Holiday Calendar'].includes(i.label)
+        ['My Attendance', 'Users & Employees', 'Units / Sub-Brands', 'Departments', 'Team Attendance', 'Shifts & Rosters', 'Leave', 'Holiday Calendar'].includes(i.label)
       );
       const g3 = list.filter((i) => ['Payroll', 'Performance', 'Reports & Analytics'].includes(i.label));
       const g4 = list.filter((i) =>
-        ['Learning & LMS', 'Helpdesk & Support', 'Units / Sub-Brands', 'Templates & Letters'].includes(i.label)
+        ['Learning & LMS', 'Helpdesk & Support', 'Templates & Letters'].includes(i.label)
       );
       const g5 = list.filter((i) => !g1.includes(i) && !g2.includes(i) && !g3.includes(i) && !g4.includes(i));
       return [
@@ -293,11 +446,11 @@ export function SidebarLayout({ items, children }: SidebarProps) {
     if (effectiveRole === 'hr') {
       const g1 = list.filter((i) => ['Dashboard', 'My Attendance'].includes(i.label));
       const g2 = list.filter((i) =>
-        ['Users & Employees', 'Departments', 'Team Attendance', 'Shifts & Rosters', 'Leave', 'Holiday Calendar'].includes(i.label)
+        ['Users & Employees', 'Units / Sub-Brands', 'Departments', 'Team Attendance', 'Shifts & Rosters', 'Leave', 'Holiday Calendar'].includes(i.label)
       );
       const g3 = list.filter((i) => ['Payroll', 'Performance', 'Reports & Analytics'].includes(i.label));
       const g4 = list.filter((i) =>
-        ['Learning & LMS', 'Helpdesk & Support', 'Units / Sub-Brands', 'Templates & Letters'].includes(i.label)
+        ['Learning & LMS', 'Helpdesk & Support', 'Templates & Letters'].includes(i.label)
       );
       const g5 = list.filter((i) => !g1.includes(i) && !g2.includes(i) && !g3.includes(i) && !g4.includes(i));
       return [
@@ -442,34 +595,62 @@ export function SidebarLayout({ items, children }: SidebarProps) {
         {/* ── Mobile Top Bar: Org Branding on Left, Bell & Profile Avatar on Right ── */}
         <View style={styles.mobileTopBar}>
           {/* Top Left: Organization Branding Pill */}
-          <TouchableOpacity
-            style={styles.mobileOrgPill}
-            activeOpacity={0.8}
-            onPress={() => setShowOrgSwitcherModal(true)}
-          >
-            <View style={styles.mobileOrgIconBox}>
-              {companyLogoUrl && /^(https?:|data:image\/|\/)/.test(companyLogoUrl) ? (
-                <Image
-                  source={{ uri: companyLogoUrl }}
-                  style={{ width: 22, height: 22, borderRadius: 6 }}
-                  resizeMode="contain"
-                />
-              ) : (
-                <Building2 size={16} color="#7C3AED" />
-              )}
-            </View>
-            <View style={styles.mobileOrgTextCol}>
-              <Text style={styles.mobileOrgTitle} numberOfLines={1}>
-                {orgDisplayName}
-              </Text>
-              <View style={styles.mobileRoleBadge}>
-                <Text style={styles.mobileRoleBadgeText}>
-                  {String(effectiveRole).toUpperCase()}
+          {canSwitchOrganization ? (
+            <TouchableOpacity
+              style={styles.mobileOrgPill}
+              activeOpacity={0.8}
+              onPress={() => setShowOrgSwitcherModal(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Switch active organization"
+            >
+              <View style={styles.mobileOrgIconBox}>
+                {companyLogoUrl && /^(https?:|data:image\/|\/)/.test(companyLogoUrl) ? (
+                  <Image
+                    source={{ uri: companyLogoUrl }}
+                    style={{ width: 22, height: 22, borderRadius: 6 }}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <Building2 size={16} color="#7C3AED" />
+                )}
+              </View>
+              <View style={styles.mobileOrgTextCol}>
+                <Text style={styles.mobileOrgTitle} numberOfLines={1}>
+                  {orgDisplayName}
                 </Text>
+                <View style={styles.mobileRoleBadge}>
+                  <Text style={styles.mobileRoleBadgeText}>
+                    {String(effectiveRole).toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+              <ChevronDown size={13} color="#94A3B8" style={{ marginLeft: 2 }} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.mobileOrgPill}>
+              <View style={styles.mobileOrgIconBox}>
+                {companyLogoUrl && /^(https?:|data:image\/|\/)/.test(companyLogoUrl) ? (
+                  <Image
+                    source={{ uri: companyLogoUrl }}
+                    style={{ width: 22, height: 22, borderRadius: 6 }}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <Building2 size={16} color="#7C3AED" />
+                )}
+              </View>
+              <View style={styles.mobileOrgTextCol}>
+                <Text style={styles.mobileOrgTitle} numberOfLines={1}>
+                  {orgDisplayName}
+                </Text>
+                <View style={styles.mobileRoleBadge}>
+                  <Text style={styles.mobileRoleBadgeText}>
+                    {String(effectiveRole).toUpperCase()}
+                  </Text>
+                </View>
               </View>
             </View>
-            <ChevronDown size={13} color="#94A3B8" style={{ marginLeft: 2 }} />
-          </TouchableOpacity>
+          )}
 
           {/* Top Right: Notification Bell + Profile Avatar */}
           <View style={styles.mobileTopRightActions}>
@@ -610,29 +791,49 @@ export function SidebarLayout({ items, children }: SidebarProps) {
               </View>
 
               {/* Organization & Units Active Switcher Banner */}
-              <TouchableOpacity
-                style={styles.sheetOrgBanner}
-                activeOpacity={0.8}
-                onPress={() => {
-                  setShowMoreSheet(false);
-                  setShowOrgSwitcherModal(true);
-                }}
-              >
-                <View style={styles.sheetOrgBannerIcon}>
-                  {companyLogoUrl && /^(https?:|data:image\/|\/)/.test(companyLogoUrl) ? (
-                    <Image source={{ uri: companyLogoUrl }} style={{ width: 22, height: 22, borderRadius: 6 }} resizeMode="contain" />
-                  ) : (
-                    <Building2 size={16} color="#7C3AED" />
-                  )}
+              {canSwitchOrganization ? (
+                <TouchableOpacity
+                  style={styles.sheetOrgBanner}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setShowMoreSheet(false);
+                    setShowOrgSwitcherModal(true);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Switch active organization"
+                >
+                  <View style={styles.sheetOrgBannerIcon}>
+                    {companyLogoUrl && /^(https?:|data:image\/|\/)/.test(companyLogoUrl) ? (
+                      <Image source={{ uri: companyLogoUrl }} style={{ width: 22, height: 22, borderRadius: 6 }} resizeMode="contain" />
+                    ) : (
+                      <Building2 size={16} color="#7C3AED" />
+                    )}
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.sheetOrgBannerTitle} numberOfLines={1}>{orgDisplayName}</Text>
+                    <Text style={styles.sheetOrgBannerSub} numberOfLines={1}>
+                      {organization?.units?.length ? `${organization.units.length} Workplace Units` : 'Hospital Workplace Units'} · Tap to switch org/unit
+                    </Text>
+                  </View>
+                  <ChevronRight size={15} color="#7C3AED" />
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.sheetOrgBanner}>
+                  <View style={styles.sheetOrgBannerIcon}>
+                    {companyLogoUrl && /^(https?:|data:image\/|\/)/.test(companyLogoUrl) ? (
+                      <Image source={{ uri: companyLogoUrl }} style={{ width: 22, height: 22, borderRadius: 6 }} resizeMode="contain" />
+                    ) : (
+                      <Building2 size={16} color="#7C3AED" />
+                    )}
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.sheetOrgBannerTitle} numberOfLines={1}>{orgDisplayName}</Text>
+                    <Text style={styles.sheetOrgBannerSub} numberOfLines={1}>
+                      {organization?.units?.length ? `${organization.units.length} Workplace Units` : 'Hospital Workplace Units'}
+                    </Text>
+                  </View>
                 </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.sheetOrgBannerTitle} numberOfLines={1}>{orgDisplayName}</Text>
-                  <Text style={styles.sheetOrgBannerSub} numberOfLines={1}>
-                    {organization?.units?.length ? `${organization.units.length} Workplace Units` : 'Hospital Workplace Units'} · Tap to switch org/unit
-                  </Text>
-                </View>
-                <ChevronRight size={15} color="#7C3AED" />
-              </TouchableOpacity>
+              )}
               <View style={styles.sheetSearchBox}>
                 <Search size={14} color={NotionColors.steel} />
                 <TextInput
@@ -736,128 +937,17 @@ export function SidebarLayout({ items, children }: SidebarProps) {
         </Modal>
 
         {/* ── Organization & Unit Switcher Modal (Mobile & Tablet) ── */}
-        <Modal
-          visible={showOrgSwitcherModal}
-          animationType="slide"
-          transparent
-          onRequestClose={() => setShowOrgSwitcherModal(false)}
-        >
-          <View style={styles.sheetOverlay}>
-            <TouchableOpacity
-              style={styles.sheetBackdrop}
-              activeOpacity={1}
-              onPress={() => setShowOrgSwitcherModal(false)}
-            />
-
-            <View style={[styles.sheetContainer, { maxHeight: '85%', paddingBottom: Math.max(insets.bottom, 16) + 16 }]}>
-              <View style={styles.sheetHandle} />
-
-              <View style={styles.sheetHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.sheetTitle}>Workplace & Organization</Text>
-                  <Text style={styles.sheetSubtitle}>Switch active organization tenant or select hospital unit</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setShowOrgSwitcherModal(false)}
-                  style={styles.sheetCloseBtn}
-                >
-                  <X size={16} color={NotionColors.steel} />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView
-                style={{ maxHeight: 420 }}
-                contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: 24, gap: 12 }}
-                showsVerticalScrollIndicator={false}
-              >
-                {/* Available Organizations */}
-                {allOrganizations.map((org) => {
-                  const isActive = org.id === organization?.id || (organization?.slug && org.slug === organization.slug);
-                  const units = Array.isArray(org.units) && org.units.length > 0
-                    ? org.units
-                    : ['Main Unit'];
-
-                  return (
-                    <TouchableOpacity
-                      key={org.id}
-                      style={[
-                        styles.orgCardItem,
-                        isActive && styles.orgCardItemActive,
-                      ]}
-                      activeOpacity={0.8}
-                      onPress={async () => {
-                        await switchOrganization(org.id);
-                        setShowOrgSwitcherModal(false);
-                      }}
-                    >
-                      <View style={styles.orgCardTopRow}>
-                        <View style={[styles.orgCardIconBox, isActive && { backgroundColor: '#EDE9FE' }]}>
-                          {org.logo_url && /^(https?:|data:image\/|\/)/.test(org.logo_url) ? (
-                            <Image source={{ uri: org.logo_url }} style={{ width: 28, height: 28, borderRadius: 8 }} resizeMode="contain" />
-                          ) : (
-                            <Building2 size={18} color={isActive ? '#7C3AED' : '#64748B'} />
-                          )}
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Text style={[styles.orgCardTitle, isActive && { color: '#7C3AED' }]} numberOfLines={1}>
-                              {org.name}
-                            </Text>
-                            {isActive && (
-                              <View style={styles.orgActiveBadge}>
-                                <Text style={styles.orgActiveBadgeText}>Active</Text>
-                              </View>
-                            )}
-                          </View>
-                          <Text style={styles.orgCardPlanText}>
-                            {String(org.plan || 'ENTERPRISE').toUpperCase()} · {units.length} Units
-                          </Text>
-                        </View>
-                        <View style={[styles.radioCircle, isActive && styles.radioCircleActive]}>
-                          {isActive && <View style={styles.radioInnerDot} />}
-                        </View>
-                      </View>
-
-                      {/* Unit Chips within this organization */}
-                      <View style={styles.orgUnitsChipRow}>
-                        {units.map((unitName) => (
-                          <TouchableOpacity
-                            key={unitName}
-                            style={[styles.orgUnitChip, isActive && styles.orgUnitChipActive]}
-                            activeOpacity={0.7}
-                            onPress={async () => {
-                              await switchOrganization(org.id);
-                              setShowOrgSwitcherModal(false);
-                            }}
-                          >
-                            <MapPin size={10} color={isActive ? '#7C3AED' : '#64748B'} />
-                            <Text style={[styles.orgUnitChipText, isActive && { color: '#6D28D9' }]} numberOfLines={1}>
-                              {unitName}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-
-                {/* Manage Units / Sub-Brands Link */}
-                <TouchableOpacity
-                  style={styles.manageUnitsBtn}
-                  activeOpacity={0.75}
-                  onPress={() => {
-                    setShowOrgSwitcherModal(false);
-                    router.push('/(hr)/locations' as never);
-                  }}
-                >
-                  <Building2 size={16} color="#7C3AED" />
-                  <Text style={styles.manageUnitsBtnText}>Configure Workplace Units & Geofences</Text>
-                  <ChevronRight size={14} color="#7C3AED" />
-                </TouchableOpacity>
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
+        {canSwitchOrganization && (
+          <OrgSwitcherModal
+            visible={showOrgSwitcherModal}
+            onClose={() => setShowOrgSwitcherModal(false)}
+            insets={insets}
+            organizations={authorizedOrganizations}
+            activeOrg={organization}
+            onSwitch={switchOrganization}
+            onManageUnits={() => router.push('/(hr)/locations' as never)}
+          />
+        )}
       </View>
     );
   }
@@ -882,9 +972,11 @@ export function SidebarLayout({ items, children }: SidebarProps) {
         {/* Brand row */}
         <View style={[styles.brandRow, collapsed && styles.brandRowCollapsed]}>
           <TouchableOpacity
-            onPress={handleDashboardPress}
+            onPress={canSwitchOrganization ? () => setShowOrgSwitcherModal(true) : handleDashboardPress}
             style={[styles.brandTouchable, collapsed && { justifyContent: 'center' }]}
             activeOpacity={0.75}
+            accessibilityRole={canSwitchOrganization ? 'button' : 'link'}
+            accessibilityLabel={canSwitchOrganization ? 'Switch active organization' : 'Dashboard'}
           >
             {collapsed ? (
               companyLogoUrl && /^(https?:|data:image\/|\/)/.test(companyLogoUrl) ? (
@@ -921,6 +1013,9 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                     <Text style={styles.desktopRoleBadgeText}>
                       {String(effectiveRole).toUpperCase()} SUITE
                     </Text>
+                    {canSwitchOrganization && (
+                      <ChevronDown size={11} color="#7C3AED" style={{ marginLeft: 3 }} />
+                    )}
                   </View>
                 </View>
               </View>
@@ -1148,6 +1243,19 @@ export function SidebarLayout({ items, children }: SidebarProps) {
           ) : children}
         </View>
       </View>
+
+      {/* Desktop Organization Switcher Modal */}
+      {canSwitchOrganization && (
+        <OrgSwitcherModal
+          visible={showOrgSwitcherModal}
+          onClose={() => setShowOrgSwitcherModal(false)}
+          insets={insets}
+          organizations={authorizedOrganizations}
+          activeOrg={organization}
+          onSwitch={switchOrganization}
+          onManageUnits={() => router.push('/(hr)/locations' as never)}
+        />
+      )}
     </View>
   );
 }
@@ -1515,6 +1623,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0F172A',
     letterSpacing: -0.2,
+    minWidth: 0,
+    flexShrink: 1,
+    ...(Platform.OS === 'web' ? ({ textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' } as any) : {}),
   },
   desktopRoleBadgeRow: {
     marginTop: 2,
@@ -1523,6 +1634,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 1.5,
     borderRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   desktopRoleBadgeText: {
     fontSize: 9,

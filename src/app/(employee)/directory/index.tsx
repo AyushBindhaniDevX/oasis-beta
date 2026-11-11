@@ -1,19 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, useWindowDimensions, Linking, Modal, Platform, StatusBar, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  CraftButton,
-  CraftCard,
-  CraftHeader,
-  Typography,
-  T,
-  S,
-} from '@/components/ui/CraftKit';
 import { useTheme } from '@/hooks/use-theme';
 import { BorderRadius, NotionColors, BrandShadow, Shadows } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
 import { Avatar } from '@/components/ui/Avatar';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { LoadingState } from '@/components/ui/States';
 import { Badge } from '@/components/ui/Badge';
 import { getDirectory, getDepartments } from '@/lib/services/employee';
@@ -126,10 +121,11 @@ export default function DirectoryScreen() {
           automaticallyAdjustContentInsets={false}
           showsVerticalScrollIndicator={false}
         >
-          {/* Constant Craft Header */}
-          <CraftHeader
+          {/* Standard Screen Header */}
+          <ScreenHeader
             title="Company Directory"
             subtitle={`Find and connect with ${employees.length} colleagues across ${organization?.name || 'the organization'}.`}
+            variant="light"
             style={{ marginBottom: 8 }}
           />
 
@@ -186,11 +182,11 @@ export default function DirectoryScreen() {
             contentContainerStyle={{ paddingBottom: 110 }}
             renderItem={({ item: emp }: any) => (
               <View style={{ flex: 1, padding: 8 }}>
-                <CraftCard
-                  variant="base"
+                <Card
+                  variant="outlined"
                   style={[
                     styles.card,
-                    { width: '100%', minWidth: 'auto' },
+                    { width: '100%', minWidth: 'auto', padding: 16, backgroundColor: '#FFFFFF', borderColor: NotionColors.hairline },
                   ]}
                   onPress={() => setSelectedEmp(emp)}
                 >
@@ -207,8 +203,8 @@ export default function DirectoryScreen() {
                       {emp.designation || 'Employee'}
                     </Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'center', marginTop: 4 }}>
-                      <View style={[styles.deptPill, { backgroundColor: colors.primary + '15' }]}>
-                        <Text style={[styles.deptText, { color: colors.primary }]} numberOfLines={1}>
+                      <View style={[styles.deptPill, { backgroundColor: NotionColors.cardTintLavender }]}>
+                        <Text style={[styles.deptText, { color: NotionColors.primary }]} numberOfLines={1}>
                           {emp.department?.name || (emp as any).department_id || 'General'}
                         </Text>
                       </View>
@@ -229,24 +225,24 @@ export default function DirectoryScreen() {
                   )}
 
                   <View style={styles.actionsContainer}>
-                    <CraftButton
+                    <Button
                       title="Email"
                       variant="secondary"
                       size="sm"
-                      icon={<Mail size={14} color={T.ink} />}
+                      icon={<Mail size={14} color={NotionColors.ink} />}
                       onPress={() => handleEmail(emp.profile?.email)}
                       style={{ flex: 1 }}
                     />
-                    <CraftButton
+                    <Button
                       title="Chat"
                       variant="primary"
                       size="sm"
-                      icon={<MessageSquare size={14} color={T.card} />}
+                      icon={<MessageSquare size={14} color="#FFFFFF" />}
                       onPress={() => handleChat(emp)}
                       style={{ flex: 1 }}
                     />
                   </View>
-                </CraftCard>
+                </Card>
               </View>
             )}
           />

@@ -40,6 +40,7 @@ export const HR_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/(hr)/dashboard', icon: LayoutDashboard },
   { label: 'My Attendance', href: '/(employee)/attendance', icon: CalendarClock, feature: 'attendance' },
   { label: 'Users & Employees', href: '/(admin)/users', icon: Users, feature: 'users' },
+  { label: 'Units / Sub-Brands', href: '/(hr)/locations', icon: Building2, feature: 'locations' },
   { label: 'Departments', href: '/(hr)/departments', icon: Network, feature: 'departments' },
   { label: 'Team Attendance', href: '/(hr)/attendance', icon: Calendar, feature: 'attendance' },
   { label: 'Leave', href: '/(hr)/leave', icon: Umbrella, feature: 'leave' },
@@ -50,7 +51,6 @@ export const HR_NAV: NavItem[] = [
   { label: 'Learning & LMS', href: '/(hr)/learning', icon: GraduationCap, feature: 'learning' },
   { label: 'Helpdesk & Support', href: '/(hr)/helpdesk', icon: LifeBuoy, feature: 'helpdesk' },
   { label: 'Reports & Analytics', href: '/(hr)/reports', icon: BarChart3 },
-  { label: 'Units / Sub-Brands', href: '/(hr)/locations', icon: Building2, feature: 'locations' },
   { label: 'Templates & Letters', href: '/(hr)/templates', icon: FileText, feature: 'templates' },
 ];
 
@@ -59,6 +59,7 @@ export const ADMIN_NAV: NavItem[] = [
   { label: 'Central Portal', href: '/(admin)/portal', icon: Building2 },
   { label: 'My Attendance', href: '/(employee)/attendance', icon: CalendarClock, feature: 'attendance' },
   { label: 'Users & Employees', href: '/(admin)/users', icon: Users, feature: 'users' },
+  { label: 'Units / Sub-Brands', href: '/(hr)/locations', icon: Building2, feature: 'locations' },
   { label: 'Departments', href: '/(hr)/departments', icon: Network, feature: 'departments' },
   { label: 'Team Attendance', href: '/(hr)/attendance', icon: Calendar, feature: 'attendance' },
   { label: 'Leave', href: '/(hr)/leave', icon: Umbrella, feature: 'leave' },
@@ -69,7 +70,6 @@ export const ADMIN_NAV: NavItem[] = [
   { label: 'Learning & LMS', href: '/(hr)/learning', icon: GraduationCap, feature: 'learning' },
   { label: 'Helpdesk & Support', href: '/(hr)/helpdesk', icon: LifeBuoy, feature: 'helpdesk' },
   { label: 'Reports & Analytics', href: '/(admin)/reports', icon: BarChart3 },
-  { label: 'Units / Sub-Brands', href: '/(hr)/locations', icon: Building2, feature: 'locations' },
   { label: 'Templates & Letters', href: '/(hr)/templates', icon: FileText, feature: 'templates' },
   { label: 'Audit Logs', href: '/(admin)/audit-logs', icon: Shield, feature: 'audit_logs' },
   { label: 'Approval Workflows', href: '/(admin)/approval-workflows', icon: Workflow },

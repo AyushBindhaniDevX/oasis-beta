@@ -1,13 +1,9 @@
 import { Avatar } from '@/components/ui/Avatar';
-import {
-  CraftButton,
-  CraftCard,
-  Typography,
-  T,
-  S,
-} from '@/components/ui/CraftKit';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { LoadingState } from '@/components/ui/States';
-import { PageHeader, SectionLabel } from '@/components/ui/kit';
+import { NotionColors } from '@/constants/theme';
 import { FONT, R } from '@/constants/ui';
 import { useTenant } from '@/context/TenantContext';
 import { useAuth } from '@/hooks/useAuth';
@@ -121,32 +117,32 @@ export default function ProfileScreen() {
 
   const InfoRow = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 }}>
-      <View style={{ width: 32, height: 32, borderRadius: R.md, backgroundColor: T.surface, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ width: 32, height: 32, borderRadius: R.md, backgroundColor: NotionColors.surface, alignItems: 'center', justifyContent: 'center' }}>
         {icon}
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={{ fontFamily: FONT, fontSize: 9, fontWeight: '600', color: T.steel, letterSpacing: 0.6 }}>
+        <Text style={{ fontFamily: FONT, fontSize: 9, fontWeight: '600', color: NotionColors.steel, letterSpacing: 0.6 }}>
           {label.toUpperCase()}
         </Text>
-        <Text style={{ fontFamily: FONT, fontSize: 13, fontWeight: '500', color: T.ink, marginTop: 2 }}>{value}</Text>
+        <Text style={{ fontFamily: FONT, fontSize: 13, fontWeight: '500', color: NotionColors.ink, marginTop: 2 }}>{value}</Text>
       </View>
     </View>
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: T.surfaceSoft }}>
+    <View style={{ flex: 1, backgroundColor: NotionColors.surfaceSoft }}>
       <ScrollView
         contentContainerStyle={{ paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Constant PageHeader ── */}
-        <PageHeader
+        {/* ── Standard ScreenHeader ── */}
+        <ScreenHeader
           title="Employee Profile"
           subtitle="Personal and professional employment records"
-          topInset={insets.top}
+          variant="light"
           right={
             <TouchableOpacity onPress={openEdit} style={styles.editBtn} activeOpacity={0.8}>
-              <Edit2 size={12} color={T.onPrimary} />
+              <Edit2 size={12} color="#FFFFFF" />
               <Text style={styles.editBtnText}>Edit</Text>
             </TouchableOpacity>
           }
@@ -155,7 +151,7 @@ export default function ProfileScreen() {
         <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
           {/* Avatar hero */}
           <Animated.View entering={FadeInDown.duration(280)}>
-            <CraftCard variant="base" style={styles.heroCard}>
+            <Card variant="outlined" style={styles.heroCard}>
               <View style={{ alignItems: 'center', paddingTop: 4 }}>
                 <Avatar name={profile?.full_name || ''} url={profile?.avatar_url} size={80} />
                 <Text style={styles.heroName}>{profile?.full_name}</Text>
@@ -166,57 +162,57 @@ export default function ProfileScreen() {
                       <Text style={styles.pillText}>ID {empCode}</Text>
                     </View>
                   )}
-                  <View style={[styles.pill, { backgroundColor: T.mint }]}>
-                    <Text style={[styles.pillText, { color: T.mintDeep }]}>Active</Text>
+                  <View style={[styles.pill, { backgroundColor: NotionColors.cardTintMint }]}>
+                    <Text style={[styles.pillText, { color: NotionColors.semanticSuccess }]}>Active</Text>
                   </View>
                 </View>
               </View>
-            </CraftCard>
+            </Card>
           </Animated.View>
 
           <View style={isDesktop ? styles.gridDesktop : { gap: 16 }}>
             {/* Contact */}
             <Animated.View entering={FadeInDown.delay(60).duration(280)} style={{ flex: 1 }}>
-              <SectionLabel>Contact</SectionLabel>
-              <CraftCard variant="base" style={styles.card}>
-                <InfoRow icon={<Mail size={14} color={T.inkFaint} />} label="Email" value={profile?.email || '—'} />
+              <Text style={styles.sectionHeading}>Contact</Text>
+              <Card variant="outlined" style={styles.card}>
+                <InfoRow icon={<Mail size={14} color={NotionColors.steel} />} label="Email" value={profile?.email || '—'} />
                 <View style={styles.sep} />
-                <InfoRow icon={<Phone size={14} color={T.inkFaint} />} label="Phone" value={profile?.phone || '—'} />
+                <InfoRow icon={<Phone size={14} color={NotionColors.steel} />} label="Phone" value={profile?.phone || '—'} />
                 <View style={styles.sep} />
-                <InfoRow icon={<MapPin size={14} color={T.inkFaint} />} label="Workplace" value={location} />
-              </CraftCard>
+                <InfoRow icon={<MapPin size={14} color={NotionColors.steel} />} label="Workplace" value={location} />
+              </Card>
             </Animated.View>
 
             {/* Employment */}
             <Animated.View entering={FadeInDown.delay(100).duration(280)} style={{ flex: 1 }}>
-              <SectionLabel>Employment</SectionLabel>
-              <CraftCard variant="base" style={styles.card}>
-                <InfoRow icon={<Building size={14} color={T.inkFaint} />} label="Department" value={dept} />
+              <Text style={styles.sectionHeading}>Employment</Text>
+              <Card variant="outlined" style={styles.card}>
+                <InfoRow icon={<Building size={14} color={NotionColors.steel} />} label="Department" value={dept} />
                 <View style={styles.sep} />
-                <InfoRow icon={<User size={14} color={T.inkFaint} />} label="Designation" value={role} />
+                <InfoRow icon={<User size={14} color={NotionColors.steel} />} label="Designation" value={role} />
                 <View style={styles.sep} />
-                <InfoRow icon={<FileText size={14} color={T.inkFaint} />} label="Join date" value={joinDate} />
+                <InfoRow icon={<FileText size={14} color={NotionColors.steel} />} label="Join date" value={joinDate} />
                 <View style={styles.sep} />
                 <View style={{ paddingVertical: 10 }}>
-                  <Text style={{ fontFamily: FONT, fontSize: 9, fontWeight: '600', color: T.inkFaint, letterSpacing: 0.6 }}>
+                  <Text style={{ fontFamily: FONT, fontSize: 9, fontWeight: '600', color: NotionColors.steel, letterSpacing: 0.6 }}>
                     APPOINTMENT LETTER
                   </Text>
-                  <CraftButton
+                  <Button
                     title="Download PDF"
                     variant="secondary"
                     size="sm"
                     loading={downloadingLetter}
-                    icon={<Download size={12} color={T.ink} />}
+                    icon={<Download size={12} color={NotionColors.ink} />}
                     onPress={handleDownload}
-                    style={{ marginTop: S.xs, alignSelf: 'flex-start' }}
+                    style={{ marginTop: 8, alignSelf: 'flex-start' }}
                   />
                   {downloadFeedback && (
-                    <Text style={{ fontFamily: FONT, fontSize: 11, color: T.inkFaint, marginTop: 4 }}>
+                    <Text style={{ fontFamily: FONT, fontSize: 11, color: NotionColors.steel, marginTop: 4 }}>
                       {downloadFeedback}
                     </Text>
                   )}
                 </View>
-              </CraftCard>
+              </Card>
             </Animated.View>
           </View>
         </View>
@@ -229,33 +225,33 @@ export default function ProfileScreen() {
           <View style={styles.modalSheet}>
             {saveSuccess ? (
               <View style={{ alignItems: 'center', padding: 20, gap: 10 }}>
-                <CheckCircle2 size={32} color={T.success} />
-                <Text style={{ fontFamily: FONT, fontSize: 15, fontWeight: '600', color: T.ink }}>
+                <CheckCircle2 size={32} color={NotionColors.semanticSuccess} />
+                <Text style={{ fontFamily: FONT, fontSize: 15, fontWeight: '600', color: NotionColors.ink }}>
                   Profile updated
                 </Text>
               </View>
             ) : (
               <>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ fontFamily: FONT, fontSize: 16, fontWeight: '600', color: T.ink }}>
+                  <Text style={{ fontFamily: FONT, fontSize: 16, fontWeight: '600', color: NotionColors.ink }}>
                     Edit profile
                   </Text>
                   <TouchableOpacity onPress={() => setEditOpen(false)}>
-                    <X size={16} color={T.inkFaint} />
+                    <X size={16} color={NotionColors.steel} />
                   </TouchableOpacity>
                 </View>
                 <View style={{ gap: 10, marginTop: 14 }}>
                   <View>
                     <Text style={styles.inputLabel}>Full name</Text>
-                    <TextInput value={editName} onChangeText={setEditName} style={styles.input} placeholderTextColor={T.inkMuted} />
+                    <TextInput value={editName} onChangeText={setEditName} style={styles.input} placeholderTextColor={NotionColors.muted} />
                   </View>
                   <View>
                     <Text style={styles.inputLabel}>Phone</Text>
-                    <TextInput value={editPhone} onChangeText={setEditPhone} style={styles.input} placeholderTextColor={T.inkMuted} keyboardType="phone-pad" />
+                    <TextInput value={editPhone} onChangeText={setEditPhone} style={styles.input} placeholderTextColor={NotionColors.muted} keyboardType="phone-pad" />
                   </View>
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                    <CraftButton title="Cancel" onPress={() => setEditOpen(false)} variant="secondary" style={{ flex: 1 }} />
-                    <CraftButton title="Save" onPress={handleSave} loading={saving} style={{ flex: 1 }} />
+                    <Button title="Cancel" onPress={() => setEditOpen(false)} variant="secondary" style={{ flex: 1 }} />
+                    <Button title="Save" onPress={handleSave} loading={saving} style={{ flex: 1 }} />
                   </View>
                 </View>
               </>
@@ -271,28 +267,38 @@ const styles = StyleSheet.create({
   body: { padding: 16, gap: 16 },
   bodyDesktop: { maxWidth: 1000, alignSelf: 'center', width: '100%', padding: 32 },
 
+  sectionHeading: {
+    fontFamily: FONT,
+    fontSize: 12,
+    fontWeight: '700',
+    color: NotionColors.steel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 8,
+  },
+
   editBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 12, paddingVertical: 8,
-    backgroundColor: T.primary, borderRadius: R.md,
+    backgroundColor: NotionColors.primary, borderRadius: R.md,
   },
-  editBtnText: { fontFamily: FONT, fontSize: 12, fontWeight: '500', color: T.onPrimary },
+  editBtnText: { fontFamily: FONT, fontSize: 12, fontWeight: '500', color: '#FFFFFF' },
 
   heroCard: {
-    backgroundColor: T.canvas, borderRadius: R.lg,
-    borderWidth: 1, borderColor: T.hairline, padding: 20, marginBottom: 16,
+    backgroundColor: NotionColors.canvas, borderRadius: R.lg,
+    borderWidth: 1, borderColor: NotionColors.hairline, padding: 20, marginBottom: 16,
   },
-  heroName: { fontFamily: FONT, fontSize: 22, fontWeight: '600', color: T.ink, letterSpacing: -0.6, marginTop: 12 },
-  heroRole: { fontFamily: FONT, fontSize: 13, color: T.steel, marginTop: 2 },
-  pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: R.sm, backgroundColor: T.surface },
-  pillText: { fontFamily: FONT, fontSize: 10, fontWeight: '600', color: T.charcoal },
+  heroName: { fontFamily: FONT, fontSize: 22, fontWeight: '600', color: NotionColors.ink, letterSpacing: -0.6, marginTop: 12 },
+  heroRole: { fontFamily: FONT, fontSize: 13, color: NotionColors.steel, marginTop: 2 },
+  pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: R.sm, backgroundColor: NotionColors.surface },
+  pillText: { fontFamily: FONT, fontSize: 10, fontWeight: '600', color: NotionColors.charcoal },
 
   gridDesktop: { flexDirection: 'row', gap: 16 },
   card: {
-    backgroundColor: T.canvas, borderRadius: R.lg,
-    borderWidth: 1, borderColor: T.hairline, padding: 14,
+    backgroundColor: NotionColors.canvas, borderRadius: R.lg,
+    borderWidth: 1, borderColor: NotionColors.hairline, padding: 14,
   },
-  sep: { height: 1, backgroundColor: T.hairlineSoft },
+  sep: { height: 1, backgroundColor: NotionColors.hairlineSoft },
 
   modalOverlay: {
     ...StyleSheet.absoluteFill, justifyContent: 'center', alignItems: 'center', zIndex: 1000,
@@ -301,17 +307,17 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill, backgroundColor: 'rgba(10,21,48,0.55)',
   },
   modalSheet: {
-    width: '92%', maxWidth: 400, backgroundColor: T.canvas,
-    borderRadius: R.lg, padding: 20, borderWidth: 1, borderColor: T.hairline,
+    width: '92%', maxWidth: 400, backgroundColor: NotionColors.canvas,
+    borderRadius: R.lg, padding: 20, borderWidth: 1, borderColor: NotionColors.hairline,
   },
   inputLabel: {
-    fontFamily: FONT, fontSize: 10, fontWeight: '600', color: T.steel,
+    fontFamily: FONT, fontSize: 10, fontWeight: '600', color: NotionColors.steel,
     letterSpacing: 0.6, marginBottom: 4,
   },
   input: {
-    fontFamily: FONT, fontSize: 13, color: T.ink,
-    backgroundColor: T.surface, borderRadius: R.md,
-    borderWidth: 1, borderColor: T.hairline,
+    fontFamily: FONT, fontSize: 13, color: NotionColors.ink,
+    backgroundColor: NotionColors.surface, borderRadius: R.md,
+    borderWidth: 1, borderColor: NotionColors.hairline,
     paddingHorizontal: 12, height: 40,
   },
 });
