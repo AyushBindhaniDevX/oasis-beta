@@ -20,6 +20,7 @@ import {
   STOCK_13_SVG,
 } from '@/constants/workManagementSvgs';
 import { useTenant } from '@/context/TenantContext';
+import { getBrandPalette } from '@/utils/color';
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/firebase';
 import { getTenantDefaultUnits, normalizeHospitalUnit } from '@/constants/config';
@@ -77,6 +78,7 @@ interface SplineChartProps {
   onSelectIndex: (idx: number) => void;
   width: number;
   height?: number;
+  brandColor?: string;
 }
 
 function InteractiveSplineChart({
@@ -86,6 +88,7 @@ function InteractiveSplineChart({
   onSelectIndex,
   width,
   height = 95,
+  brandColor = '#5645d4',
 }: SplineChartProps) {
   const chartW = Math.max(140, width);
   const minVal = Math.min(...data, 70);
@@ -148,8 +151,8 @@ function InteractiveSplineChart({
       <Svg width={chartW} height={height} viewBox={`0 0 ${chartW} ${height}`} fill="none">
         <Defs>
           <LinearGradient id="interactiveSplineGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <Stop offset="0%" stopColor="#7C3AED" stopOpacity="0.22" />
-            <Stop offset="100%" stopColor="#7C3AED" stopOpacity="0.0" />
+            <Stop offset="0%" stopColor={brandColor} stopOpacity="0.22" />
+            <Stop offset="100%" stopColor={brandColor} stopOpacity="0.0" />
           </LinearGradient>
         </Defs>
 
@@ -159,14 +162,14 @@ function InteractiveSplineChart({
         {/* Spline Line */}
         <Path
           d={linePath}
-          stroke="#7C3AED"
+          stroke={brandColor}
           strokeWidth={2.8}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
 
         {/* Single Marker for Active Peak Point - matches design, no bumpy dots */}
-        <Circle cx={activePoint.x} cy={activePoint.y} r={6.5} fill="#7C3AED" />
+        <Circle cx={activePoint.x} cy={activePoint.y} r={6.5} fill={brandColor} />
         <Circle cx={activePoint.x} cy={activePoint.y} r={3} fill="#FFFFFF" />
       </Svg>
 
@@ -226,10 +229,14 @@ function DonutProgressRing({
   pct = 92,
   size = 114,
   label = 'Present',
+  brandColor = '#5645d4',
+  trackColor = '#EDE9FE',
 }: {
   pct?: number;
   size?: number;
   label?: string;
+  brandColor?: string;
+  trackColor?: string;
 }) {
   const strokeWidth = 14;
   const radius = (size - strokeWidth) / 2;
@@ -245,7 +252,7 @@ function DonutProgressRing({
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke="#EDE9FE"
+            stroke={trackColor}
             strokeWidth={strokeWidth}
             fill="none"
           />
@@ -253,7 +260,7 @@ function DonutProgressRing({
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke="#7C3AED"
+            stroke={brandColor}
             strokeWidth={strokeWidth}
             fill="none"
             strokeDasharray={`${filled} ${circ - filled}`}
@@ -292,7 +299,8 @@ function MetricWave({ color, width = 85, height = 28 }: { color: string; width?:
 /* ─── Main Admin Dashboard Component ─────────────────────────────────── */
 export default function AdminDashboard() {
   const { profile } = useAuth();
-  const { organization: tenantOrg, companyLogoUrl } = useTenant();
+  const { organization: tenantOrg, companyLogoUrl, primaryColor } = useTenant();
+  const brandPalette = useMemo(() => getBrandPalette(primaryColor), [primaryColor]);
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -747,8 +755,8 @@ export default function AdminDashboard() {
       {/* Header - Matches reference design cleanly without colliding badges */}
       <View style={s.cardHeaderRow}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <View style={[s.iconBox, { backgroundColor: '#EDE9FE', width: 32, height: 32, borderRadius: 10 }]}>
-            <BarChart2 size={16} color="#7C3AED" />
+          <View style={[s.iconBox, { backgroundColor: brandPalette.primarySurface, width: 32, height: 32, borderRadius: 10 }]}>
+            <BarChart2 size={16} color={brandPalette.primary} />
           </View>
           <Text style={s.sectionTitle}>Attendance Overview</Text>
         </View>
@@ -768,7 +776,13 @@ export default function AdminDashboard() {
       <View style={s.attendanceBodyRow}>
         {/* Left Donut & Legend */}
         <View style={s.donutAndLegendCol}>
-          <DonutProgressRing pct={activeChartPercentage} size={isDesktop ? 114 : 96} label="Present" />
+          <DonutProgressRing
+            pct={activeChartPercentage}
+            size={isDesktop ? 114 : 96}
+            label="Present"
+            brandColor={brandPalette.primary}
+            trackColor={brandPalette.primarySurface}
+          />
 
           <View style={s.legendList}>
             <TouchableOpacity
@@ -812,6 +826,7 @@ export default function AdminDashboard() {
             onSelectIndex={(idx) => setChartIndex(idx)}
             width={splineChartWidth}
             height={90}
+            brandColor={brandPalette.primary}
           />
         </View>
       </View>
@@ -828,8 +843,8 @@ export default function AdminDashboard() {
           style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
           activeOpacity={0.8}
         >
-          <Text style={s.seeAllLink}>See All</Text>
-          <ArrowRight size={13} color="#7C3AED" />
+          <Text style={[s.seeAllLink, { color: brandPalette.primary }]}>See All</Text>
+          <ArrowRight size={13} color={brandPalette.primary} />
         </TouchableOpacity>
       </View>
 
@@ -872,7 +887,7 @@ export default function AdminDashboard() {
           style={s.quickActionBtn}
           onPress={() => router.push('/(admin)/settings' as never)}
         >
-          <View style={[s.quickActionIconCircle, { backgroundColor: '#F5F3FF' }]}>
+          <View style={[s.quickActionIconCircle, { backgroundColor: brandPalette.primaryLight }]}>
             <SvgXml xml={STOCK_12_SVG} width={42} height={30} />
           </View>
           <Text style={s.quickActionLabel}>Security{'\n'}Settings</Text>
@@ -886,8 +901,8 @@ export default function AdminDashboard() {
     <View style={s.bottomHalfCard}>
       <View style={s.cardHeaderRow}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={[s.iconBox, { backgroundColor: '#EDE9FE', width: 26, height: 26 }]}>
-            <Building2 size={14} color="#7C3AED" />
+          <View style={[s.iconBox, { backgroundColor: brandPalette.primarySurface, width: 26, height: 26 }]}>
+            <Building2 size={14} color={brandPalette.primary} />
           </View>
           <Text style={s.cardTitleMedium}>Organization Info</Text>
         </View>
@@ -919,9 +934,9 @@ export default function AdminDashboard() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={s.orgSubName} numberOfLines={1}>{orgName}</Text>
-            <View style={s.adminRolePill}>
-              <Shield size={9} color="#7C3AED" />
-              <Text style={s.adminRolePillText}>Admin</Text>
+            <View style={[s.adminRolePill, { backgroundColor: brandPalette.primarySurface }]}>
+              <Shield size={9} color={brandPalette.primary} />
+              <Text style={[s.adminRolePillText, { color: brandPalette.primaryDeep }]}>Admin</Text>
             </View>
           </View>
         </View>
@@ -988,7 +1003,7 @@ export default function AdminDashboard() {
             onPress={() => router.push('/(admin)/audit-logs' as never)}
             activeOpacity={0.7}
           >
-            <Text style={s.seeAllSmall}>See All →</Text>
+            <Text style={[s.seeAllSmall, { color: brandPalette.primary }]}>See All →</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1042,8 +1057,8 @@ export default function AdminDashboard() {
       style={[
         s.metricCard,
         {
-          backgroundColor: '#F3EEFE',
-          borderColor: '#E4DCFD',
+          backgroundColor: brandPalette.primaryLight,
+          borderColor: brandPalette.primaryBorder,
           flex: 1,
           minWidth: 0,
         },
@@ -1051,18 +1066,18 @@ export default function AdminDashboard() {
       onPress={() => router.push('/(admin)/users' as never)}
     >
       <View style={s.cardTopRow}>
-        <View style={[s.iconBox, { backgroundColor: '#DDD6FE' }]}>
+        <View style={[s.iconBox, { backgroundColor: brandPalette.primarySurface }]}>
           <SvgXml xml={STOCK_4_SVG} width={32} height={24} />
         </View>
         <View style={s.valueRow}>
-          <Text style={[s.metricValueText, { color: '#1E1B4B' }]}>{totalEmployeesDisplay}</Text>
+          <Text style={[s.metricValueText, { color: brandPalette.primaryDeep }]}>{totalEmployeesDisplay}</Text>
           <Text style={s.trendGreen}>↑ +12%</Text>
         </View>
       </View>
       <View style={s.cardBottomRow}>
         <Text style={s.metricLabelText} numberOfLines={1}>Total Employees</Text>
         <View style={s.waveContainer}>
-          <MetricWave color="#8B5CF6" width={isDesktop ? 120 : 64} height={20} />
+          <MetricWave color={brandPalette.primaryWave} width={isDesktop ? 120 : 64} height={20} />
         </View>
       </View>
     </InteractiveTile>
@@ -1165,7 +1180,7 @@ export default function AdminDashboard() {
         <ScrollView
           style={s.canvas}
           contentContainerStyle={[s.contentContainer, isDesktop && s.desktopContainer]}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#7C3AED" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={brandPalette.primary} />}
           showsVerticalScrollIndicator={false}
         >
           {/* ── Hero Greeting Banner with STOCK 6 SVG ────────────────── */}
@@ -1199,7 +1214,7 @@ export default function AdminDashboard() {
               >
                 <TouchableOpacity
                   onPress={() => setSelectedUnit('all')}
-                  style={[s.unitChip, selectedUnit === 'all' && s.unitChipActive]}
+                  style={[s.unitChip, selectedUnit === 'all' && [s.unitChipActive, { backgroundColor: brandPalette.primary, borderColor: brandPalette.primary }]]}
                   activeOpacity={0.7}
                 >
                   <Building2 size={13} color={selectedUnit === 'all' ? '#FFF' : '#64748B'} />
@@ -1215,7 +1230,7 @@ export default function AdminDashboard() {
                     <TouchableOpacity
                       key={u}
                       onPress={() => setSelectedUnit(u)}
-                      style={[s.unitChip, isAct && s.unitChipActive]}
+                      style={[s.unitChip, isAct && [s.unitChipActive, { backgroundColor: brandPalette.primary, borderColor: brandPalette.primary }]]}
                       activeOpacity={0.7}
                     >
                       <MapPin size={12} color={isAct ? '#FFF' : '#64748B'} />
@@ -1288,8 +1303,8 @@ export default function AdminDashboard() {
         onClose={() => setShowTimeframeModal(false)}
         title="Select Attendance Period"
         subtitle="Choose reporting window for dashboard analytics"
-        icon={<CalendarDays size={20} color="#7C3AED" />}
-        iconBgColor="#F3EEFE"
+        icon={<CalendarDays size={20} color={brandPalette.primary} />}
+        iconBgColor={brandPalette.primaryLight}
         size="sm"
       >
         <View style={{ gap: 8 }}>
@@ -1303,8 +1318,8 @@ export default function AdminDashboard() {
               }}
               activeOpacity={0.8}
             >
-              <Text style={[s.modalOptionText, timeframe === opt && s.modalOptionTextActive]}>{opt}</Text>
-              {timeframe === opt && <Check size={16} color="#7C3AED" />}
+              <Text style={[s.modalOptionText, timeframe === opt && [s.modalOptionTextActive, { color: brandPalette.primary }] ]}>{opt}</Text>
+              {timeframe === opt && <Check size={16} color={brandPalette.primary} />}
             </TouchableOpacity>
           ))}
         </View>
@@ -1398,7 +1413,7 @@ export default function AdminDashboard() {
             style={s.modalActionBtn}
             onPress={() => handleExportCSV('payroll')}
           >
-            <Download size={16} color="#7C3AED" />
+            <Download size={16} color={brandPalette.primary} />
             <Text style={s.modalActionText}>Export Payroll Run Rate (.CSV)</Text>
           </TouchableOpacity>
 

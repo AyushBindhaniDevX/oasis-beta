@@ -1,54 +1,46 @@
-import { ADMIN_NAV } from '@/constants/navigation';
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  useWindowDimensions,
-  TouchableOpacity,
-  Switch,
-  Platform,
-} from 'react-native';
-import Svg, { Path, SvgXml } from 'react-native-svg';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import { SidebarLayout } from '@/components/layout/Sidebar';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { InteractiveTile } from '@/components/ui/InteractiveTile';
+import { Select } from '@/components/ui/Select';
+import { LoadingState } from '@/components/ui/States';
+import { TimePicker } from '@/components/ui/TimePicker';
+import { ADMIN_NAV } from '@/constants/navigation';
 import {
+  STOCK_12_SVG,
   STOCK_6_SVG,
   STOCK_7_SVG,
   STOCK_9_SVG,
-  STOCK_12_SVG,
 } from '@/constants/workManagementSvgs';
-import { useAuth } from '@/hooks/useAuth';
-import { useTheme } from '@/hooks/use-theme';
-import { Input } from '@/components/ui/Input';
-import { Button } from '@/components/ui/Button';
-import { Select } from '@/components/ui/Select';
-import { TimePicker } from '@/components/ui/TimePicker';
 import { useTenant } from '@/context/TenantContext';
+import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/hooks/useAuth';
 import { useBiometrics } from '@/hooks/useBiometrics';
-import { LoadingState } from '@/components/ui/States';
-import { SidebarLayout } from '@/components/layout/Sidebar';
-import { getOrganization, updateOrganization } from '@/lib/services/organization';
 import { createAuditLog } from '@/lib/services/audit';
+import { getOrganization, updateOrganization } from '@/lib/services/organization';
 import type { Organization } from '@/types';
 import {
-  Building2,
-  Clock,
-  MapPin,
-  CheckCircle2,
   AlertCircle,
-  Save,
-  Globe,
+  Building2,
+  CheckCircle2,
+  Clock,
   Coins,
-  ShieldCheck,
-  Mail,
-  Phone,
-  Sparkles,
-  Server,
+  Globe,
   Radio,
-  Fingerprint,
+  Save,
+  Sparkles
 } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
+import {
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  useWindowDimensions,
+  View
+} from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import Svg, { Path, SvgXml } from 'react-native-svg';
 
 function MetricWave({ color, width = 85, height = 28 }: { color: string; width?: number; height?: number }) {
   return (
@@ -177,16 +169,16 @@ export default function SettingsScreen() {
           auto_welcome_email: autoWelcomeEmail,
           auto_approve_expense: autoApproveExpense,
           expense_threshold: parseInt(expenseThreshold, 10) || 1000,
-          
+
           enable_pf: enablePf,
           employee_contribution_percent: parseFloat(empContribution) || 12,
           employer_contribution_percent: parseFloat(emprContribution) || 8.3,
-          
+
           enable_late_policy: enableLatePolicy,
           consecutive_late_days: parseInt(consecutiveLateDays, 10) || 3,
           late_deduction_amount: parseFloat(lateDeductionAmount) || 500,
           late_approval_required: lateApprovalRequired,
-          
+
           enable_company_announcements: enableCompanyAnnouncements,
           enable_birthday_notifications: enableBirthdayNotifications,
         },

@@ -54,13 +54,15 @@ function getVariantStyles(variant: ButtonVariant, colors: ThemeColors, isPressed
   }
 
   switch (variant) {
-    case 'primary':
+    case 'primary': {
+      const primaryBg = colors.primary || NotionColors.primary;
       return {
-        bg: isPressed ? NotionColors.primaryPressed : NotionColors.primary,
-        text: NotionColors.onPrimary,
+        bg: isPressed ? (colors.primaryDark || NotionColors.primaryPressed) : primaryBg,
+        text: colors.primaryForeground || NotionColors.onPrimary,
         border: 'transparent',
         shadow: BrandShadow,
       };
+    }
     case 'dark':
       return {
         bg: isPressed ? '#1e1e1e' : NotionColors.inkDeep,

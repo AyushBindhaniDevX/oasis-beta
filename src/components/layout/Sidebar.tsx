@@ -3,6 +3,7 @@ import { FeatureGate } from '@/components/ui/FeatureGate';
 import { SubedgeBrand } from '@/components/ui/SubedgeBrand';
 import { getNavForRole, NavItem } from '@/constants/navigation';
 import { BorderRadius, NotionColors } from '@/constants/theme';
+import { getBrandPalette } from '@/utils/color';
 import { useNotifications } from '@/context/NotificationContext';
 import { useTenant } from '@/context/TenantContext';
 import { useTheme } from '@/hooks/use-theme';
@@ -82,6 +83,8 @@ function DesktopQuickActionBtn({
   onPress: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const { primaryColor } = useTenant();
+  const brandPalette = useMemo(() => getBrandPalette(primaryColor), [primaryColor]);
 
   if (collapsed) {
     return (
@@ -91,7 +94,7 @@ function DesktopQuickActionBtn({
         onHoverOut={() => setHovered(false)}
         style={[
           styles.collapsedIconBtn,
-          { backgroundColor: hovered ? '#6D28D9' : '#7C3AED' },
+          { backgroundColor: hovered ? brandPalette.primaryHover : brandPalette.primary },
         ]}
       >
         <Plus size={16} color="#fff" strokeWidth={2.5} />
@@ -106,7 +109,16 @@ function DesktopQuickActionBtn({
       onHoverOut={() => setHovered(false)}
       style={[
         styles.newRequestBtn,
-        hovered && styles.newRequestBtnHover,
+        {
+          backgroundColor: hovered ? brandPalette.primaryHover : brandPalette.primary,
+          ...(Platform.OS === 'web'
+            ? ({
+                boxShadow: `0 6px 18px ${brandPalette.primarySurface}`,
+              } as any)
+            : {
+                shadowColor: brandPalette.primary,
+              }),
+        },
       ]}
     >
       <View style={styles.newRequestIconPill}>
@@ -136,6 +148,8 @@ function DesktopNavItem({
   onPress: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const { primaryColor } = useTenant();
+  const brandPalette = useMemo(() => getBrandPalette(primaryColor), [primaryColor]);
   const IconComponent = item.icon;
 
   return (
@@ -146,24 +160,38 @@ function DesktopNavItem({
       style={[
         styles.navItem,
         collapsed && styles.navItemCollapsed,
-        active && styles.navItemActive,
+        active && [
+          styles.navItemActive,
+          {
+            backgroundColor: brandPalette.primaryLight,
+            borderColor: brandPalette.primaryBorder,
+          },
+        ],
         hovered && !active && styles.navItemHover,
         isLocked && { opacity: 0.55 },
       ]}
     >
-      {active && !collapsed && <View style={styles.navActiveLeftBar} />}
+      {active && !collapsed && (
+        <View style={[styles.navActiveLeftBar, { backgroundColor: brandPalette.primary }]} />
+      )}
 
       {IconComponent && (
         <View
           style={[
             styles.navIconBox,
             hovered && !active && styles.navIconBoxHover,
-            active && styles.navIconBoxActive,
+            active && [
+              styles.navIconBoxActive,
+              {
+                backgroundColor: brandPalette.primarySurface,
+                borderColor: brandPalette.primaryBorder,
+              },
+            ],
           ]}
         >
           <IconComponent
             size={17}
-            color={active ? '#7C3AED' : hovered ? '#0F172A' : isLocked ? NotionColors.muted : '#64748B'}
+            color={active ? brandPalette.primary : hovered ? '#0F172A' : isLocked ? NotionColors.muted : '#64748B'}
             strokeWidth={active ? 2.3 : 1.8}
           />
         </View>
@@ -175,7 +203,7 @@ function DesktopNavItem({
           style={[
             styles.navLabel,
             {
-              color: active ? '#7C3AED' : hovered ? '#0F172A' : isLocked ? NotionColors.muted : '#334155',
+              color: active ? brandPalette.primaryDeep : hovered ? '#0F172A' : isLocked ? NotionColors.muted : '#334155',
               fontWeight: active ? '700' : hovered ? '600' : '500',
             },
           ]}
@@ -185,7 +213,7 @@ function DesktopNavItem({
       )}
 
       {!collapsed && active && (
-        <View style={styles.sidebarActiveDot} />
+        <View style={[styles.sidebarActiveDot, { backgroundColor: brandPalette.primary }]} />
       )}
 
       {!collapsed && isLocked && (
@@ -259,6 +287,7 @@ function OrgSwitcherModal({
             {/* Authorized Organizations (Multi-Tenant Access) */}
             {organizations.map((org) => {
               const isActive = org.id === activeOrg?.id || (activeOrg?.slug && org.slug === activeOrg.slug);
+              const orgPalette = getBrandPalette(org.primary_color || activeOrg?.primary_color);
               const units = Array.isArray(org.units) && org.units.length > 0
                 ? org.units
                 : ['Main Unit'];
@@ -268,7 +297,7 @@ function OrgSwitcherModal({
                   key={org.id}
                   style={[
                     styles.orgCardItem,
-                    isActive && styles.orgCardItemActive,
+                    isActive && [styles.orgCardItemActive, { borderColor: orgPalette.primaryBorder }],
                   ]}
                   activeOpacity={0.8}
                   onPress={async () => {
@@ -277,21 +306,21 @@ function OrgSwitcherModal({
                   }}
                 >
                   <View style={styles.orgCardTopRow}>
-                    <View style={[styles.orgCardIconBox, isActive && { backgroundColor: '#EDE9FE' }]}>
+                    <View style={[styles.orgCardIconBox, isActive && { backgroundColor: orgPalette.primarySurface }]}>
                       {org.logo_url && /^(https?:|data:image\/|\/)/.test(org.logo_url) ? (
                         <Image source={{ uri: org.logo_url }} style={{ width: 28, height: 28, borderRadius: 8 }} resizeMode="contain" />
                       ) : (
-                        <Building2 size={18} color={isActive ? '#7C3AED' : '#64748B'} />
+                        <Building2 size={18} color={isActive ? orgPalette.primary : '#64748B'} />
                       )}
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={[styles.orgCardTitle, isActive && { color: '#7C3AED' }]} numberOfLines={1}>
+                        <Text style={[styles.orgCardTitle, isActive && { color: orgPalette.primary }]} numberOfLines={1}>
                           {org.name}
                         </Text>
                         {isActive && (
-                          <View style={styles.orgActiveBadge}>
-                            <Text style={styles.orgActiveBadgeText}>Active</Text>
+                          <View style={[styles.orgActiveBadge, { backgroundColor: orgPalette.primarySurface }]}>
+                            <Text style={[styles.orgActiveBadgeText, { color: orgPalette.primaryDeep }]}>Active</Text>
                           </View>
                         )}
                       </View>
@@ -299,8 +328,8 @@ function OrgSwitcherModal({
                         {String(org.plan || 'ENTERPRISE').toUpperCase()} · {units.length} Units
                       </Text>
                     </View>
-                    <View style={[styles.radioCircle, isActive && styles.radioCircleActive]}>
-                      {isActive && <View style={styles.radioInnerDot} />}
+                    <View style={[styles.radioCircle, isActive && { borderColor: orgPalette.primary }]}>
+                      {isActive && <View style={[styles.radioInnerDot, { backgroundColor: orgPalette.primary }]} />}
                     </View>
                   </View>
 
@@ -309,15 +338,15 @@ function OrgSwitcherModal({
                     {units.map((unitName: string) => (
                       <TouchableOpacity
                         key={unitName}
-                        style={[styles.orgUnitChip, isActive && styles.orgUnitChipActive]}
+                        style={[styles.orgUnitChip, isActive && { backgroundColor: orgPalette.primaryLight, borderColor: orgPalette.primaryBorder }]}
                         activeOpacity={0.7}
                         onPress={async () => {
                           await onSwitch(org.id);
                           onClose();
                         }}
                       >
-                        <MapPin size={10} color={isActive ? '#7C3AED' : '#64748B'} />
-                        <Text style={[styles.orgUnitChipText, isActive && { color: '#6D28D9' }]} numberOfLines={1}>
+                        <MapPin size={10} color={isActive ? orgPalette.primary : '#64748B'} />
+                        <Text style={[styles.orgUnitChipText, isActive && { color: orgPalette.primaryDeep }]} numberOfLines={1}>
                           {unitName}
                         </Text>
                       </TouchableOpacity>
@@ -328,18 +357,23 @@ function OrgSwitcherModal({
             })}
 
             {/* Manage Units / Sub-Brands Link */}
-            <TouchableOpacity
-              style={styles.manageUnitsBtn}
-              activeOpacity={0.75}
-              onPress={() => {
-                onClose();
-                onManageUnits();
-              }}
-            >
-              <Building2 size={16} color="#7C3AED" />
-              <Text style={styles.manageUnitsBtnText}>Configure Workplace Units & Geofences</Text>
-              <ChevronRight size={14} color="#7C3AED" />
-            </TouchableOpacity>
+            {(() => {
+              const activePalette = getBrandPalette(activeOrg?.primary_color);
+              return (
+                <TouchableOpacity
+                  style={[styles.manageUnitsBtn, { backgroundColor: activePalette.primaryLight, borderColor: activePalette.primaryBorder }]}
+                  activeOpacity={0.75}
+                  onPress={() => {
+                    onClose();
+                    onManageUnits();
+                  }}
+                >
+                  <Building2 size={16} color={activePalette.primary} />
+                  <Text style={[styles.manageUnitsBtnText, { color: activePalette.primary }]}>Configure Workplace Units & Geofences</Text>
+                  <ChevronRight size={14} color={activePalette.primary} />
+                </TouchableOpacity>
+              );
+            })()}
           </ScrollView>
         </View>
       </View>
@@ -365,7 +399,9 @@ export function SidebarLayout({ items, children }: SidebarProps) {
     authorizedOrganizations,
     canSwitchOrganization,
     switchOrganization,
+    primaryColor,
   } = useTenant();
+  const brandPalette = useMemo(() => getBrandPalette(primaryColor), [primaryColor]);
   const { unreadCount } = useNotifications();
 
   const [showMoreSheet, setShowMoreSheet] = useState(false);
@@ -611,15 +647,15 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                     resizeMode="contain"
                   />
                 ) : (
-                  <Building2 size={16} color="#7C3AED" />
+                  <Building2 size={16} color={brandPalette.primary} />
                 )}
               </View>
               <View style={styles.mobileOrgTextCol}>
                 <Text style={styles.mobileOrgTitle} numberOfLines={1}>
                   {orgDisplayName}
                 </Text>
-                <View style={styles.mobileRoleBadge}>
-                  <Text style={styles.mobileRoleBadgeText}>
+                <View style={[styles.mobileRoleBadge, { backgroundColor: brandPalette.primarySurface }]}>
+                  <Text style={[styles.mobileRoleBadgeText, { color: brandPalette.primaryDeep }]}>
                     {String(effectiveRole).toUpperCase()}
                   </Text>
                 </View>
@@ -636,15 +672,15 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                     resizeMode="contain"
                   />
                 ) : (
-                  <Building2 size={16} color="#7C3AED" />
+                  <Building2 size={16} color={brandPalette.primary} />
                 )}
               </View>
               <View style={styles.mobileOrgTextCol}>
                 <Text style={styles.mobileOrgTitle} numberOfLines={1}>
                   {orgDisplayName}
                 </Text>
-                <View style={styles.mobileRoleBadge}>
-                  <Text style={styles.mobileRoleBadgeText}>
+                <View style={[styles.mobileRoleBadge, { backgroundColor: brandPalette.primarySurface }]}>
+                  <Text style={[styles.mobileRoleBadgeText, { color: brandPalette.primaryDeep }]}>
                     {String(effectiveRole).toUpperCase()}
                   </Text>
                 </View>
@@ -674,8 +710,8 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                   style={{ width: 34, height: 34, borderRadius: 17 }}
                 />
               ) : (
-                <View style={styles.mobileAvatarFallback}>
-                  <Text style={styles.mobileAvatarText}>{userInitial}</Text>
+                <View style={[styles.mobileAvatarFallback, { backgroundColor: brandPalette.primarySurface, borderColor: brandPalette.primaryBorder }]}>
+                  <Text style={[styles.mobileAvatarText, { color: brandPalette.primary }]}>{userInitial}</Text>
                 </View>
               )}
               <View style={styles.mobileAvatarOnlineDot} />
@@ -710,7 +746,7 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                   onPress={() => (isLocked ? handleLockedItemPress(tab.label) : router.push(tab.href as never))}
                   style={[
                     styles.floatingTabBtn,
-                    active && styles.floatingTabBtnActive,
+                    active && [styles.floatingTabBtnActive, { backgroundColor: brandPalette.primaryLight, borderColor: brandPalette.primaryBorder }],
                     isLocked && { opacity: 0.55 },
                   ]}
                   activeOpacity={0.7}
@@ -718,7 +754,7 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                   <View style={styles.tabIconContainer}>
                     <IconComp
                       size={20}
-                      color={active ? '#7C3AED' : isLocked ? NotionColors.muted : '#94A3B8'}
+                      color={active ? brandPalette.primary : isLocked ? NotionColors.muted : '#94A3B8'}
                       strokeWidth={active ? 2.5 : 1.8}
                     />
                     {isLocked && (
@@ -730,14 +766,14 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                   <Text
                     style={[
                       styles.tabLabel,
-                      active && styles.tabLabelActive,
+                      active && [styles.tabLabelActive, { color: brandPalette.primaryDeep }],
                       isLocked && { color: NotionColors.muted },
                     ]}
                     numberOfLines={1}
                   >
                     {tab.label}
                   </Text>
-                  {active && <View style={styles.activeIndicatorBar} />}
+                  {active && <View style={[styles.activeIndicatorBar, { backgroundColor: brandPalette.primary }]} />}
                 </TouchableOpacity>
               );
             })}
@@ -746,18 +782,18 @@ export function SidebarLayout({ items, children }: SidebarProps) {
               onPress={() => setShowMoreSheet(true)}
               style={[
                 styles.floatingTabBtn,
-                showMoreSheet && styles.floatingTabBtnActive,
+                showMoreSheet && [styles.floatingTabBtnActive, { backgroundColor: brandPalette.primaryLight, borderColor: brandPalette.primaryBorder }],
               ]}
               activeOpacity={0.7}
             >
               <View style={styles.tabIconContainer}>
                 <MoreHorizontal
                   size={20}
-                  color={showMoreSheet ? '#7C3AED' : '#94A3B8'}
+                  color={showMoreSheet ? brandPalette.primary : '#94A3B8'}
                   strokeWidth={showMoreSheet ? 2.5 : 1.8}
                 />
                 {unreadCount > 0 && (
-                  <View style={styles.tabCountBadge}>
+                  <View style={[styles.tabCountBadge, { backgroundColor: brandPalette.primary }]}>
                     <Text style={styles.tabCountText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
                   </View>
                 )}
@@ -1002,7 +1038,7 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                       resizeMode="contain"
                     />
                   ) : (
-                    <Building2 size={16} color="#7C3AED" />
+                    <Building2 size={16} color={brandPalette.primary} />
                   )}
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
@@ -1100,8 +1136,8 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                       style={{ width: 34, height: 34, borderRadius: 17 }}
                     />
                   ) : (
-                    <View style={styles.footerAvatarFallback}>
-                      <Text style={styles.footerAvatarInitial}>{userInitial}</Text>
+                    <View style={[styles.footerAvatarFallback, { backgroundColor: brandPalette.primarySurface, borderColor: brandPalette.primaryBorder }]}>
+                      <Text style={[styles.footerAvatarInitial, { color: brandPalette.primary }]}>{userInitial}</Text>
                     </View>
                   )}
                   <View style={styles.footerOnlineBadge} />
@@ -1151,8 +1187,8 @@ export function SidebarLayout({ items, children }: SidebarProps) {
                     style={{ width: 32, height: 32, borderRadius: 16 }}
                   />
                 ) : (
-                  <View style={[styles.footerAvatarFallback, { width: 32, height: 32, borderRadius: 16 }]}>
-                    <Text style={[styles.footerAvatarInitial, { fontSize: 13 }]}>{userInitial}</Text>
+                  <View style={[styles.footerAvatarFallback, { width: 32, height: 32, borderRadius: 16, backgroundColor: brandPalette.primarySurface, borderColor: brandPalette.primaryBorder }]}>
+                    <Text style={[styles.footerAvatarInitial, { fontSize: 13, color: brandPalette.primary }]}>{userInitial}</Text>
                   </View>
                 )}
                 <View style={[styles.footerOnlineBadge, { bottom: 0, right: 0 }]} />

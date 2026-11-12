@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   useWindowDimensions, RefreshControl, Platform,
@@ -7,6 +7,7 @@ import { useRouter, Redirect } from 'expo-router';
 import { HR_NAV } from '@/constants/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/context/TenantContext';
+import { getBrandPalette } from '@/utils/color';
 import { useTheme } from '@/hooks/use-theme';
 import { Card } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
@@ -31,7 +32,8 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 export default function HRDashboard() {
   const colors = useTheme();
   const { profile, role } = useAuth();
-  const { organization: tenantOrg } = useTenant();
+  const { organization: tenantOrg, primaryColor } = useTenant();
+  const brandPalette = useMemo(() => getBrandPalette(primaryColor), [primaryColor]);
   const activeOrgId = tenantOrg?.id || profile?.organization_id;
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -87,20 +89,20 @@ export default function HRDashboard() {
   if (loading) return <LoadingState />;
 
   const mobileKpis = [
-    { label: 'Employees', value: `${empCount}`, color: '#0D7377', bg: '#E6F4F4', icon: Users },
+    { label: 'Employees', value: `${empCount}`, color: brandPalette.primary, bg: brandPalette.primarySurface, icon: Users },
     { label: 'Present', value: `${attendanceStats.present}`, color: '#059669', bg: '#D1FAE5', icon: Calendar },
     { label: 'Late', value: `${attendanceStats.late}`, color: '#D97706', bg: '#FEF3C7', icon: Clock },
-    { label: 'Pending', value: `${pendingLeaves.length}`, color: '#7C3AED', bg: '#EDE9FE', icon: Umbrella },
+    { label: 'Pending', value: `${pendingLeaves.length}`, color: '#EA580C', bg: '#FEF3E8', icon: Umbrella },
   ];
 
   const hrQuickActions = [
-    { label: 'My Attendance', icon: Clock, href: '/(employee)/attendance', color: '#7C3AED', bg: '#EDE9FE' },
-    { label: 'Users & Staff', icon: Users, href: '/(admin)/users', color: '#0D7377', bg: '#E6F4F4' },
+    { label: 'My Attendance', icon: Clock, href: '/(employee)/attendance', color: brandPalette.primary, bg: brandPalette.primarySurface },
+    { label: 'Users & Staff', icon: Users, href: '/(admin)/users', color: brandPalette.primary, bg: brandPalette.primarySurface },
     { label: 'Team Attendance', icon: Calendar, href: '/(hr)/attendance', color: '#059669', bg: '#D1FAE5' },
-    { label: 'Leave', icon: Umbrella, href: '/(hr)/leave', color: '#7C3AED', bg: '#EDE9FE' },
+    { label: 'Leave', icon: Umbrella, href: '/(hr)/leave', color: '#EA580C', bg: '#FEF3E8' },
     { label: 'Payroll', icon: CreditCard, href: '/(hr)/payroll', color: '#0369A1', bg: '#E0F2FE' },
     { label: 'Performance', icon: Award, href: '/(hr)/performance', color: '#DC2626', bg: '#FEE2E2' },
-    { label: 'Learning', icon: GraduationCap, href: '/(hr)/learning', color: '#7C3AED', bg: '#EDE9FE' },
+    { label: 'Learning', icon: GraduationCap, href: '/(hr)/learning', color: brandPalette.primary, bg: brandPalette.primarySurface },
   ];
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -110,7 +112,7 @@ export default function HRDashboard() {
     <ScrollView
       style={mStyles.root}
       contentContainerStyle={mStyles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0D7377" />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={brandPalette.primary} />}
       showsVerticalScrollIndicator={false}
     >
       {/* ── HR Hero Banner ────────────────────────────────────────────────── */}
@@ -189,12 +191,12 @@ export default function HRDashboard() {
       <Animated.View entering={FadeInDown.delay(120).duration(350).springify()}>
         <View style={mStyles.card}>
           <View style={mStyles.cardHead}>
-            <View style={[mStyles.cardIconWrap, { backgroundColor: '#EDE9FE' }]}>
-              <Umbrella size={16} color="#7C3AED" />
+            <View style={[mStyles.cardIconWrap, { backgroundColor: brandPalette.primarySurface }]}>
+              <Umbrella size={16} color={brandPalette.primary} />
             </View>
             <Text style={mStyles.cardTitle}>Pending Approvals</Text>
             {pendingLeaves.length > 0 && (
-              <View style={mStyles.pendingBadge}>
+              <View style={[mStyles.pendingBadge, { backgroundColor: brandPalette.primary }]}>
                 <Text style={mStyles.pendingBadgeText}>{pendingLeaves.length}</Text>
               </View>
             )}
@@ -282,7 +284,7 @@ export default function HRDashboard() {
 
       {/* Stats */}
       <View style={[styles.statsGrid, styles.statsGridDesktop]}>
-        <StatCard label="Total Employees" value={empCount} />
+        <StatCard label="Total Employees" value={empCount} color={brandPalette.primary} />
         <StatCard label="Present Today" value={attendanceStats.present} color="#16A34A" />
         <StatCard label="Late Today" value={attendanceStats.late} color="#D97706" />
         <StatCard label="On Leave" value={pendingLeaves.length} color="#3B82F6" />

@@ -109,6 +109,7 @@ export interface TenantContextState {
   allOrganizations: Organization[];
   authorizedOrganizations: Organization[];
   canSwitchOrganization: boolean;
+  primaryColor: string;
   companyName: string;
   companyLogoUrl: string | null;
   officeName: string;
@@ -721,6 +722,14 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     return getTenantDefaultUnits(organization?.name, organization?.id, organization?.units, industry);
   }, [organization, industry]);
 
+  const primaryColor: string = useMemo(() => {
+    return (
+      organization?.primary_color ||
+      (industry && INDUSTRY_PRESETS[industry]?.color) ||
+      '#5645d4'
+    );
+  }, [organization?.primary_color, industry]);
+
   const value: TenantContextState = {
     organization,
     workplace,
@@ -728,6 +737,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     allOrganizations,
     authorizedOrganizations,
     canSwitchOrganization,
+    primaryColor,
     companyName,
     companyLogoUrl,
     officeName,

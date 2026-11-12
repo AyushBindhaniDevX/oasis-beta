@@ -1795,10 +1795,10 @@ function KanbanColumn({
       ]}
       {...(Platform.OS === 'web'
         ? ({
-            onDragOver,
-            onDragLeave,
-            onDrop,
-          } as any)
+          onDragOver,
+          onDragLeave,
+          onDrop,
+        } as any)
         : {})}
     >
       {/* Column Head */}
@@ -1841,16 +1841,16 @@ function KanbanColumn({
                   key={emp.id}
                   {...(Platform.OS === 'web'
                     ? ({
-                        draggable: true,
-                        onDragStart: (e: any) => onDragStart(e, emp.id),
-                        style: [
-                          styles.empKanbanCard,
-                          isWorking && { opacity: 0.4 },
-                        ],
-                      } as any)
+                      draggable: true,
+                      onDragStart: (e: any) => onDragStart(e, emp.id),
+                      style: [
+                        styles.empKanbanCard,
+                        isWorking && { opacity: 0.4 },
+                      ],
+                    } as any)
                     : {
-                        style: styles.empKanbanCard,
-                      })}
+                      style: styles.empKanbanCard,
+                    })}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                     <Avatar name={name} url={emp.profile?.avatar_url} size={34} />

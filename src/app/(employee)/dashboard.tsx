@@ -52,6 +52,7 @@ import {
 } from '@/constants/workManagementSvgs';
 import { useNotifications } from '@/context/NotificationContext';
 import { useTenant } from '@/context/TenantContext';
+import { getBrandPalette } from '@/utils/color';
 import { useAuth } from '@/hooks/useAuth';
 import { clockIn, clockOut, getTodayAttendance } from '@/lib/services/attendance';
 import { getEmployeeByProfileId } from '@/lib/services/employee';
@@ -92,7 +93,8 @@ function MetricWave({
 
 export default function EmployeeDashboard() {
   const { profile } = useAuth();
-  const { organization, employee: tenantEmp, workplace: tenantWp, companyLogoUrl } = useTenant();
+  const { organization, employee: tenantEmp, workplace: tenantWp, companyLogoUrl, primaryColor } = useTenant();
+  const brandPalette = useMemo(() => getBrandPalette(primaryColor), [primaryColor]);
   const activeOrgId = organization?.id || tenantEmp?.organization_id || profile?.organization_id;
   const { unreadCount } = useNotifications();
   const router = useRouter();
@@ -399,7 +401,7 @@ export default function EmployeeDashboard() {
     <ScrollView
       style={s.canvas}
       contentContainerStyle={[s.contentContainer, isDesktop && s.desktopContainer]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#7C3AED" />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={brandPalette.primary} />}
       showsVerticalScrollIndicator={false}
     >
       {/* ── Hero Greeting Banner with STOCK 6 SVG ──────────────────────── */}
@@ -494,8 +496,8 @@ export default function EmployeeDashboard() {
               style={[
                 s.metricCard,
                 {
-                  backgroundColor: '#F3EEFE',
-                  borderColor: '#E4DCFD',
+                  backgroundColor: brandPalette.primaryLight,
+                  borderColor: brandPalette.primaryBorder,
                   flex: 1,
                   minWidth: 0,
                 },
@@ -503,18 +505,18 @@ export default function EmployeeDashboard() {
               onPress={() => router.push('/(employee)/attendance' as never)}
             >
               <View style={s.cardTopRow}>
-                <View style={[s.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                <View style={[s.iconBox, { backgroundColor: brandPalette.primarySurface }]}>
                   <SvgXml xml={STOCK_4_SVG} width={32} height={24} />
                 </View>
                 <View style={s.valueRow}>
-                  <Text style={[s.metricValueText, { color: '#1E1B4B' }]}>{monthlyStats.hours}h</Text>
+                  <Text style={[s.metricValueText, { color: brandPalette.primaryDeep }]}>{monthlyStats.hours}h</Text>
                   <Text style={s.trendGreen}>{monthlyStats.hours > 0 ? `${monthlyStats.hours}h Logged` : 'Active Shift'}</Text>
                 </View>
               </View>
               <View style={s.cardBottomRow}>
                 <Text style={s.metricLabelText} numberOfLines={1}>Monthly Shift Hours</Text>
                 <View style={s.waveContainer}>
-                  <MetricWave color="#8B5CF6" width={isDesktop ? 120 : 64} height={20} />
+                  <MetricWave color={brandPalette.primaryWave} width={isDesktop ? 120 : 64} height={20} />
                 </View>
               </View>
             </InteractiveTile>
@@ -621,8 +623,8 @@ export default function EmployeeDashboard() {
                 style={[
                   s.metricCard,
                   {
-                    backgroundColor: '#F3EEFE',
-                    borderColor: '#E4DCFD',
+                    backgroundColor: brandPalette.primaryLight,
+                    borderColor: brandPalette.primaryBorder,
                     flex: 1,
                     minWidth: 0,
                   },
@@ -630,18 +632,18 @@ export default function EmployeeDashboard() {
                 onPress={() => router.push('/(employee)/attendance' as never)}
               >
                 <View style={s.cardTopRow}>
-                  <View style={[s.iconBox, { backgroundColor: '#DDD6FE' }]}>
+                  <View style={[s.iconBox, { backgroundColor: brandPalette.primarySurface }]}>
                     <SvgXml xml={STOCK_4_SVG} width={32} height={24} />
                   </View>
                   <View style={s.valueRow}>
-                    <Text style={[s.metricValueText, { color: '#1E1B4B' }]}>{monthlyStats.hours}h</Text>
+                    <Text style={[s.metricValueText, { color: brandPalette.primaryDeep }]}>{monthlyStats.hours}h</Text>
                     <Text style={s.trendGreen}>{monthlyStats.hours > 0 ? `${monthlyStats.hours}h Logged` : 'Active Shift'}</Text>
                   </View>
                 </View>
                 <View style={s.cardBottomRow}>
                   <Text style={s.metricLabelText} numberOfLines={1}>Monthly Shift Hours</Text>
                   <View style={s.waveContainer}>
-                    <MetricWave color="#8B5CF6" width={64} height={20} />
+                    <MetricWave color={brandPalette.primaryWave} width={64} height={20} />
                   </View>
                 </View>
               </InteractiveTile>
@@ -685,8 +687,8 @@ export default function EmployeeDashboard() {
         {/* Card Header */}
         <View style={s.cardHeaderRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={[s.iconBox, { backgroundColor: '#EDE9FE', width: 32, height: 32, borderRadius: 10 }]}>
-              <Clock size={16} color="#7C3AED" />
+            <View style={[s.iconBox, { backgroundColor: brandPalette.primarySurface, width: 32, height: 32, borderRadius: 10 }]}>
+              <Clock size={16} color={brandPalette.primary} />
             </View>
             <Text style={s.sectionTitle}>Today's Shift Punch</Text>
           </View>
@@ -761,7 +763,7 @@ export default function EmployeeDashboard() {
           <View style={s.punchMetricItem}>
             <Text style={s.punchMetricLabel}>DUTY LOCATION</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
-              <MapPin size={12} color="#7C3AED" />
+              <MapPin size={12} color={brandPalette.primary} />
               <Text style={s.punchLocationText} numberOfLines={1}>
                 {workplaceName}
               </Text>
@@ -786,7 +788,7 @@ export default function EmployeeDashboard() {
           <TouchableOpacity
             style={[
               s.punchActionButton,
-              isClockedIn ? { backgroundColor: '#DC2626' } : { backgroundColor: '#7C3AED' },
+              isClockedIn ? { backgroundColor: '#DC2626' } : { backgroundColor: brandPalette.primary },
             ]}
             activeOpacity={0.85}
             onPress={() => handleClock(isClockedIn ? 'out' : 'in')}
@@ -817,8 +819,8 @@ export default function EmployeeDashboard() {
             style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
             activeOpacity={0.8}
           >
-            <Text style={s.seeAllLink}>See All</Text>
-            <ArrowRight size={13} color="#7C3AED" />
+            <Text style={[s.seeAllLink, { color: brandPalette.primary }]}>See All</Text>
+            <ArrowRight size={13} color={brandPalette.primary} />
           </TouchableOpacity>
         </View>
 
@@ -861,7 +863,7 @@ export default function EmployeeDashboard() {
             style={s.quickActionBtn}
             onPress={() => router.push('/(employee)/learning' as never)}
           >
-            <View style={[s.quickActionIconCircle, { backgroundColor: '#F3EEFE' }]}>
+            <View style={[s.quickActionIconCircle, { backgroundColor: brandPalette.primaryLight }]}>
               <SvgXml xml={STOCK_10_SVG} width={42} height={30} />
             </View>
             <Text style={s.quickActionLabel}>Learning{'\n'}& LMS</Text>
@@ -889,8 +891,8 @@ export default function EmployeeDashboard() {
         <View style={s.bottomHalfCard}>
           <View style={s.cardHeaderRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <View style={[s.iconBox, { backgroundColor: '#EDE9FE', width: 26, height: 26 }]}>
-                <Building2 size={14} color="#7C3AED" />
+              <View style={[s.iconBox, { backgroundColor: brandPalette.primarySurface, width: 26, height: 26 }]}>
+                <Building2 size={14} color={brandPalette.primary} />
               </View>
               <Text style={s.cardTitleMedium}>Duty Station</Text>
             </View>
@@ -907,9 +909,9 @@ export default function EmployeeDashboard() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.orgSubName} numberOfLines={1}>{orgName}</Text>
-                <View style={s.rolePill}>
-                  <Shield size={9} color="#7C3AED" />
-                  <Text style={s.rolePillText}>{designation}</Text>
+                <View style={[s.rolePill, { backgroundColor: brandPalette.primarySurface }]}>
+                  <Shield size={9} color={brandPalette.primary} />
+                  <Text style={[s.rolePillText, { color: brandPalette.primaryDeep }]}>{designation}</Text>
                 </View>
               </View>
             </View>
@@ -979,8 +981,8 @@ export default function EmployeeDashboard() {
             {/* Item 2 */}
             <View style={s.timelineItem}>
               <View style={s.timelineIconCol}>
-                <View style={[s.timelineCircle, { backgroundColor: '#EDE9FE' }]}>
-                  <CalendarDays size={11} color="#7C3AED" strokeWidth={2.2} />
+                <View style={[s.timelineCircle, { backgroundColor: brandPalette.primarySurface }]}>
+                  <CalendarDays size={11} color={brandPalette.primary} strokeWidth={2.2} />
                 </View>
                 <View style={s.timelineLine} />
               </View>

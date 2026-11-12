@@ -53,6 +53,7 @@ import { FeatureGate } from '@/components/ui/FeatureGate';
 import { getRouteFeature } from '@/components/layout/Sidebar';
 import { useNotifications } from '@/context/NotificationContext';
 import { BorderRadius, NotionColors, Shadows } from '@/constants/theme';
+import { getBrandPalette } from '@/utils/color';
 import * as Haptics from 'expo-haptics';
 
 export interface TabItem {
@@ -148,9 +149,11 @@ export function BottomTabBar({ children, tabs, moreItems }: BottomTabBarProps) {
   const isDesktop = width >= 1024;
   const colors = useTheme();
   const insets = useSafeAreaInsets();
-  const { isFeatureEnabled, organization, companyName, companyLogoUrl, activePlan } = useTenant();
+  const { isFeatureEnabled, organization, companyName, companyLogoUrl, activePlan, primaryColor } = useTenant();
   const { profile, signOut, role } = useAuth();
   const { unreadCount } = useNotifications();
+
+  const brandPalette = useMemo(() => getBrandPalette(primaryColor), [primaryColor]);
 
   const userRole = profile?.role || role;
   const resolvedTabs = tabs || getTabsForRole(userRole);
@@ -337,7 +340,7 @@ export function BottomTabBar({ children, tabs, moreItems }: BottomTabBarProps) {
                       style={[
                         styles.moreItem,
                         { backgroundColor: '#ffffff', borderColor: colors.border },
-                        isActive && { backgroundColor: NotionColors.cardTintLavender, borderColor: NotionColors.brandPurple300 },
+                        isActive && { backgroundColor: brandPalette.primaryLight, borderColor: brandPalette.primaryBorder },
                         isLocked && { opacity: 0.6 },
                       ]}
                       onPress={() => handleMoreItemPress(item)}
@@ -347,7 +350,7 @@ export function BottomTabBar({ children, tabs, moreItems }: BottomTabBarProps) {
                         style={[
                           styles.moreItemIcon,
                           isActive
-                            ? { backgroundColor: NotionColors.primary }
+                            ? { backgroundColor: brandPalette.primary }
                             : { backgroundColor: colors.backgroundElement },
                           isLocked && { backgroundColor: NotionColors.cardTintRose },
                         ]}
@@ -366,7 +369,7 @@ export function BottomTabBar({ children, tabs, moreItems }: BottomTabBarProps) {
                             style={[
                               styles.moreItemLabel,
                               { color: NotionColors.ink },
-                              isActive && { color: NotionColors.primary, fontWeight: '600' },
+                              isActive && { color: brandPalette.primary, fontWeight: '600' },
                               isLocked && { color: NotionColors.slate },
                             ]}
                             numberOfLines={1}
@@ -386,7 +389,7 @@ export function BottomTabBar({ children, tabs, moreItems }: BottomTabBarProps) {
                         ) : null}
                       </View>
 
-                      <ChevronRight size={14} color={isActive ? NotionColors.primary : NotionColors.hairlineStrong} />
+                      <ChevronRight size={14} color={isActive ? brandPalette.primary : NotionColors.hairlineStrong} />
                     </TouchableOpacity>
                   );
                 })}
@@ -439,9 +442,9 @@ export function BottomTabBar({ children, tabs, moreItems }: BottomTabBarProps) {
                 style={[
                   styles.tabIndicator,
                   isActive && {
-                    backgroundColor: '#F3EEFE',
+                    backgroundColor: brandPalette.primaryLight,
                     borderWidth: 1,
-                    borderColor: '#DDD6FE',
+                    borderColor: brandPalette.primaryBorder,
                     borderRadius: 16,
                     paddingHorizontal: 8,
                   },
@@ -449,7 +452,7 @@ export function BottomTabBar({ children, tabs, moreItems }: BottomTabBarProps) {
               >
                 <Icon
                   size={19}
-                  color={isActive ? '#7C3AED' : isLocked ? NotionColors.muted : NotionColors.steel}
+                  color={isActive ? brandPalette.primary : isLocked ? NotionColors.muted : NotionColors.steel}
                   strokeWidth={isActive ? 2.5 : 1.8}
                 />
                 {isLocked && (
@@ -458,7 +461,7 @@ export function BottomTabBar({ children, tabs, moreItems }: BottomTabBarProps) {
                   </View>
                 )}
                 {tab.key === 'more' && unreadCount > 0 && !isLocked && (
-                  <View style={[styles.tabCountBadge, { backgroundColor: NotionColors.primary }]}>
+                  <View style={[styles.tabCountBadge, { backgroundColor: brandPalette.primary }]}>
                     <Text style={styles.tabCountText}>
                       {unreadCount > 9 ? '9+' : unreadCount}
                     </Text>
@@ -468,15 +471,15 @@ export function BottomTabBar({ children, tabs, moreItems }: BottomTabBarProps) {
               <Text
                 style={[
                   styles.tabLabel,
-                  { color: isActive ? '#6D28D9' : isLocked ? NotionColors.muted : NotionColors.slate },
-                  isActive && { fontWeight: '800', color: '#6D28D9' },
+                  { color: isActive ? brandPalette.primaryDeep : isLocked ? NotionColors.muted : NotionColors.slate },
+                  isActive && { fontWeight: '800', color: brandPalette.primaryDeep },
                 ]}
                 numberOfLines={1}
               >
                 {tab.label}
               </Text>
               {isActive && (
-                <View style={{ width: 16, height: 3, backgroundColor: '#7C3AED', borderRadius: 1.5, marginTop: 2 }} />
+                <View style={{ width: 16, height: 3, backgroundColor: brandPalette.primary, borderRadius: 1.5, marginTop: 2 }} />
               )}
             </TouchableOpacity>
           );

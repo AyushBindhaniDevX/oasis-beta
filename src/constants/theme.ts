@@ -233,7 +233,9 @@ export const Colors = {
 };
 
 export type ThemeColor = keyof typeof Colors.light;
-export type ThemeColors = typeof Colors.light;
+export type ThemeColors = {
+  [K in keyof typeof Colors.light]: string;
+};
 
 /**
  * Brand Gradients for linear gradient backgrounds
